@@ -36,6 +36,7 @@
 #define NU_LL (double)(3.29e15)
 #define NU_LW (double)(2.71e15)
 #define PLANCK_EV (double)(4.1357e-15)
+#define T_RE 1e4
 
 // ======================================================
 // Don't change these unless you know what you are doing!

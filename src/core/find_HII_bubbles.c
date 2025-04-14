@@ -44,6 +44,38 @@ double RtoM(double R)
   return -1;
 }
 
+float ComputeFullyIoinizedTemperature(float z_re, float z, float delta){
+    // z_re: the redshift of reionization
+    // z:    the current redshift
+    // delta:the density contrast
+    float result, delta_re;
+    // just be fully ionized
+    if (fabs(z - z_re) < 1e-4)
+        result = 1;
+    else{
+        // linearly extrapolate to get density at reionization
+        delta_re = delta * (1. + z ) / (1. + z_re);
+        if (delta_re<=-1) delta_re=-1. + ABS_TOL;
+        // evolving ionized box eq. 6 of McQuinn 2015, ignored the dependency of density at ionization
+        if (delta<=-1) delta=-1. + ABS_TOL;
+        result  = pow((1. + delta) / (1. + delta_re), 1.1333);
+        result *= pow((1. + z) / (1. + z_re), 3.4);
+        result *= expf(pow((1. + z)/7.1, 2.5) - pow((1. + z_re)/7.1, 2.5));
+    }
+    result *= pow(T_RE, 1.7);
+    // 1e4 before helium reionization; double it after
+    result += pow(1e4 * ((1. + z)/4.), 1.7) * ( 1 + delta);
+    result  = pow(result, 0.5882);
+    return result;
+}
+
+float ComputePartiallyIoinizedTemperature(float T_HI, float res_xH){
+    if (res_xH<=0.) return T_RE;
+    if (res_xH>=1) return T_HI;
+
+    return T_HI * res_xH + T_RE * (1. - res_xH);
+}
+
 void _find_HII_bubbles(const int snapshot)
 {
   // TODO: TAKE A VERY VERY CLOSE LOOK AT UNITS!!!!
@@ -468,6 +500,20 @@ void _find_HII_bubbles(const int snapshot)
         density_over_mean = 1.0 + (double)((float*)deltax)[i_padded];
         mass_weighted_global_xH += cell_xH * density_over_mean;
         mass_weight += density_over_mean;
+
+        if (z_in[i_real]>0) && (xH[i_real]<REL_TOL)
+            run_globals.reion_grids.temp_kinetic_all_gas[i_real] = ComputeFullyIoinizedTemperature(z_in[i_real], (float)redshift, ((float*)deltax)[i_padded]);
+		
+		// Below sometimes (very rare though) can happen when the density drops too fast and to below T_HI 
+		if (run_globals.params.Flag_IncludeSpinTemp) {
+			if (run_globals.reion_grids.temp_kinetic_all_gas[i_real] < run_globals.reion_grids.Tk_box[i_real])
+			    run_globals.reion_grids.temp_kinetic_all_gas[i_real] = run_globals.reion_grids.Tk_box[i_real];
+		}
+		else{
+			thistk = TK*(1. + cT_ad*perturbed_field->density[HII_R_INDEX(x,y,z)]);
+			if (run_globals.reion_grids.temp_kinetic_all_gas[i_real] < thistk)
+				run_globals.reion_grids.temp_kinetic_all_gas[i_real] = thistk;
+		}
 
         if (run_globals.params.Flag_IncludeRecombinations) {
           // Store the resultant recombination cell
