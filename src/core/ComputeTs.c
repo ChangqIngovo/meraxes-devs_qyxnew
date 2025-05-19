@@ -187,14 +187,19 @@ void _ComputeTs(int snapshot)
   // Check redshift against ReionMaxHeatingRedshift. If zp > ReionMaxHeatingRedshift assume the x_e (electron fraction)
   // and gas temperatures are homogenous Equivalent to the default setup of 21cmFAST.
   if ((zp - run_globals.params.physics.ReionMaxHeatingRedshift) >= -0.0001) {
+
+    float xe = (float)xion_RECFAST((float)zp, 0);
+    float TK = (float)T_RECFAST((float)zp,0);
+    float cT_ad = cT_approx((float)zp); //finding the adiabatic index at the initial redshift from 2302.08506 to fix adiabatic fluctuations.
+
     for (int ix = 0; ix < local_nix; ix++)
       for (int iy = 0; iy < ReionGridDim; iy++)
         for (int iz = 0; iz < ReionGridDim; iz++) {
           i_real = grid_index(ix, iy, iz, ReionGridDim, INDEX_REAL);
           i_padded = grid_index(ix, iy, iz, ReionGridDim, INDEX_PADDED);
 
-          x_e_box_prev[i_padded] = (float)(float)xion_RECFAST((float)zp, 0);
-          Tk_box[i_real] = (float)(float)T_RECFAST((float)zp, 0);
+          x_e_box_prev[i_padded] = xe;
+          Tk_box[i_real] = TK * (1.0 + cT_ad * run_globals.reion_grids.deltax[i_padded]);
 
           TS_box[i_real] = get_Ts((float)zp,
                                   run_globals.reion_grids.deltax[i_padded],

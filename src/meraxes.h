@@ -458,6 +458,7 @@ typedef struct reion_grids_t
 
   // Grids necessary for inhomogeneous recombinations
   float* z_re;
+  float* temp_kinetic_all_gas;
 
   float* N_rec;
   fftwf_complex* N_rec_unfiltered;

@@ -511,6 +511,13 @@ double nu_n(int n)
   return ans;
 }
 
+// approximation for the adiabatic index at z=6-50 from 2302.08506 (also 1506.04152). Linear only, used to initialize the Tk box at high z so it's not homogeneous. Otherwise half of the adiabatic fluctuations are missing. Definition is \delta Tk = Tk * cT * \delta (at each z).
+float cT_approx(float z)
+{
+  return 0.58 - 0.006*(z - 10.0);
+}
+
+
 // Returns recycling fraction (=fraction of photons converted into Lyalpha for Ly-n resonance
 double frecycle(int n)
 {
@@ -1296,7 +1303,7 @@ void evolveInt(float zp,
         zpp = (zpp_edge[zpp_ct] + zpp_edge[zpp_ct - 1]) * 0.5;
         dzpp = zpp_edge[zpp_ct - 1] - zpp_edge[zpp_ct];
       }
-	  dt_dzpp = dtdz(zpp);
+      dt_dzpp = dtdz(zpp);
 
       // Use this when using the SFR provided by Meraxes
       // Units should be M_solar/s. Factor of (dt_dzp * dzpp) converts from per s to per z'

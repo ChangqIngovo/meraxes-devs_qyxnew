@@ -99,6 +99,8 @@ void _find_HII_bubbles(const int snapshot)
   double f_coll_stars;
   double neutral_fraction;
   double Gamma_R_prefactor;
+  float thistk, TK;
+  float cT_ad; //finding the adiabatic index at the initial redshift from 2302.08506 to fix adiabatic fluctuations.
 #if USE_MINI_HALOS
   const double ReionEfficiencyIII = run_globals.params.physics.ReionEfficiencyIII;
   const double ReionNionPhotPerBaryIII = run_globals.params.physics.ReionNionPhotPerBaryIII;
@@ -122,6 +124,8 @@ void _find_HII_bubbles(const int snapshot)
 
   float zstep = (float)(prev_redshift - redshift);
   float fabs_dtdz = (float)fabs(dtdz((float)redshift) / run_globals.params.Hubble_h);
+  TK = T_RECFAST(redshift,0);
+  cT_ad = cT_approx(redshift);
 
   int i_real;
   int i_padded;
@@ -185,6 +189,7 @@ void _find_HII_bubbles(const int snapshot)
 
   // Fields relevant for computing the inhomogeneous recombinations
   float* Gamma12 = run_globals.reion_grids.Gamma12;
+  float* z_in = run_globals.reion_grids.z_at_ionization;
   float* N_rec = run_globals.reion_grids.N_rec;
   fftwf_complex* N_rec_unfiltered = NULL;
   fftwf_complex* N_rec_filtered = NULL;
@@ -446,6 +451,11 @@ void _find_HII_bubbles(const int snapshot)
           // Check if this is the last filtering step.
           // If so, assign partial ionisations to those cells which aren't fully ionised
           else if (flag_last_filter_step && (xH[i_real] > REL_TOL)) {
+			if (run_globals.params.Flag_IncludeSpinTemp)
+				run_globals.reion_grids.temp_kinetic_all_gas[i_real] = ComputePartiallyIoinizedTemperature(run_globals.reion_grids.temp_kinetic_all_gas[i_real], xH[i_real]);
+			else
+				run_globals.reion_grids.temp_kinetic_all_gas[i_real] = ComputePartiallyIoinizedTemperature(TK*(1. + cT_ad*deltax[i_padded]), xH[i_real]);
+
 #if USE_MINI_HALOS
             xH[i_real] =
               (float)(neutral_fraction - (f_coll_stars * ReionEfficiency + f_coll_starsIII * ReionEfficiencyIII));
@@ -460,7 +470,6 @@ void _find_HII_bubbles(const int snapshot)
           }
 
           // Check if new ionisation
-          float* z_in = run_globals.reion_grids.z_at_ionization;
           if ((xH[i_real] < REL_TOL) && (z_in[i_real] < 0)) // New ionisation!
           {
             z_in[i_real] = (float)redshift;
@@ -501,7 +510,7 @@ void _find_HII_bubbles(const int snapshot)
         mass_weighted_global_xH += cell_xH * density_over_mean;
         mass_weight += density_over_mean;
 
-        if (z_in[i_real]>0) && (xH[i_real]<REL_TOL)
+        if ((z_in[i_real]>0) && (xH[i_real]<REL_TOL))
             run_globals.reion_grids.temp_kinetic_all_gas[i_real] = ComputeFullyIoinizedTemperature(z_in[i_real], (float)redshift, ((float*)deltax)[i_padded]);
 		
 		// Below sometimes (very rare though) can happen when the density drops too fast and to below T_HI 
@@ -510,7 +519,7 @@ void _find_HII_bubbles(const int snapshot)
 			    run_globals.reion_grids.temp_kinetic_all_gas[i_real] = run_globals.reion_grids.Tk_box[i_real];
 		}
 		else{
-			thistk = TK*(1. + cT_ad*perturbed_field->density[HII_R_INDEX(x,y,z)]);
+			thistk = TK*(1. + cT_ad*deltax[i_padded]);
 			if (run_globals.reion_grids.temp_kinetic_all_gas[i_real] < thistk)
 				run_globals.reion_grids.temp_kinetic_all_gas[i_real] = thistk;
 		}

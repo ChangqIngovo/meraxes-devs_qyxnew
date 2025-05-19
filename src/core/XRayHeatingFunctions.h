@@ -147,6 +147,8 @@ extern "C"
   /* Returns frequency of Lyman-n, in units of Lyman-alpha */
   double nu_n(int n);
 
+  float cT_approx(float z);
+
   /* Returns recycling fraction (=fraction of photons converted into Lyalpha for Ly-n resonance */
   double frecycle(int n);
 
