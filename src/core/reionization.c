@@ -376,6 +376,7 @@ void init_reion_grids()
     grids->xH[ii] = 1.0;
     grids->z_at_ionization[ii] = -1;
     grids->r_bubble[ii] = 0.0;
+    grids->temp_kinetic_all_gas[ii] = 0.0;
 #if USE_MINI_HALOS
     if (run_globals.params.Flag_IncludeLymanWerner) {
       grids->JLW_box[ii] = 0.0;
@@ -580,6 +581,7 @@ void malloc_reionization_grids()
   grids->z_at_ionization = NULL;
   grids->J_21_at_ionization = NULL;
   grids->J_21 = NULL;
+  grids->temp_kinetic_all_gas = NULL;
 
 #if USE_MINI_HALOS
   grids->JLW_box = NULL;
@@ -777,6 +779,7 @@ void malloc_reionization_grids()
     grids->xH = fftwf_alloc_real((size_t)slab_n_real);
     grids->z_at_ionization = fftwf_alloc_real((size_t)slab_n_real);
     grids->r_bubble = fftwf_alloc_real((size_t)slab_n_real);
+    grids->temp_kinetic_all_gas = fftwf_alloc_real((size_t)slab_n_real);
 
 #if USE_MINI_HALOS
     if (run_globals.params.Flag_IncludeLymanWerner) {
@@ -1068,6 +1071,7 @@ void free_reionization_grids()
   fftwf_free(grids->r_bubble);
   fftwf_free(grids->z_at_ionization);
   fftwf_free(grids->xH);
+  fftwf_free(grids->temp_kinetic_all_gas);
 
   fftwf_destroy_plan(grids->weighted_sfr_filtered_reverse_plan);
   fftwf_destroy_plan(grids->weighted_sfr_forward_plan);
@@ -1830,6 +1834,7 @@ void save_reion_output_grids(int snapshot)
   write_grid_float("xH", grids->xH, file_id, fspace_id, memspace_id, dcpl_id);
   write_grid_float("z_at_ionization", grids->z_at_ionization, file_id, fspace_id, memspace_id, dcpl_id);
   write_grid_float("r_bubble", grids->r_bubble, file_id, fspace_id, memspace_id, dcpl_id);
+  write_grid_float("temp_kinetic_all_gas", grids->temp_kinetic_all_gas, file_id, fspace_id, memspace_id, dcpl_id);
 
   if (run_globals.params.ReionUVBFlag) {
     write_grid_float("J_21", grids->J_21, file_id, fspace_id, memspace_id, dcpl_id);
