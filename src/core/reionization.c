@@ -283,7 +283,7 @@ void call_find_HII_bubbles(int snapshot, int nout_gals, timer_info* timer)
   find_HII_bubbles(snapshot, timer);
 
   mlog("grids->volume_weighted_global_xH = %g", MLOG_MESG, grids->volume_weighted_global_xH);
-  mlog("grids->volume_weighted_global_Gamma = %g", MLOG_MESG, grids->volume_weighted_global_Gamma);
+  mlog("grids->volume_weighted_global_Gamma = %g (h**2 1e-12 /s)", MLOG_MESG, grids->volume_weighted_global_Gamma);
   mlog("global mass weighted xHII = %g at z = %g",
        MLOG_MESG,
        1.0 - grids->mass_weighted_global_xH,
@@ -1839,10 +1839,11 @@ void save_reion_output_grids(int snapshot)
   write_grid_float("z_at_ionization", grids->z_at_ionization, file_id, fspace_id, memspace_id, dcpl_id);
   write_grid_float("r_bubble", grids->r_bubble, file_id, fspace_id, memspace_id, dcpl_id);
   write_grid_float("temp_kinetic_all_gas", grids->temp_kinetic_all_gas, file_id, fspace_id, memspace_id, dcpl_id);
+  write_grid_float("residual_xH", grids->nHI, file_id, fspace_id, memspace_id, dcpl_id);
+  write_grid_float("Gamma12", grids->Gamma12, file_id, fspace_id, memspace_id, dcpl_id);
+  H5LTset_attribute_double(file_id, "Gamma12", "volume_weighted_global_Gamma", &(grids->volume_weighted_global_Gamma), 1);
 
   if (run_globals.params.ReionUVBFlag) {
-    write_grid_float("Gamma12", grids->Gamma12, file_id, fspace_id, memspace_id, dcpl_id);
-    H5LTset_attribute_double(file_id, "Gamma12", "volume_weighted_global_Gamma", &(grids->volume_weighted_global_Gamma), 1);
     write_grid_float("J_21_at_ionization", grids->J_21_at_ionization, file_id, fspace_id, memspace_id, dcpl_id);
     write_grid_float("Mvir_crit", grids->Mvir_crit, file_id, fspace_id, memspace_id, dcpl_id);
 
