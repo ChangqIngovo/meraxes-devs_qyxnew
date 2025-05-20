@@ -228,11 +228,19 @@ void _find_HII_bubbles(const int snapshot)
 
   // Loop through filter radii
   double ReionRBubbleMax;
-  if (run_globals.params.Flag_IncludeRecombinations) {
-    ReionRBubbleMax = run_globals.params.physics.ReionRBubbleMaxRecomb; // Mpc/h
-  } else {
-    ReionRBubbleMax = run_globals.params.physics.ReionRBubbleMax; // Mpc/h
+  if (run_globals.params.Flag_EvolvingReionRBubbleMax) {
+    if (redshift > 6.)
+        ReionRBubbleMax = 25.483241248322766; // Mpc/h 
+    else
+        ReionRBubbleMax = 112. * pow( (1.+redshift) / 5. , -4.4);
   }
+  else{
+    if (run_globals.params.Flag_IncludeRecombinations)
+      ReionRBubbleMax = run_globals.params.physics.ReionRBubbleMaxRecomb; // Mpc/h
+    else
+      ReionRBubbleMax = run_globals.params.physics.ReionRBubbleMax; // Mpc/h
+  }
+
   double ReionRBubbleMin = run_globals.params.physics.ReionRBubbleMin; // Mpc/h
   double R = fmin(ReionRBubbleMax, L_FACTOR * box_size);               // Mpc/h
   double ReionDeltaRFactor = run_globals.params.ReionDeltaRFactor;
@@ -459,10 +467,10 @@ void _find_HII_bubbles(const int snapshot)
           // Check if this is the last filtering step.
           // If so, assign partial ionisations to those cells which aren't fully ionised
           else if (flag_last_filter_step && (xH[i_real] > REL_TOL)) {
-			if (run_globals.params.Flag_IncludeSpinTemp)
-				run_globals.reion_grids.temp_kinetic_all_gas[i_real] = ComputePartiallyIoinizedTemperature(run_globals.reion_grids.temp_kinetic_all_gas[i_real], xH[i_real]);
-			else
-				run_globals.reion_grids.temp_kinetic_all_gas[i_real] = ComputePartiallyIoinizedTemperature(TK*(1. + cT_ad*deltax[i_padded]), xH[i_real]);
+            if (run_globals.params.Flag_IncludeSpinTemp)
+                run_globals.reion_grids.temp_kinetic_all_gas[i_real] = ComputePartiallyIoinizedTemperature(run_globals.reion_grids.temp_kinetic_all_gas[i_real], xH[i_real]);
+            else
+                run_globals.reion_grids.temp_kinetic_all_gas[i_real] = ComputePartiallyIoinizedTemperature(TK*(1. + cT_ad*deltax[i_padded]), xH[i_real]);
 
 #if USE_MINI_HALOS
             xH[i_real] =
@@ -520,17 +528,17 @@ void _find_HII_bubbles(const int snapshot)
 
         if ((z_in[i_real]>0) && (xH[i_real]<REL_TOL))
             run_globals.reion_grids.temp_kinetic_all_gas[i_real] = ComputeFullyIoinizedTemperature(z_in[i_real], (float)redshift, ((float*)deltax)[i_padded]);
-		
-		// Below sometimes (very rare though) can happen when the density drops too fast and to below T_HI 
-		if (run_globals.params.Flag_IncludeSpinTemp) {
-			if (run_globals.reion_grids.temp_kinetic_all_gas[i_real] < run_globals.reion_grids.Tk_box[i_real])
-			    run_globals.reion_grids.temp_kinetic_all_gas[i_real] = run_globals.reion_grids.Tk_box[i_real];
-		}
-		else{
-			thistk = TK*(1. + cT_ad*deltax[i_padded]);
-			if (run_globals.reion_grids.temp_kinetic_all_gas[i_real] < thistk)
-				run_globals.reion_grids.temp_kinetic_all_gas[i_real] = thistk;
-		}
+        
+        // Below sometimes (very rare though) can happen when the density drops too fast and to below T_HI 
+        if (run_globals.params.Flag_IncludeSpinTemp) {
+            if (run_globals.reion_grids.temp_kinetic_all_gas[i_real] < run_globals.reion_grids.Tk_box[i_real])
+                run_globals.reion_grids.temp_kinetic_all_gas[i_real] = run_globals.reion_grids.Tk_box[i_real];
+        }
+        else{
+            thistk = TK*(1. + cT_ad*deltax[i_padded]);
+            if (run_globals.reion_grids.temp_kinetic_all_gas[i_real] < thistk)
+                run_globals.reion_grids.temp_kinetic_all_gas[i_real] = thistk;
+        }
 
         if (run_globals.params.Flag_IncludeRecombinations) {
           // Store the resultant recombination cell

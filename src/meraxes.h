@@ -282,6 +282,7 @@ typedef struct run_params_t
   int Flag_IncludeStreamVel;
   int Flag_IncludeMetalEvo; // New for Metallicity
   int Flag_IncludeRecombinations;
+  int Flag_EvolvingReionRBubbleMax;
   int Flag_Compute21cmBrightTemp;
   int Flag_ComputePS;
   int Flag_IncludePecVelsFor21cm;
