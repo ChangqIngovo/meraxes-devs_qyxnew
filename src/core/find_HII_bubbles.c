@@ -124,7 +124,15 @@ void _find_HII_bubbles(const int snapshot)
 
   float zstep = (float)(prev_redshift - redshift);
   float fabs_dtdz = (float)fabs(dtdz((float)redshift) / run_globals.params.Hubble_h);
+  if (T_RECFAST(100, 1) < 0){
+      mlog_error("Failed to init T_RECFAST. Aborting...");
+      ABORT(EXIT_FAILURE);
+  }
   TK = T_RECFAST(redshift,0);
+  if (T_RECFAST(100, 2) < 0){
+      mlog_error("Failed to free T_RECFAST. Aborting...");
+      ABORT(EXIT_FAILURE);
+  }
   cT_ad = cT_approx(redshift);
 
   int i_real;
