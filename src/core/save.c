@@ -765,7 +765,7 @@ void create_master_file()
       const char* group_name = { "Units/Grids" };
       group_id = H5Gcreate(file_id, group_name, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
       H5LTset_attribute_string(file_id, group_name, "xH", "None");
-      H5LTset_attribute_string(file_id, group_name, "J_21", "10e-21 erg/s/Hz/cm/cm/sr");
+      H5LTset_attribute_string(file_id, group_name, "Gamma12", "1e-12 /s");
       H5LTset_attribute_string(file_id, group_name, "J_21_at_ionization", "10e-21 erg/s/Hz/cm/cm/sr");
       H5LTset_attribute_string(file_id, group_name, "z_at_ionization", "None");
       H5LTset_attribute_string(file_id, group_name, "r_bubble", "Mpc");
@@ -813,7 +813,7 @@ void create_master_file()
       const char* group_name = { "HubbleConversions/Grids" };
       group_id = H5Gcreate(file_id, group_name, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
       H5LTset_attribute_string(file_id, group_name, "xH", "None");
-      H5LTset_attribute_string(file_id, group_name, "J_21", "v*(h**2)");
+      H5LTset_attribute_string(file_id, group_name, "Gamma12", "v*(h**2)");
       H5LTset_attribute_string(file_id, group_name, "J_21_at_ionization", "v*(h**2)");
       H5LTset_attribute_string(file_id, group_name, "z_at_ionization", "None");
       H5LTset_attribute_string(file_id, group_name, "r_bubble", "v/h");

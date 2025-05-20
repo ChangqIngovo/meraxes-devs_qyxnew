@@ -46,6 +46,8 @@ extern "C"
                                          // gamma12  (in 1e-12 s^-1). if usecase B, then use case B, otherwise case A
   double splined_recombination_rate(double z_eff, double gamma12_bg); // assumes T=1e4 and case B
   double recombination_rate(double z_eff, double gamma12_bg, double T4, int usecaseB);
+  double clumping_factor(double z_eff, double gamma12_bg, double T4, int usecaseB);
+  double residual_neutral_hydrogen(double z_eff, double gamma12_bg, double T4, int usecaseB);
   void init_MHR(); /*initializes the lookup table for the PDF density integral in MHR00 model at redshift z*/
   void free_MHR(); /* deallocates the gsl structures from init_MHR */
   double Gamma_SS(double Gamma_bg, double Delta, double T_4, double z); // ionization rate w. self shielding

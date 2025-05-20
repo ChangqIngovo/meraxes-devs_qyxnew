@@ -420,7 +420,6 @@ typedef struct reion_grids_t
   float* xH;
   float* z_at_ionization;
   float* J_21_at_ionization;
-  float* J_21;
   float* Mvir_crit;
 #if USE_MINI_HALOS
   float* Mvir_crit_MC;
@@ -468,6 +467,7 @@ typedef struct reion_grids_t
   fftwf_plan N_rec_filtered_reverse_plan;
 
   float* Gamma12;
+  float* nHI;
 
   // Grids necessary for the 21cm brightness temperature
   float* delta_T;
@@ -498,7 +498,7 @@ typedef struct reion_grids_t
   struct gal_to_slab_t* galaxy_to_slab_map;
 
   double volume_weighted_global_xH;
-  double volume_weighted_global_J_21;
+  double volume_weighted_global_Gamma;
   double mass_weighted_global_xH;
 
   double volume_ave_J_alpha;

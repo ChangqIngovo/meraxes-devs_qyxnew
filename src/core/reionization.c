@@ -283,7 +283,7 @@ void call_find_HII_bubbles(int snapshot, int nout_gals, timer_info* timer)
   find_HII_bubbles(snapshot, timer);
 
   mlog("grids->volume_weighted_global_xH = %g", MLOG_MESG, grids->volume_weighted_global_xH);
-  mlog("grids->volume_weighted_global_J_21 = %g", MLOG_MESG, grids->volume_weighted_global_J_21);
+  mlog("grids->volume_weighted_global_Gamma = %g", MLOG_MESG, grids->volume_weighted_global_Gamma);
   mlog("global mass weighted xHII = %g at z = %g",
        MLOG_MESG,
        1.0 - grids->mass_weighted_global_xH,
@@ -349,7 +349,7 @@ void init_reion_grids()
   mlog("Initialising grids...", MLOG_MESG);
 
   grids->volume_weighted_global_xH = 1.0;
-  grids->volume_weighted_global_J_21 = 0.0;
+  grids->volume_weighted_global_Gamma = 0.0;
   grids->mass_weighted_global_xH = 1.0;
   grids->started = 0;
   grids->finished = 0;
@@ -394,6 +394,7 @@ void init_reion_grids()
     if (run_globals.params.Flag_IncludeRecombinations) {
       grids->z_re[ii] = 0.0;
       grids->Gamma12[ii] = 0.0;
+      grids->nHI[ii] = 0;
     }
     if (run_globals.params.Flag_Compute21cmBrightTemp) {
       grids->delta_T[ii] = 0.0;
@@ -432,7 +433,7 @@ void init_reion_grids()
   for (int ii = 0; ii < slab_n_real; ii++)
     if (run_globals.params.ReionUVBFlag) {
       grids->J_21_at_ionization[ii] = (float)0.;
-      grids->J_21[ii] = (float)0.;
+      grids->Gamma12[ii] = (float)0.;
       grids->Mvir_crit[ii] = (float)0.;
 #if USE_MINI_HALOS
       if (run_globals.params.Flag_IncludeLymanWerner)
@@ -580,7 +581,7 @@ void malloc_reionization_grids()
   grids->weighted_sfr_filtered = NULL;
   grids->z_at_ionization = NULL;
   grids->J_21_at_ionization = NULL;
-  grids->J_21 = NULL;
+  grids->Gamma12 = NULL;
   grids->temp_kinetic_all_gas = NULL;
 
 #if USE_MINI_HALOS
@@ -620,6 +621,7 @@ void malloc_reionization_grids()
   grids->N_rec_filtered = NULL;
   grids->z_re = NULL;
   grids->Gamma12 = NULL;
+  grids->nHI = NULL;
   grids->N_rec = NULL;
   grids->N_rec_filtered = NULL;
   grids->N_rec_unfiltered = NULL;
@@ -881,6 +883,7 @@ void malloc_reionization_grids()
 
       grids->z_re = fftwf_alloc_real((size_t)slab_n_real);
       grids->Gamma12 = fftwf_alloc_real((size_t)slab_n_real);
+      grids->nHI = fftwf_alloc_real((size_t)slab_n_real);
     }
 
     if (run_globals.params.Flag_Compute21cmBrightTemp) {
@@ -914,7 +917,7 @@ void malloc_reionization_grids()
 
     if (run_globals.params.ReionUVBFlag) {
       grids->J_21_at_ionization = fftwf_alloc_real((size_t)slab_n_real);
-      grids->J_21 = fftwf_alloc_real((size_t)slab_n_real);
+      grids->Gamma12 = fftwf_alloc_real((size_t)slab_n_real);
       grids->Mvir_crit = fftwf_alloc_real((size_t)slab_n_real);
 
 #if USE_MINI_HALOS
@@ -980,7 +983,7 @@ void free_reionization_grids()
 
   if (run_globals.params.ReionUVBFlag) {
     fftwf_free(grids->Mvir_crit);
-    fftwf_free(grids->J_21);
+    fftwf_free(grids->Gamma12);
     fftwf_free(grids->J_21_at_ionization);
 
 #if USE_MINI_HALOS
@@ -1016,6 +1019,7 @@ void free_reionization_grids()
 
     fftwf_free(grids->Gamma12);
     fftwf_free(grids->z_re);
+    fftwf_free(grids->nHI);
 
     fftwf_destroy_plan(grids->N_rec_filtered_reverse_plan);
     fftwf_destroy_plan(grids->N_rec_forward_plan);
@@ -1837,8 +1841,8 @@ void save_reion_output_grids(int snapshot)
   write_grid_float("temp_kinetic_all_gas", grids->temp_kinetic_all_gas, file_id, fspace_id, memspace_id, dcpl_id);
 
   if (run_globals.params.ReionUVBFlag) {
-    write_grid_float("J_21", grids->J_21, file_id, fspace_id, memspace_id, dcpl_id);
-    H5LTset_attribute_double(file_id, "J_21", "volume_weighted_global_J_21", &(grids->volume_weighted_global_J_21), 1);
+    write_grid_float("Gamma12", grids->Gamma12, file_id, fspace_id, memspace_id, dcpl_id);
+    H5LTset_attribute_double(file_id, "Gamma12", "volume_weighted_global_Gamma", &(grids->volume_weighted_global_Gamma), 1);
     write_grid_float("J_21_at_ionization", grids->J_21_at_ionization, file_id, fspace_id, memspace_id, dcpl_id);
     write_grid_float("Mvir_crit", grids->Mvir_crit, file_id, fspace_id, memspace_id, dcpl_id);
 
