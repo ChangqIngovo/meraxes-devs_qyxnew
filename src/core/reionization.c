@@ -282,17 +282,18 @@ void call_find_HII_bubbles(int snapshot, int nout_gals, timer_info* timer)
   // Call find_HII_bubbles
   find_HII_bubbles(snapshot, timer);
 
-  mlog("grids->volume_weighted_global_xH = %g", MLOG_MESG, grids->volume_weighted_global_xH);
-  mlog("grids->volume_weighted_global_Gamma12 = %g (h**2 1e-12 /s)", MLOG_MESG, grids->volume_weighted_global_Gamma12);
-  mlog("grids->volume_weighted_global_r_bubble = %g (h**-1 Mpc)", MLOG_MESG, grids->volume_weighted_global_r_bubble);
-  mlog("grids->volume_weighted_global_weighted_sfr = %g (Msun/yr)", MLOG_MESG, grids->volume_weighted_global_weighted_sfr);
+  mlog("global quantities = volume-weighted VS mass-weighted", MLOG_MESG);
+  mlog("xH = %g VS %g", MLOG_MESG, grids->volume_weighted_global_xH, grids->mass_weighted_global_xH);
+  mlog("Gamma12 = %g VS %g (h**2 1e-12 /s)", MLOG_MESG, grids->volume_weighted_global_Gamma12, grids->mass_weighted_global_Gamma12);
+  mlog("r_bubble = %g VS %g (h**-1 Mpc)", MLOG_MESG, grids->volume_weighted_global_r_bubble, grids->mass_weighted_global_r_bubble);
+  mlog("temp_kinetic_all_gas = %g VS %g (K)", MLOG_MESG, grids->volume_weighted_global_temp_kinetic_all_gas);
+  mlog("N_rec = %g VS %g (/N_b)", MLOG_MESG, grids->volume_weighted_global_N_rec, grids->mass_weighted_global_N_rec);
+  mlog("residual_xH = %g VS %g", MLOG_MESG, grids->volume_weighted_global_residual_xH, grids->mass_weighted_global_residual_xH);
+
+  mlog("sfr = %g (Msun/yr)", MLOG_MESG, grids->volume_weighted_global_weighted_sfr);
 #if USE_MINI_HALOS
-  mlog("grids->volume_weighted_global_weighted_sfrIII = %g (Msun/yr)", MLOG_MESG, grids->volume_weighted_global_weighted_sfrIII);
+  mlog("sfrIII = %g (Msun/yr)", MLOG_MESG, grids->volume_weighted_global_weighted_sfrIII);
 #endif
-  mlog("global mass weighted xHII = %g at z = %g",
-       MLOG_MESG,
-       1.0 - grids->mass_weighted_global_xH,
-       run_globals.ZZ[snapshot]);
   mlog("...done", MLOG_CLOSE | MLOG_TIMERSTOP);
 }
 
@@ -1777,7 +1778,7 @@ void load_reion_sfr_grids(int snapshot_counter_backwards, float weight, const in
 #if USE_MINI_HALOS
             (grids->sfrIII)[grid_index(ii, jj, kk, ReionGridDim, INDEX_PADDED)] = grids->sfrIII_histories[snapshot_counter_backwards * local_n_complex * 2+grid_index(ii, jj, kk, ReionGridDim, INDEX_REAL)]  * weight;
 #endif
-		}
+        }
   }
   else{
     for (int ii = 0; ii < local_nix; ii++)

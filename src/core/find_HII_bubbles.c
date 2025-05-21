@@ -474,8 +474,6 @@ void _find_HII_bubbles(const int snapshot)
   // TODO: The deltax grid will have rounding errors from forward and reverse
   //       FFT. Should cache deltax slabs prior to ffts and reuse here.
   double volume_weighted_global_xH = 0.0;
-  double mass_weighted_global_xH = 0.0;
-  double mass_weight = 0.0;
   double volume_weighted_global_Gamma12 = 0.0;
   double volume_weighted_global_r_bubble = 0.0;
   double volume_weighted_global_weighted_sfr = 0.0;
@@ -486,11 +484,14 @@ void _find_HII_bubbles(const int snapshot)
   double volume_weighted_global_N_rec = 0.0;
   double volume_weighted_global_residual_xH = 0.0;
 
+  double mass_weight = 0.0;
+  double mass_weighted_global_xH = 0.0;
   double mass_weighted_global_Gamma12 = 0.0;
   double mass_weighted_global_r_bubble = 0.0;
   double mass_weighted_global_temp_kinetic_all_gas = 0.0;
   double mass_weighted_global_N_rec = 0.0;
   double mass_weighted_global_residual_xH = 0.0;
+
   double Hubble_h = run_globals.params.Hubble_h;
 
   for (int ix = 0; ix < local_nix; ix++)
