@@ -775,6 +775,7 @@ void create_master_file()
       H5LTset_attribute_string(file_id, group_name, "deltax", "None");
       H5LTset_attribute_string(file_id, group_name, "residual_xH", "None");
       H5LTset_attribute_string(file_id, group_name, "temp_kinetic_all_gas", "K");
+      H5LTset_attribute_string(file_id, group_name, "N_rec", "None");
 
 #if USE_MINI_HALOS
       if (run_globals.params.Flag_IncludeLymanWerner) {
@@ -827,6 +828,7 @@ void create_master_file()
       H5LTset_attribute_string(file_id, group_name, "deltax", "None");
       H5LTset_attribute_string(file_id, group_name, "residual_xH", "None");
       H5LTset_attribute_string(file_id, group_name, "temp_kinetic_all_gas", "None");
+      H5LTset_attribute_string(file_id, group_name, "N_rec", "None");
 
 #if USE_MINI_HALOS
       if (run_globals.params.Flag_IncludeLymanWerner) {

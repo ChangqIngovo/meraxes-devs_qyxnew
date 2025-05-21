@@ -189,6 +189,9 @@ void _find_HII_bubbles(const int snapshot)
 
   // Fields relevant for computing the inhomogeneous recombinations
   float* Gamma12 = run_globals.reion_grids.Gamma12;
+  float* J_21_at_ionization = run_globals.reion_grids.J_21_at_ionization;
+  float* Tk_box = run_globals.reion_grids.Tk_box;
+  float* temp_kinetic_all_gas = run_globals.reion_grids.temp_kinetic_all_gas;
   float* z_in = run_globals.reion_grids.z_at_ionization;
   float* N_rec = run_globals.reion_grids.N_rec;
   float* weighted_sfr = run_globals.reion_grids.weighted_sfr;
@@ -425,7 +428,7 @@ void _find_HII_bubbles(const int snapshot)
 #if USE_MINI_HALOS
                 Gamma12[i_real] += (float)(Gamma_R_prefactorIII * weighted_sfr_densityIII);
 #endif
-			}
+            }
 
             // Mark as ionised
             xH[i_real] = 0;
@@ -437,9 +440,9 @@ void _find_HII_bubbles(const int snapshot)
           // If so, assign partial ionisations to those cells which aren't fully ionised
           else if (flag_last_filter_step && (xH[i_real] > REL_TOL)) {
             if (run_globals.params.Flag_IncludeSpinTemp)
-                run_globals.reion_grids.temp_kinetic_all_gas[i_real] = ComputePartiallyIoinizedTemperature(run_globals.reion_grids.temp_kinetic_all_gas[i_real], xH[i_real]);
+                temp_kinetic_all_gas[i_real] = ComputePartiallyIoinizedTemperature(temp_kinetic_all_gas[i_real], xH[i_real]);
             else
-                run_globals.reion_grids.temp_kinetic_all_gas[i_real] = ComputePartiallyIoinizedTemperature(TK*(1. + cT_ad*deltax[i_padded]), xH[i_real]);
+                temp_kinetic_all_gas[i_real] = ComputePartiallyIoinizedTemperature(TK*(1. + cT_ad*deltax[i_padded]), xH[i_real]);
 
             xH[i_real] = (float)(neutral_fraction - f_coll_stars * ReionEfficiency);
 #if USE_MINI_HALOS
@@ -457,11 +460,11 @@ void _find_HII_bubbles(const int snapshot)
           {
             z_in[i_real] = (float)redshift;
             if (flag_ReionUVBFlag){
-              run_globals.reion_grids.J_21_at_ionization[i_real] = (float)(weighted_sfr_density * J_21_aux_constant);
+              J_21_at_ionization[i_real] = (float)(weighted_sfr_density * J_21_aux_constant);
 #if USE_MINI_HALOS
-              run_globals.reion_grids.J_21_at_ionization[i_real] += (float)(weighted_sfr_densityIII * J_21_auxIII_constant);
+              J_21_at_ionization[i_real] += (float)(weighted_sfr_densityIII * J_21_auxIII_constant);
 #endif
-			}
+            }
           }
         }
     // iz
@@ -474,12 +477,21 @@ void _find_HII_bubbles(const int snapshot)
   double volume_weighted_global_xH = 0.0;
   double mass_weighted_global_xH = 0.0;
   double mass_weight = 0.0;
-  double volume_weighted_global_Gamma = 0.0;
+  double volume_weighted_global_Gamma12 = 0.0;
   double volume_weighted_global_r_bubble = 0.0;
   double volume_weighted_global_weighted_sfr = 0.0;
 #if USE_MINI_HALOS
   double volume_weighted_global_weighted_sfrIII = 0.0;
 #endif
+  double volume_weighted_global_temp_kinetic_all_gas = 0.0;
+  double volume_weighted_global_N_rec = 0.0;
+  double volume_weighted_global_residual_xH = 0.0;
+
+  double mass_weighted_global_Gamma12 = 0.0;
+  double mass_weighted_global_r_bubble = 0.0;
+  double mass_weighted_global_temp_kinetic_all_gas = 0.0;
+  double mass_weighted_global_N_rec = 0.0;
+  double mass_weighted_global_residual_xH = 0.0;
   double Hubble_h = run_globals.params.Hubble_h;
 
   for (int ix = 0; ix < local_nix; ix++)
@@ -489,7 +501,7 @@ void _find_HII_bubbles(const int snapshot)
         i_padded = grid_index(ix, iy, iz, ReionGridDim, INDEX_PADDED);
         double cell_xH = (double)(xH[i_real]);
         volume_weighted_global_xH += cell_xH;
-        volume_weighted_global_Gamma += (double)Gamma12[i_real];
+        volume_weighted_global_Gamma12 += (double)Gamma12[i_real];
         volume_weighted_global_r_bubble += (double)r_bubble[i_real];
         volume_weighted_global_weighted_sfr += (double)weighted_sfr[i_padded];
 #if USE_MINI_HALOS
@@ -498,20 +510,22 @@ void _find_HII_bubbles(const int snapshot)
 
         density_over_mean = 1.0 + (double)((float*)deltax)[i_padded];
         mass_weighted_global_xH += cell_xH * density_over_mean;
+        mass_weighted_global_Gamma12 += (double)Gamma12[i_real] * density_over_mean;
+        mass_weighted_global_r_bubble += (double)r_bubble[i_real] * density_over_mean;
         mass_weight += density_over_mean;
 
         if ((z_in[i_real]>0) && (xH[i_real]<REL_TOL))
-            run_globals.reion_grids.temp_kinetic_all_gas[i_real] = ComputeFullyIoinizedTemperature(z_in[i_real], (float)redshift, ((float*)deltax)[i_padded]);
+            temp_kinetic_all_gas[i_real] = ComputeFullyIoinizedTemperature(z_in[i_real], (float)redshift, ((float*)deltax)[i_padded]);
         
         // Below sometimes (very rare though) can happen when the density drops too fast and to below T_HI 
         if (run_globals.params.Flag_IncludeSpinTemp) {
-            if (run_globals.reion_grids.temp_kinetic_all_gas[i_real] < run_globals.reion_grids.Tk_box[i_real])
-                run_globals.reion_grids.temp_kinetic_all_gas[i_real] = run_globals.reion_grids.Tk_box[i_real];
+            if (temp_kinetic_all_gas[i_real] < Tk_box[i_real])
+                temp_kinetic_all_gas[i_real] = Tk_box[i_real];
         }
         else{
             thistk = TK*(1. + cT_ad*deltax[i_padded]);
-            if (run_globals.reion_grids.temp_kinetic_all_gas[i_real] < thistk)
-                run_globals.reion_grids.temp_kinetic_all_gas[i_real] = thistk;
+            if (temp_kinetic_all_gas[i_real] < thistk)
+                temp_kinetic_all_gas[i_real] = thistk;
         }
 
         if (run_globals.params.Flag_IncludeRecombinations) {
@@ -521,25 +535,58 @@ void _find_HII_bubbles(const int snapshot)
           N_rec[i_padded] += dNrec;
           nHI[i_real] = splined_residual_neutral_hydrogen(z_eff,Gamma12[i_real] * Hubble_h * Hubble_h);
         }
+        volume_weighted_global_temp_kinetic_all_gas += (double)temp_kinetic_all_gas[i_real];
+        volume_weighted_global_N_rec += (double)N_rec[i_padded];
+        volume_weighted_global_residual_xH += (double)nHI[i_real];
+        mass_weighted_global_temp_kinetic_all_gas += (double)temp_kinetic_all_gas[i_real] * density_over_mean;
+        mass_weighted_global_N_rec += (double)N_rec[i_padded] * density_over_mean;
+        mass_weighted_global_residual_xH += (double)nHI[i_real] * density_over_mean;
       }
 
   MPI_Allreduce(MPI_IN_PLACE, &volume_weighted_global_xH, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
-  MPI_Allreduce(MPI_IN_PLACE, &volume_weighted_global_Gamma, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
+  MPI_Allreduce(MPI_IN_PLACE, &volume_weighted_global_Gamma12, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
   MPI_Allreduce(MPI_IN_PLACE, &volume_weighted_global_r_bubble, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
   MPI_Allreduce(MPI_IN_PLACE, &volume_weighted_global_weighted_sfr, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
+  MPI_Allreduce(MPI_IN_PLACE, &volume_weighted_global_temp_kinetic_all_gas, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
+  MPI_Allreduce(MPI_IN_PLACE, &volume_weighted_global_N_rec, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
+  MPI_Allreduce(MPI_IN_PLACE, &volume_weighted_global_residual_xH, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
   MPI_Allreduce(MPI_IN_PLACE, &mass_weighted_global_xH, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
+  MPI_Allreduce(MPI_IN_PLACE, &mass_weighted_global_Gamma12, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
+  MPI_Allreduce(MPI_IN_PLACE, &mass_weighted_global_r_bubble, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
+  MPI_Allreduce(MPI_IN_PLACE, &mass_weighted_global_temp_kinetic_all_gas, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
+  MPI_Allreduce(MPI_IN_PLACE, &mass_weighted_global_N_rec, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
+  MPI_Allreduce(MPI_IN_PLACE, &mass_weighted_global_residual_xH, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
   MPI_Allreduce(MPI_IN_PLACE, &mass_weight, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
 
   volume_weighted_global_xH /= total_n_cells;
-  volume_weighted_global_Gamma /= total_n_cells;
+  volume_weighted_global_Gamma12 /= total_n_cells;
   volume_weighted_global_r_bubble /= total_n_cells;
   volume_weighted_global_weighted_sfr /= total_n_cells;
+  volume_weighted_global_temp_kinetic_all_gas /= total_n_cells;
+  volume_weighted_global_N_rec /= total_n_cells;
+  volume_weighted_global_residual_xH /= total_n_cells;
+
   mass_weighted_global_xH /= mass_weight;
+  mass_weighted_global_Gamma12 /= total_n_cells;
+  mass_weighted_global_r_bubble /= total_n_cells;
+  mass_weighted_global_temp_kinetic_all_gas /= total_n_cells;
+  mass_weighted_global_N_rec /= total_n_cells;
+  mass_weighted_global_residual_xH /= total_n_cells;
+
   run_globals.reion_grids.volume_weighted_global_xH = volume_weighted_global_xH;
-  run_globals.reion_grids.volume_weighted_global_Gamma = volume_weighted_global_Gamma;
+  run_globals.reion_grids.volume_weighted_global_Gamma12 = volume_weighted_global_Gamma12;
   run_globals.reion_grids.volume_weighted_global_r_bubble = volume_weighted_global_r_bubble;
   run_globals.reion_grids.volume_weighted_global_weighted_sfr = volume_weighted_global_weighted_sfr;
+  run_globals.reion_grids.volume_weighted_global_temp_kinetic_all_gas = volume_weighted_global_temp_kinetic_all_gas;
+  run_globals.reion_grids.volume_weighted_global_N_rec = volume_weighted_global_N_rec;
+  run_globals.reion_grids.volume_weighted_global_residual_xH = volume_weighted_global_residual_xH;
+
   run_globals.reion_grids.mass_weighted_global_xH = mass_weighted_global_xH;
+  run_globals.reion_grids.mass_weighted_global_Gamma12 = mass_weighted_global_Gamma12;
+  run_globals.reion_grids.mass_weighted_global_r_bubble = mass_weighted_global_r_bubble;
+  run_globals.reion_grids.mass_weighted_global_temp_kinetic_all_gas = mass_weighted_global_temp_kinetic_all_gas;
+  run_globals.reion_grids.mass_weighted_global_N_rec = mass_weighted_global_N_rec;
+  run_globals.reion_grids.mass_weighted_global_residual_xH = mass_weighted_global_residual_xH;
 
 #if USE_MINI_HALOS
   MPI_Allreduce(MPI_IN_PLACE, &volume_weighted_global_weighted_sfrIII, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);

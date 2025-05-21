@@ -498,10 +498,19 @@ typedef struct reion_grids_t
   struct gal_to_slab_t* galaxy_to_slab_map;
 
   double volume_weighted_global_xH;
-  double volume_weighted_global_Gamma;
+  double volume_weighted_global_Gamma12;
   double volume_weighted_global_r_bubble;	
+  double volume_weighted_global_temp_kinetic_all_gas;
+  double volume_weighted_global_N_rec;
+  double volume_weighted_global_residual_xH;
   double volume_weighted_global_weighted_sfr;
+
   double mass_weighted_global_xH;
+  double mass_weighted_global_Gamma12;
+  double mass_weighted_global_r_bubble;	
+  double mass_weighted_global_temp_kinetic_all_gas;
+  double mass_weighted_global_N_rec;
+  double mass_weighted_global_residual_xH;
 
   double volume_ave_J_alpha;
   double volume_ave_xalpha;
