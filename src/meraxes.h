@@ -499,6 +499,8 @@ typedef struct reion_grids_t
 
   double volume_weighted_global_xH;
   double volume_weighted_global_Gamma;
+  double volume_weighted_global_r_bubble;	
+  double volume_weighted_global_weighted_sfr;
   double mass_weighted_global_xH;
 
   double volume_ave_J_alpha;
@@ -510,6 +512,7 @@ typedef struct reion_grids_t
   double volume_ave_xe;
   double volume_ave_Tb;
 #if USE_MINI_HALOS
+  double volume_weighted_global_weighted_sfrIII;
   double volume_ave_J_alphaII;
   double volume_ave_J_LW;
   double volume_ave_J_LWII;
