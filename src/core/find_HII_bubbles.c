@@ -109,8 +109,7 @@ void _find_HII_bubbles(const int snapshot)
   double Gamma_R_prefactorIII;
 #endif
 
-  double dNrec, rec;
-  float z_eff;
+  double recombination_rate, clumping_factor, rec, z_eff, rnh;
 
   const double redshift = run_globals.ZZ[snapshot];
   double prev_redshift;
@@ -198,7 +197,7 @@ void _find_HII_bubbles(const int snapshot)
 #if USE_MINI_HALOS
   float* weighted_sfrIII = run_globals.reion_grids.weighted_sfrIII;
 #endif
-  float* nHI = run_globals.reion_grids.nHI;
+  float* residual_xH = run_globals.reion_grids.residual_xH;
   fftwf_complex* N_rec_unfiltered = NULL;
   fftwf_complex* N_rec_filtered = NULL;
   if (run_globals.params.Flag_IncludeRecombinations) {
@@ -530,17 +529,20 @@ void _find_HII_bubbles(const int snapshot)
 
         if (run_globals.params.Flag_IncludeRecombinations) {
           // Store the resultant recombination cell
-          z_eff = (float)((1. + redshift) * pow(density_over_mean, 1.0 / 3.0) - 1);
-          dNrec = splined_recombination_rate(z_eff, Gamma12[i_real] * Hubble_h * Hubble_h) * fabs_dtdz * zstep * (1. - cell_xH);
-          N_rec[i_padded] += dNrec;
-          nHI[i_real] = splined_residual_neutral_hydrogen(z_eff,Gamma12[i_real] * Hubble_h * Hubble_h);
+          z_eff = (1. + redshift) * pow(density_over_mean, 1.0 / 3.0) - 1;
+          if (splined_recombination(z_eff, (double)Gamma12[i_real] * Hubble_h * Hubble_h, (double)temp_kinetic_all_gas[i_real], &recombination_rate, &rnh) != 1){
+            mlog_error("splined_recombination failed. Aborting...");
+            ABORT(EXIT_FAILURE);
+          }
+          N_rec[i_padded] += (float)recombination_rate * fabs_dtdz * zstep * (1. - (float)cell_xH);
+		  residual_xH[i_real] = (float)rnh;
         }
         volume_weighted_global_temp_kinetic_all_gas += (double)temp_kinetic_all_gas[i_real];
         volume_weighted_global_N_rec += (double)N_rec[i_padded];
-        volume_weighted_global_residual_xH += (double)nHI[i_real];
+        volume_weighted_global_residual_xH += (double)residual_xH[i_real];
         mass_weighted_global_temp_kinetic_all_gas += (double)temp_kinetic_all_gas[i_real] * density_over_mean;
         mass_weighted_global_N_rec += (double)N_rec[i_padded] * density_over_mean;
-        mass_weighted_global_residual_xH += (double)nHI[i_real] * density_over_mean;
+        mass_weighted_global_residual_xH += (double)residual_xH[i_real] * density_over_mean;
       }
 
   MPI_Allreduce(MPI_IN_PLACE, &volume_weighted_global_xH, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);

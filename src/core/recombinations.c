@@ -23,23 +23,33 @@ static double beta_table[beta_NPTS], beta_params[beta_NPTS];
 static gsl_interp_accel* beta_acc;
 static gsl_spline* beta_spline;
 
-static double RR_table[RR_Z_NPTS][RR_lnGamma_NPTS], lnGamma_values[RR_lnGamma_NPTS];
-static double CF_table[RR_Z_NPTS][RR_lnGamma_NPTS], RNH_table[RR_Z_NPTS][RR_lnGamma_NPTS];
-static gsl_interp_accel *RR_acc[RR_Z_NPTS], *CF_acc[RR_Z_NPTS], *RNH_acc[RR_Z_NPTS];
-static gsl_spline *RR_spline[RR_Z_NPTS], *CF_spline[RR_Z_NPTS], *RNH_spline[RR_Z_NPTS];
+static double RR_table[RR_Z_NPTS][RR_T_NPTS][RR_lnGamma_NPTS], lnGamma_values[RR_lnGamma_NPTS];
+static double RNH_table[RR_Z_NPTS][RR_T_NPTS][RR_lnGamma_NPTS];
+//static double CF_table[RR_Z_NPTS][RR_T_NPTS][RR_lnGamma_NPTS];
+static gsl_interp_accel *RR_acc[RR_Z_NPTS][RR_T_NPTS], *RNH_acc[RR_Z_NPTS][RR_T_NPTS]; //*CF_acc[RR_Z_NPTS][RR_T_NPTS]
+static gsl_spline *RR_spline[RR_Z_NPTS][RR_T_NPTS], *RNH_spline[RR_Z_NPTS][RR_T_NPTS]; //*CF_spline[RR_Z_NPTS][RR_T_NPTS]
 
-double splined_recombination_rate(double z_eff, double gamma12_bg)
+int splined_recombination(double z_eff, double gamma12_bg, double temp, double *recombination_rate, double *residual_xH)
 {
-  int z_ct = (int)(z_eff / RR_DEL_Z + 0.5); // round to nearest int
+  int z_ct = (int)((z_eff-RR_Z_END) / RR_DEL_Z + 0.5); // round to nearest int
+  int t_ct = (int)((temp-RR_T_STA) / RR_DEL_T + 0.5); // round to nearest int
   double lnGamma = log(gamma12_bg);
 
   // check out of bounds
   if (z_ct < 0) { // out of array bounds
-    // mlog("WARNING: splined_recombination_rate: effective redshift %g is outside of array bounds", MLOG_MESG, z_eff);
+    mlog("WARNING: splined_recombination_rate: effective redshift %g is outside of array left bound", MLOG_MESG, z_eff);
     z_ct = 0;
   } else if (z_ct >= RR_Z_NPTS) {
-    mlog("WARNING: splined_recombination_rate: effective redshift %g is outside of array bounds", MLOG_MESG, z_eff);
+    mlog("WARNING: splined_recombination_rate: effective redshift %g is outside of array right bound", MLOG_MESG, z_eff);
     z_ct = RR_Z_NPTS - 1;
+  }
+
+  if (t_ct < 0) { // out of array bounds
+    mlog("WARNING: splined_recombination_rate: temperature %g is outside of array left bound", MLOG_MESG, temp);
+    t_ct = 0;
+  } else if (t_ct >= RR_T_NPTS) {
+    mlog("WARNING: splined_recombination_rate: temperature %g is outside of array right bound", MLOG_MESG, temp);
+    t_ct = RR_T_NPTS - 1;
   }
 
   if (lnGamma < RR_lnGamma_min) {
@@ -49,61 +59,17 @@ double splined_recombination_rate(double z_eff, double gamma12_bg)
     lnGamma = RR_lnGamma_min + RR_DEL_lnGamma * RR_lnGamma_NPTS - FRACT_FLOAT_ERR;
   }
 
-  return gsl_spline_eval(RR_spline[z_ct], lnGamma, RR_acc[z_ct]);
-}
+  *recombination_rate = gsl_spline_eval(RR_spline[z_ct][t_ct], lnGamma, RR_acc[z_ct][t_ct]);
+  *residual_xH = gsl_spline_eval(RNH_spline[z_ct][t_ct], lnGamma, RNH_acc[z_ct][t_ct]);
+  //*clumping_factor = gsl_spline_eval(CF_spline[z_ct], lnGamma, CF_acc[z_ct]);
 
-double splined_clumping_factor(double z_eff, double gamma12_bg)
-{
-  int z_ct = (int)(z_eff / RR_DEL_Z + 0.5); // round to nearest int
-  double lnGamma = log(gamma12_bg);
-
-  // check out of bounds
-  if (z_ct < 0) { // out of array bounds
-    // mlog("WARNING: splined_recombination_rate: effective redshift %g is outside of array bounds", MLOG_MESG, z_eff);
-    z_ct = 0;
-  } else if (z_ct >= RR_Z_NPTS) {
-    mlog("WARNING: splined_clumping_factor: effective redshift %g is outside of array bounds", MLOG_MESG, z_eff);
-    z_ct = RR_Z_NPTS - 1;
-  }
-
-  if (lnGamma < RR_lnGamma_min) {
-    return 0;
-  } else if (lnGamma >= (RR_lnGamma_min + RR_DEL_lnGamma * RR_lnGamma_NPTS)) {
-    mlog("WARNING: splined_clumping_factor: Gamma12 of %g is outside of interpolation array", MLOG_MESG, gamma12_bg);
-    lnGamma = RR_lnGamma_min + RR_DEL_lnGamma * RR_lnGamma_NPTS - FRACT_FLOAT_ERR;
-  }
-
-  return gsl_spline_eval(CF_spline[z_ct], lnGamma, CF_acc[z_ct]);
-}
-
-double splined_residual_neutral_hydrogen(double z_eff, double gamma12_bg)
-{
-  int z_ct = (int)(z_eff / RR_DEL_Z + 0.5); // round to nearest int
-  double lnGamma = log(gamma12_bg);
-
-  // check out of bounds
-  if (z_ct < 0) { // out of array bounds
-    // mlog("WARNING: splined_recombination_rate: effective redshift %g is outside of array bounds", MLOG_MESG, z_eff);
-    z_ct = 0;
-  } else if (z_ct >= RR_Z_NPTS) {
-    mlog("WARNING: splined_residual_neutral_hydrogen: effective redshift %g is outside of array bounds", MLOG_MESG, z_eff);
-    z_ct = RR_Z_NPTS - 1;
-  }
-
-  if (lnGamma < RR_lnGamma_min) {
-    return 0;
-  } else if (lnGamma >= (RR_lnGamma_min + RR_DEL_lnGamma * RR_lnGamma_NPTS)) {
-    mlog("WARNING: splined_residual_neutral_hydrogen: Gamma12 of %g is outside of interpolation array", MLOG_MESG, gamma12_bg);
-    lnGamma = RR_lnGamma_min + RR_DEL_lnGamma * RR_lnGamma_NPTS - FRACT_FLOAT_ERR;
-  }
-
-  return gsl_spline_eval(RNH_spline[z_ct], lnGamma, RNH_acc[z_ct]);
+  return 1;
 }
 
 void init_MHR()
 {
-  int z_ct, gamma_ct;
-  float z, gamma;
+  int z_ct, gamma_ct, t_ct;
+  double z, gamma, temp;
 
   mlog("Initialising MHR parameter and recombination rate LUTs...", MLOG_MESG);
 
@@ -115,34 +81,41 @@ void init_MHR()
   // now the recombination rate look up tables
   for (z_ct = 0; z_ct < RR_Z_NPTS; z_ct++) {
 
-    z = z_ct * RR_DEL_Z; // redshift corresponding to index z_ct of the array
+    z = z_ct * RR_DEL_Z + RR_Z_END; // redshift corresponding to index z_ct of the array
 
-    // Intialize the Gamma values
-    for (gamma_ct = 0; gamma_ct < RR_lnGamma_NPTS; gamma_ct++) {
-      lnGamma_values[gamma_ct] = RR_lnGamma_min + gamma_ct * RR_DEL_lnGamma; // ln of Gamma12
-      gamma = (float)exp(lnGamma_values[gamma_ct]);
-      RR_table[z_ct][gamma_ct] = recombination_rate(z, gamma, 1, 1); // CHANGE THIS TO INCLUDE TEMPERATURE
-      CF_table[z_ct][gamma_ct] = clumping_factor(z, gamma, 1, 1); // CHANGE THIS TO INCLUDE TEMPERATURE
-      RNH_table[z_ct][gamma_ct] = residual_neutral_hydrogen(z, gamma, 1, 1); // CHANGE THIS TO INCLUDE TEMPERATURE
-    }
+	for (t_ct = 0; t_ct < RR_T_NPTS; t_ct++){
+	
+	  temp = (t_ct * RR_DEL_T + RR_T_STA)/1e4;
 
-    // set up the spline in gamma
-    RR_acc[z_ct] = gsl_interp_accel_alloc();
-    CF_acc[z_ct] = gsl_interp_accel_alloc();
-    RNH_acc[z_ct] = gsl_interp_accel_alloc();
-    RR_spline[z_ct] = gsl_spline_alloc(gsl_interp_cspline, RR_lnGamma_NPTS);
-    gsl_spline_init(RR_spline[z_ct], lnGamma_values, RR_table[z_ct], RR_lnGamma_NPTS);
-    CF_spline[z_ct] = gsl_spline_alloc(gsl_interp_cspline, RR_lnGamma_NPTS);
-    gsl_spline_init(CF_spline[z_ct], lnGamma_values, CF_table[z_ct], RR_lnGamma_NPTS);
-    RNH_spline[z_ct] = gsl_spline_alloc(gsl_interp_cspline, RR_lnGamma_NPTS);
-    gsl_spline_init(RNH_spline[z_ct], lnGamma_values, RNH_table[z_ct], RR_lnGamma_NPTS);
+      // Intialize the Gamma values
+      for (gamma_ct = 0; gamma_ct < RR_lnGamma_NPTS; gamma_ct++) {
+        lnGamma_values[gamma_ct] = RR_lnGamma_min + gamma_ct * RR_DEL_lnGamma; // ln of Gamma12
+        gamma = (float)exp(lnGamma_values[gamma_ct]);
+        RR_table[z_ct][t_ct][gamma_ct] = recombination_rate(z, gamma, temp, 1);
+        //CF_table[z_ct][t_ct][gamma_ct] = clumping_factor(z, gamma, temp, 1);
+        RNH_table[z_ct][t_ct][gamma_ct] = residual_neutral_hydrogen(z, gamma, temp, 1);
+      }
 
+      // set up the spline in gamma
+      RR_acc[z_ct][t_ct] = gsl_interp_accel_alloc();
+      RR_spline[z_ct][t_ct] = gsl_spline_alloc(gsl_interp_cspline, RR_lnGamma_NPTS);
+      gsl_spline_init(RR_spline[z_ct][t_ct], lnGamma_values, RR_table[z_ct][t_ct], RR_lnGamma_NPTS);
+
+      //CF_acc[z_ct][t_ct] = gsl_interp_accel_alloc();
+      //CF_spline[z_ct][t_ct] = gsl_spline_alloc(gsl_interp_cspline, RR_lnGamma_NPTS);
+      //gsl_spline_init(CF_spline[z_ct][t_ct], lnGamma_values, CF_table[z_ct][t_ct], RR_lnGamma_NPTS);
+	
+      RNH_acc[z_ct][t_ct] = gsl_interp_accel_alloc();
+      RNH_spline[z_ct][t_ct] = gsl_spline_alloc(gsl_interp_cspline, RR_lnGamma_NPTS);
+      gsl_spline_init(RNH_spline[z_ct][t_ct], lnGamma_values, RNH_table[z_ct][t_ct], RR_lnGamma_NPTS);
+
+	} // go to next temp
   } // go to next redshift
 }
 
 void free_MHR()
 {
-  int z_ct;
+  int z_ct, t_ct;
 
   free_A_MHR();
   free_C_MHR();
@@ -150,12 +123,14 @@ void free_MHR()
 
   // now the recombination rate look up tables
   for (z_ct = 0; z_ct < RR_Z_NPTS; z_ct++) {
-    gsl_spline_free(RR_spline[z_ct]);
-    gsl_interp_accel_free(RR_acc[z_ct]);
-    gsl_spline_free(CF_spline[z_ct]);
-    gsl_interp_accel_free(CF_acc[z_ct]);
-    gsl_spline_free(RNH_spline[z_ct]);
-    gsl_interp_accel_free(RNH_acc[z_ct]);
+	for (t_ct = 0; t_ct < RR_T_NPTS; t_ct++){
+      gsl_spline_free(RR_spline[z_ct][t_ct]);
+      gsl_interp_accel_free(RR_acc[z_ct][t_ct]);
+      //gsl_spline_free(CF_spline[z_ct][t_ct]);
+      //gsl_interp_accel_free(CF_acc[z_ct][t_ct]);
+      gsl_spline_free(RNH_spline[z_ct][t_ct]);
+      gsl_interp_accel_free(RNH_acc[z_ct][t_ct]);
+	}
   }
 }
 

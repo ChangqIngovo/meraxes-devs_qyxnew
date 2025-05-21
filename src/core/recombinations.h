@@ -22,7 +22,13 @@
 
 // number of points in redshift axis;  we will only interpolate over gamma, and just index sample in redshift
 #define RR_Z_NPTS (int)(300)
-#define RR_DEL_Z (float)(0.2)
+#define RR_DEL_Z (float)(0.1)
+#define RR_Z_END (float)(5.0) // added zend so that the 300 points span z=5, 5.1, ... 34.9.
+
+// same, just index sample in temperature
+#define RR_T_NPTS (int)(300)
+#define RR_DEL_T (float)(100)
+#define RR_T_STA (float)(1000) // added zend so that the 300 points span T=1000, 1100, ... 30900
 
 // number of samples of gamma for the interpolation tables
 #define RR_lnGamma_NPTS (int)(150)
@@ -44,7 +50,7 @@ extern "C"
                           double gamma12,
                           int usecaseB); // neutral fraction given H density (cm^-3), gas temperature (in 1e4 K), and
                                          // gamma12  (in 1e-12 s^-1). if usecase B, then use case B, otherwise case A
-  double splined_recombination_rate(double z_eff, double gamma12_bg); // assumes T=1e4 and case B
+  int splined_recombination(double z_eff, double gamma12_bg, double temp, double *recombination_rate, double *residual_xH); // assumes case B
   double recombination_rate(double z_eff, double gamma12_bg, double T4, int usecaseB);
   double clumping_factor(double z_eff, double gamma12_bg, double T4, int usecaseB);
   double residual_neutral_hydrogen(double z_eff, double gamma12_bg, double T4, int usecaseB);

@@ -400,7 +400,7 @@ void init_reion_grids()
     if (run_globals.params.Flag_IncludeRecombinations) {
       grids->z_re[ii] = 0.0;
       grids->Gamma12[ii] = 0.0;
-      grids->nHI[ii] = 0;
+      grids->residual_xH[ii] = 0;
     }
     if (run_globals.params.Flag_Compute21cmBrightTemp) {
       grids->delta_T[ii] = 0.0;
@@ -625,7 +625,7 @@ void malloc_reionization_grids()
   grids->N_rec_filtered = NULL;
   grids->z_re = NULL;
   grids->Gamma12 = NULL;
-  grids->nHI = NULL;
+  grids->residual_xH = NULL;
   grids->N_rec = NULL;
   grids->N_rec_filtered = NULL;
   grids->N_rec_unfiltered = NULL;
@@ -887,7 +887,7 @@ void malloc_reionization_grids()
 
       grids->z_re = fftwf_alloc_real((size_t)slab_n_real);
       grids->Gamma12 = fftwf_alloc_real((size_t)slab_n_real);
-      grids->nHI = fftwf_alloc_real((size_t)slab_n_real);
+      grids->residual_xH = fftwf_alloc_real((size_t)slab_n_real);
     }
 
     if (run_globals.params.Flag_Compute21cmBrightTemp) {
@@ -1021,7 +1021,7 @@ void free_reionization_grids()
 
     fftwf_free(grids->Gamma12);
     fftwf_free(grids->z_re);
-    fftwf_free(grids->nHI);
+    fftwf_free(grids->residual_xH);
 
     fftwf_destroy_plan(grids->N_rec_filtered_reverse_plan);
     fftwf_destroy_plan(grids->N_rec_forward_plan);
@@ -1841,7 +1841,7 @@ void save_reion_output_grids(int snapshot)
   write_grid_float("z_at_ionization", grids->z_at_ionization, file_id, fspace_id, memspace_id, dcpl_id);
   write_grid_float("r_bubble", grids->r_bubble, file_id, fspace_id, memspace_id, dcpl_id);
   write_grid_float("temp_kinetic_all_gas", grids->temp_kinetic_all_gas, file_id, fspace_id, memspace_id, dcpl_id);
-  write_grid_float("residual_xH", grids->nHI, file_id, fspace_id, memspace_id, dcpl_id);
+  write_grid_float("residual_xH", grids->residual_xH, file_id, fspace_id, memspace_id, dcpl_id);
   write_grid_float("Gamma12", grids->Gamma12, file_id, fspace_id, memspace_id, dcpl_id);
   write_grid_float("N_rec", grids->N_rec, file_id, fspace_id, memspace_id, dcpl_id);
 
