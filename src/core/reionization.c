@@ -288,7 +288,7 @@ void call_find_HII_bubbles(int snapshot, int nout_gals, timer_info* timer)
   mlog("r_bubble = %g VS %g (h**-1 Mpc)", MLOG_MESG, grids->volume_weighted_global_r_bubble, grids->mass_weighted_global_r_bubble);
   mlog("temp_kinetic_all_gas = %g VS %g (K)", MLOG_MESG, grids->volume_weighted_global_temp_kinetic_all_gas);
   mlog("N_rec = %g VS %g (/N_b)", MLOG_MESG, grids->volume_weighted_global_N_rec, grids->mass_weighted_global_N_rec);
-  mlog("residual_xH = %g VS %g", MLOG_MESG, grids->volume_weighted_global_residual_xH, grids->mass_weighted_global_residual_xH);
+  mlog("residual_xH = %g VS %g (x10**-4)", MLOG_MESG, grids->volume_weighted_global_residual_xH, grids->mass_weighted_global_residual_xH);
 
   mlog("sfr = %g (Msun/yr)", MLOG_MESG, grids->volume_weighted_global_weighted_sfr);
 #if USE_MINI_HALOS
