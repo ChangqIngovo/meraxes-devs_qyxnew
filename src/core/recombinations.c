@@ -53,7 +53,9 @@ int splined_recombination(double z_eff, double gamma12_bg, double temp, double *
   }
 
   if (lnGamma < RR_lnGamma_min) {
-    return 0;
+    *recombination_rate = 0.;
+	*residual_xH = 0.;
+	return 1;
   } else if (lnGamma >= (RR_lnGamma_min + RR_DEL_lnGamma * RR_lnGamma_NPTS)) {
     mlog("WARNING: splined_recombination_rate: Gamma12 of %g is outside of interpolation array", MLOG_MESG, gamma12_bg);
     lnGamma = RR_lnGamma_min + RR_DEL_lnGamma * RR_lnGamma_NPTS - FRACT_FLOAT_ERR;

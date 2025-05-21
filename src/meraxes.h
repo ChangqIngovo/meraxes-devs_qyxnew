@@ -467,7 +467,7 @@ typedef struct reion_grids_t
   fftwf_plan N_rec_filtered_reverse_plan;
 
   float* Gamma12;
-  float* nHI;
+  float* residual_xH;
 
   // Grids necessary for the 21cm brightness temperature
   float* delta_T;
