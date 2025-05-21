@@ -621,8 +621,6 @@ void malloc_reionization_grids()
 #endif
 
   // Grids required for inhomogeneous recombinations
-  grids->N_rec_unfiltered = NULL;
-  grids->N_rec_filtered = NULL;
   grids->z_re = NULL;
   grids->Gamma12 = NULL;
   grids->residual_xH = NULL;
@@ -1799,6 +1797,8 @@ void save_reion_output_grids(int snapshot)
   reion_grids_t* grids = &(run_globals.reion_grids);
   int ReionGridDim = run_globals.params.ReionGridDim;
   int local_nix = (int)(run_globals.reion_grids.slab_nix[run_globals.mpi_rank]);
+  // fftw padded grids
+  float* grid = (float*)calloc((size_t)local_nix * (size_t)ReionGridDim * (size_t)ReionGridDim, sizeof(float));
 
   // float *ps;
   // int   ps_nbins;
@@ -1843,7 +1843,13 @@ void save_reion_output_grids(int snapshot)
   write_grid_float("temp_kinetic_all_gas", grids->temp_kinetic_all_gas, file_id, fspace_id, memspace_id, dcpl_id);
   write_grid_float("residual_xH", grids->residual_xH, file_id, fspace_id, memspace_id, dcpl_id);
   write_grid_float("Gamma12", grids->Gamma12, file_id, fspace_id, memspace_id, dcpl_id);
-  write_grid_float("N_rec", grids->N_rec, file_id, fspace_id, memspace_id, dcpl_id);
+
+  for (int ii = 0; ii < local_nix; ii++)
+    for (int jj = 0; jj < ReionGridDim; jj++)
+      for (int kk = 0; kk < ReionGridDim; kk++)
+        grid[grid_index(ii, jj, kk, ReionGridDim, INDEX_REAL)] =
+          (grids->N_rec)[grid_index(ii, jj, kk, ReionGridDim, INDEX_PADDED)];
+  write_grid_float("N_rec", grid, file_id, fspace_id, memspace_id, dcpl_id);
 
   if (run_globals.params.ReionUVBFlag) {
     write_grid_float("J_21_at_ionization", grids->J_21_at_ionization, file_id, fspace_id, memspace_id, dcpl_id);
@@ -1854,9 +1860,6 @@ void save_reion_output_grids(int snapshot)
       write_grid_float("Mvir_crit_MC", grids->Mvir_crit_MC, file_id, fspace_id, memspace_id, dcpl_id);
 #endif
   }
-
-  // fftw padded grids
-  float* grid = (float*)calloc((size_t)(local_nix * ReionGridDim * ReionGridDim), sizeof(float));
 
 #if USE_MINI_HALOS
   if (run_globals.params.Flag_IncludeLymanWerner) {
@@ -1878,7 +1881,6 @@ void save_reion_output_grids(int snapshot)
         for (int kk = 0; kk < ReionGridDim; kk++)
           grid[grid_index(ii, jj, kk, ReionGridDim, INDEX_REAL)] =
             (grids->x_e_box_prev)[grid_index(ii, jj, kk, ReionGridDim, INDEX_PADDED)];
-
     write_grid_float("x_e_box", grid, file_id, fspace_id, memspace_id, dcpl_id);
   }
 
