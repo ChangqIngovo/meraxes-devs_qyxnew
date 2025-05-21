@@ -45,8 +45,11 @@ int splined_recombination(double z_eff, double gamma12_bg, double temp, double *
   }
 
   if (t_ct < 0) { // out of array bounds
-    mlog("WARNING: splined_recombination_rate: temperature %g is outside of array left bound", MLOG_MESG, temp);
-    t_ct = 0;
+    //mlog("WARNING: splined_recombination_rate: temperature %g is outside of array left bound", MLOG_MESG, temp);
+    //t_ct = 0;
+	*recombination_rate = 0.;
+	*residual_xH = 1.;
+	return 1;
   } else if (t_ct >= RR_T_NPTS) {
     mlog("WARNING: splined_recombination_rate: temperature %g is outside of array right bound", MLOG_MESG, temp);
     t_ct = RR_T_NPTS - 1;
@@ -54,7 +57,7 @@ int splined_recombination(double z_eff, double gamma12_bg, double temp, double *
 
   if (lnGamma < RR_lnGamma_min) {
     *recombination_rate = 0.;
-	*residual_xH = 0.;
+	*residual_xH = 1.;
 	return 1;
   } else if (lnGamma >= (RR_lnGamma_min + RR_DEL_lnGamma * RR_lnGamma_NPTS)) {
     mlog("WARNING: splined_recombination_rate: Gamma12 of %g is outside of interpolation array", MLOG_MESG, gamma12_bg);
