@@ -770,14 +770,16 @@ void create_master_file()
       H5LTset_attribute_string(file_id, group_name, "z_at_ionization", "None");
       H5LTset_attribute_string(file_id, group_name, "r_bubble", "Mpc");
       H5LTset_attribute_string(file_id, group_name, "Mvir_crit", "1e10 solMass");
-      H5LTset_attribute_string(file_id, group_name, "StellarMass", "1e10 solMass");
-      H5LTset_attribute_string(file_id, group_name, "Sfr", "solMass/yr");
+      H5LTset_attribute_string(file_id, group_name, "stars", "1e10 solMass");
+      H5LTset_attribute_string(file_id, group_name, "weighted_sfr", "solMass/yr");
       H5LTset_attribute_string(file_id, group_name, "deltax", "None");
+      H5LTset_attribute_string(file_id, group_name, "residual_xH", "None");
+      H5LTset_attribute_string(file_id, group_name, "temp_kinetic_all_gas", "K");
 
 #if USE_MINI_HALOS
       if (run_globals.params.Flag_IncludeLymanWerner) {
-        H5LTset_attribute_string(file_id, group_name, "JLW_box", "1e-21erg/s/Hz/cm/cm/sr");
-        H5LTset_attribute_string(file_id, group_name, "JLW_box_II", "1e-21erg/s/Hz/cm/cm/sr");
+        H5LTset_attribute_string(file_id, group_name, "JLW_box", "1e-21 erg/s/Hz/cm/cm/sr");
+        H5LTset_attribute_string(file_id, group_name, "JLW_box_II", "1e-21 erg/s/Hz/cm/cm/sr");
         H5LTset_attribute_string(file_id, group_name, "Mvir_crit_MC", "1e10 solMass");
       }
 #endif
@@ -818,9 +820,11 @@ void create_master_file()
       H5LTset_attribute_string(file_id, group_name, "z_at_ionization", "None");
       H5LTset_attribute_string(file_id, group_name, "r_bubble", "v/h");
       H5LTset_attribute_string(file_id, group_name, "Mvir_crit", "v/h");
-      H5LTset_attribute_string(file_id, group_name, "StellarMass", "v/h");
-      H5LTset_attribute_string(file_id, group_name, "Sfr", "None");
+      H5LTset_attribute_string(file_id, group_name, "stars", "v/h");
+      H5LTset_attribute_string(file_id, group_name, "weighted_sfr", "None");
       H5LTset_attribute_string(file_id, group_name, "deltax", "None");
+      H5LTset_attribute_string(file_id, group_name, "residual_xH", "None");
+      H5LTset_attribute_string(file_id, group_name, "temp_kinetic_all_gas", "None");
 
 #if USE_MINI_HALOS
       if (run_globals.params.Flag_IncludeLymanWerner) {
