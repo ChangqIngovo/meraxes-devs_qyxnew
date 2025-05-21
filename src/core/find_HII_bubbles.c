@@ -191,6 +191,10 @@ void _find_HII_bubbles(const int snapshot)
   float* Gamma12 = run_globals.reion_grids.Gamma12;
   float* z_in = run_globals.reion_grids.z_at_ionization;
   float* N_rec = run_globals.reion_grids.N_rec;
+  float* weighted_sfr = run_globals.reion_grids.weighted_sfr;
+#if USE_MINI_HALOS
+  float* weighted_sfrIII = run_globals.reion_grids.weighted_sfrIII;
+#endif
   float* nHI = run_globals.reion_grids.nHI;
   fftwf_complex* N_rec_unfiltered = NULL;
   fftwf_complex* N_rec_filtered = NULL;
@@ -471,6 +475,11 @@ void _find_HII_bubbles(const int snapshot)
   double mass_weighted_global_xH = 0.0;
   double mass_weight = 0.0;
   double volume_weighted_global_Gamma = 0.0;
+  double volume_weighted_global_r_bubble = 0.0;
+  double volume_weighted_global_weighted_sfr = 0.0;
+#if USE_MINI_HALOS
+  double volume_weighted_global_weighted_sfrIII = 0.0;
+#endif
   double Hubble_h = run_globals.params.Hubble_h;
 
   for (int ix = 0; ix < local_nix; ix++)
@@ -480,10 +489,12 @@ void _find_HII_bubbles(const int snapshot)
         i_padded = grid_index(ix, iy, iz, ReionGridDim, INDEX_PADDED);
         double cell_xH = (double)(xH[i_real]);
         volume_weighted_global_xH += cell_xH;
-
-        if (flag_ReionUVBFlag) {
-          volume_weighted_global_Gamma += (double)Gamma12[i_real];
-        }
+        volume_weighted_global_Gamma += (double)Gamma12[i_real];
+        volume_weighted_global_r_bubble += (double)r_bubble[i_real];
+        volume_weighted_global_weighted_sfr += (double)weighted_sfr[i_padded];
+#if USE_MINI_HALOS
+        volume_weighted_global_weighted_sfrIII += (double)weighted_sfrIII[i_padded];
+#endif
 
         density_over_mean = 1.0 + (double)((float*)deltax)[i_padded];
         mass_weighted_global_xH += cell_xH * density_over_mean;
@@ -513,20 +524,28 @@ void _find_HII_bubbles(const int snapshot)
       }
 
   MPI_Allreduce(MPI_IN_PLACE, &volume_weighted_global_xH, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
-  if (flag_ReionUVBFlag) {
-    MPI_Allreduce(MPI_IN_PLACE, &volume_weighted_global_Gamma, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
-  }
+  MPI_Allreduce(MPI_IN_PLACE, &volume_weighted_global_Gamma, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
+  MPI_Allreduce(MPI_IN_PLACE, &volume_weighted_global_r_bubble, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
+  MPI_Allreduce(MPI_IN_PLACE, &volume_weighted_global_weighted_sfr, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
   MPI_Allreduce(MPI_IN_PLACE, &mass_weighted_global_xH, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
   MPI_Allreduce(MPI_IN_PLACE, &mass_weight, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
 
   volume_weighted_global_xH /= total_n_cells;
-  if (flag_ReionUVBFlag) {
-    volume_weighted_global_Gamma /= total_n_cells;
-  }
+  volume_weighted_global_Gamma /= total_n_cells;
+  volume_weighted_global_r_bubble /= total_n_cells;
+  volume_weighted_global_weighted_sfr /= total_n_cells;
   mass_weighted_global_xH /= mass_weight;
   run_globals.reion_grids.volume_weighted_global_xH = volume_weighted_global_xH;
   run_globals.reion_grids.volume_weighted_global_Gamma = volume_weighted_global_Gamma;
+  run_globals.reion_grids.volume_weighted_global_r_bubble = volume_weighted_global_r_bubble;
+  run_globals.reion_grids.volume_weighted_global_weighted_sfr = volume_weighted_global_weighted_sfr;
   run_globals.reion_grids.mass_weighted_global_xH = mass_weighted_global_xH;
+
+#if USE_MINI_HALOS
+  MPI_Allreduce(MPI_IN_PLACE, &volume_weighted_global_weighted_sfrIII, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
+  volume_weighted_global_weighted_sfrIII /= total_n_cells;
+  run_globals.reion_grids.volume_weighted_global_weighted_sfrIII = volume_weighted_global_weighted_sfrIII;
+#endif
 }
 
 // This function makes sure that the right version of find_HII_bubbles() gets called.

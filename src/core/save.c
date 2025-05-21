@@ -778,6 +778,8 @@ void create_master_file()
 
 #if USE_MINI_HALOS
       if (run_globals.params.Flag_IncludeLymanWerner) {
+        H5LTset_attribute_string(file_id, group_name, "starsIII", "1e10 solMass");
+        H5LTset_attribute_string(file_id, group_name, "weighted_sfrIII", "solMass/yr");
         H5LTset_attribute_string(file_id, group_name, "JLW_box", "1e-21 erg/s/Hz/cm/cm/sr");
         H5LTset_attribute_string(file_id, group_name, "JLW_box_II", "1e-21 erg/s/Hz/cm/cm/sr");
         H5LTset_attribute_string(file_id, group_name, "Mvir_crit_MC", "1e10 solMass");
@@ -828,6 +830,8 @@ void create_master_file()
 
 #if USE_MINI_HALOS
       if (run_globals.params.Flag_IncludeLymanWerner) {
+        H5LTset_attribute_string(file_id, group_name, "starsIII", "v/h");
+        H5LTset_attribute_string(file_id, group_name, "weighted_sfrIII", "None");
         H5LTset_attribute_string(file_id, group_name, "JLW_box", "v");
         H5LTset_attribute_string(file_id, group_name, "JLW_box_II", "v");
         H5LTset_attribute_string(file_id, group_name, "Mvir_crit_MC", "v/h");
