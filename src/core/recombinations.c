@@ -32,7 +32,7 @@ static gsl_spline *RR_spline[RR_Z_NPTS][RR_T_NPTS], *RNH_spline[RR_Z_NPTS][RR_T_
 int splined_recombination(double z_eff, double gamma12_bg, double temp, double *recombination_rate, double *residual_xH)
 {
   int z_ct = (int)((z_eff-RR_Z_END) / RR_DEL_Z + 0.5); // round to nearest int
-  int t_ct = (int)((temp-RR_T_STA) / RR_DEL_T + 0.5); // round to nearest int
+  int t_ct = (int)((log10(temp)-RR_T_STA) / RR_DEL_T + 0.5); // round to nearest int
   double lnGamma = log(gamma12_bg);
 
   // check out of bounds
@@ -90,7 +90,7 @@ void init_MHR()
 
 	for (t_ct = 0; t_ct < RR_T_NPTS; t_ct++){
 	
-	  temp = (t_ct * RR_DEL_T + RR_T_STA)/1e4;
+	  temp = pow(10, (t_ct * RR_DEL_T + RR_T_STA) - 4.0);
 
       // Intialize the Gamma values
       for (gamma_ct = 0; gamma_ct < RR_lnGamma_NPTS; gamma_ct++) {

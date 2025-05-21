@@ -21,14 +21,14 @@
 #define beta_NPTS (int)(5)
 
 // number of points in redshift axis;  we will only interpolate over gamma, and just index sample in redshift
-#define RR_Z_NPTS (int)(300)
+#define RR_Z_NPTS (int)(350)
 #define RR_DEL_Z (float)(0.1)
-#define RR_Z_END (float)(5.0) // added zend so that the 300 points span z=5, 5.1, ... 34.9.
+#define RR_Z_END (float)(5.0) // added zend so that the 300 points span z=5, 5.1, ... 39.9.
 
 // same, just index sample in temperature
-#define RR_T_NPTS (int)(300)
-#define RR_DEL_T (float)(100)
-#define RR_T_STA (float)(1000) // added zend so that the 300 points span T=1000, 1100, ... 30900
+#define RR_T_NPTS (int)(200)
+#define RR_DEL_T (float)(0.01)
+#define RR_T_STA (float)(2) // added zend so that the 300 points span T=1e2, 1e2.01, ... 1e3.99
 
 // number of samples of gamma for the interpolation tables
 #define RR_lnGamma_NPTS (int)(150)
