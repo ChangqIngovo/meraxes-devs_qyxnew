@@ -155,7 +155,7 @@ void init_MHR()
   for (z_ct = 0; z_ct < RR_Z_NPTS; z_ct++) {
     for (t_ct = 0; t_ct < RR_T_NPTS; t_ct++){
     
-      for (gamma_ct = 0; gamma_ct < RR_lnGamma_NPTS; gamma_ct++) {
+      for (gamma_ct = 0; gamma_ct < RR_lnGamma_NPTS; gamma_ct++)
         lnGamma_values[gamma_ct] = RR_lnGamma_min + gamma_ct * RR_DEL_lnGamma; // ln of Gamma12
 
       // set up the spline in gamma

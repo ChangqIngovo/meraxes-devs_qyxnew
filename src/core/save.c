@@ -25,7 +25,7 @@ static float current_mwmsa(galaxy_t* gal, int i_snap)
   if (mwmsa_denom >0)
       return (float)((mwmsa_num / mwmsa_denom) - LTTime[snapshot]);
   else
-      return 0
+      return 0;
 }
 
 void prepare_galaxy_for_output(galaxy_t gal, galaxy_output_t* galout, int i_snap)
