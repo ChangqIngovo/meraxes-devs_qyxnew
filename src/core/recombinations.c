@@ -76,7 +76,7 @@ void init_MHR()
   int z_ct, gamma_ct, t_ct;
   double z, gamma, temp;
 
-  mlog("Initialising MHR parameter and recombination rate LUTs...", MLOG_MESG | MLOG_TIMERSTART);
+  mlog("Initialising MHR parameter and recombination interpolration tables...", MLOG_OPEN | MLOG_TIMERSTART);
 
   // first initialize the MHR parameter look up tables
   init_C_MHR();    /*initializes the lookup table for the C paremeter in MHR00 model*/
@@ -113,7 +113,7 @@ void init_MHR()
       if (rr_fp)    fclose(rr_fp);
       if (cf_fp)    fclose(cf_fp);
       if (rnh_fp)   fclose(rnh_fp);
-      mlog("Recomputing RR_table and RNH_table...", MLOG_MESG | MLOG_TIMERSTART);
+      mlog("Recomputing recombination tables.", MLOG_MESG | MLOG_TIMERSTART);
 
       for (gamma_ct = 0; gamma_ct < RR_lnGamma_NPTS; gamma_ct++)
         lnGamma_values[gamma_ct] = RR_lnGamma_min + gamma_ct * RR_DEL_lnGamma; // ln of Gamma12
@@ -159,7 +159,7 @@ void init_MHR()
 	  }
     }
 
-    mlog("...done.", MLOG_MESG | MLOG_TIMERSTOP);
+    mlog("...done.", MLOG_CONT | MLOG_TIMERSTOP);
   }
 
   MPI_Bcast(lnGamma_values, RR_lnGamma_NPTS, MPI_DOUBLE, 0, run_globals.mpi_comm);
@@ -187,7 +187,7 @@ void init_MHR()
     } // go to next temp
   } // go to next redshift
 
-  mlog("...done.", MLOG_MESG | MLOG_TIMERSTOP);
+  mlog("...done.", MLOG_CLOSE | MLOG_TIMERSTOP);
 
 }
 
