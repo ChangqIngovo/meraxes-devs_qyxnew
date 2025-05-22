@@ -51,3 +51,4 @@ build
 /.direnv/
 /.dmypy.json
 /.clangd
+input/recombination_tables/
