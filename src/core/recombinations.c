@@ -109,6 +109,10 @@ void init_MHR()
         mlog("Loaded recombination tables from disk.", MLOG_MESG);
     }
     else{
+      if (gamma_fp) fclose(gamma_fp);
+      if (rr_fp)    fclose(rr_fp);
+      if (cf_fp)    fclose(cf_fp);
+      if (rnh_fp)   fclose(rnh_fp);
       mlog("Recomputing RR_table and RNH_table...", MLOG_MESG | MLOG_TIMERSTART);
 
       for (gamma_ct = 0; gamma_ct < RR_lnGamma_NPTS; gamma_ct++)
@@ -131,24 +135,28 @@ void init_MHR()
       }
 
       // Save to disk
-      FILE *gamma_fp = fopen(GAMMA_FILENAME, "wb");
-      FILE *rr_fp = fopen(RR_FILENAME, "wb");
-      FILE *cf_fp = fopen(CF_FILENAME, "wb");
-      FILE *rnh_fp = fopen(RNH_FILENAME, "wb");
+      gamma_fp = fopen(GAMMA_FILENAME, "wb");
+      rr_fp = fopen(RR_FILENAME, "wb");
+      cf_fp = fopen(CF_FILENAME, "wb");
+      rnh_fp = fopen(RNH_FILENAME, "wb");
       if (gamma_fp && rr_fp && cf_fp && rnh_fp) {
-          fwrite(lnGamma_values, sizeof(double), RR_lnGamma_NPTS, gamma_fp);
-          fwrite(RR_table, sizeof(double), RR_Z_NPTS * RR_T_NPTS * RR_lnGamma_NPTS, rr_fp);
-          fwrite(CF_table, sizeof(double), RR_Z_NPTS * RR_T_NPTS * RR_lnGamma_NPTS, cf_fp);
-          fwrite(RNH_table, sizeof(double), RR_Z_NPTS * RR_T_NPTS * RR_lnGamma_NPTS, rnh_fp);
-          fclose(gamma_fp);
-          fclose(rr_fp);
-          fclose(cf_fp);
-          fclose(rnh_fp);
-          mlog("Saved RR_table and RNH_table to disk.", MLOG_MESG);
+        fwrite(lnGamma_values, sizeof(double), RR_lnGamma_NPTS, gamma_fp);
+        fwrite(RR_table, sizeof(double), RR_Z_NPTS * RR_T_NPTS * RR_lnGamma_NPTS, rr_fp);
+        fwrite(CF_table, sizeof(double), RR_Z_NPTS * RR_T_NPTS * RR_lnGamma_NPTS, cf_fp);
+        fwrite(RNH_table, sizeof(double), RR_Z_NPTS * RR_T_NPTS * RR_lnGamma_NPTS, rnh_fp);
+        fclose(gamma_fp);
+        fclose(rr_fp);
+        fclose(cf_fp);
+        fclose(rnh_fp);
+        mlog("Saved RR_table and RNH_table to disk.", MLOG_MESG);
       } 
-      else
-          mlog("Warning: Failed to save lookup tables to disk.", MLOG_MESG);
-
+      else{
+        if (gamma_fp) fclose(gamma_fp);
+        if (rr_fp)    fclose(rr_fp);
+        if (cf_fp)    fclose(cf_fp);
+        if (rnh_fp)   fclose(rnh_fp);
+        mlog("Warning: Failed to save lookup tables to disk.", MLOG_MESG);
+	  }
     }
 
     mlog("...done.", MLOG_MESG | MLOG_TIMERSTOP);
