@@ -59,6 +59,7 @@ galaxy_t* new_galaxy(int snapshot, unsigned long halo_ID)
   gal->BlackHoleAccretedColdMass = 0.0;
   gal->BlackHoleAccretingColdMass = 0.0;
   gal->Sfr = 0.0;
+  gal->FescWeightedSfr = 0.0;
   gal->Cos_Inc = gsl_rng_uniform(run_globals.random_generator);
   gal->MergTime = 99999.9;
   gal->BaryonFracModifier = 1.0;
@@ -72,8 +73,10 @@ galaxy_t* new_galaxy(int snapshot, unsigned long halo_ID)
   gal->StellarMass_II = 0.;
   gal->StellarMass_III = 0.;
   gal->GrossStellarMassIII = 0.0;
+  gal->SfrIII = 0.0;
   gal->FescIII = 1.0;
   gal->FescIIIWeightedGSM = 0.0;
+  gal->FescIIIWeightedSfr = 0.0;
   gal->Remnant_Mass = 0.;
   gal->Metal_Probability = 0.0;
   gal->Metals_IGM = 0.0;
@@ -165,6 +168,7 @@ void reset_galaxy_properties(galaxy_t* gal, int snapshot)
   // Here we reset any galaxy properties which are calculated on a snapshot by
   // snapshot basis.
   gal->Sfr = 0.0;
+  gal->FescWeightedSfr = 0.0;
   gal->Mcool = 0.0;
   gal->Rcool = 0.0;
   gal->MvirCrit = 0.0;
@@ -174,6 +178,10 @@ void reset_galaxy_properties(galaxy_t* gal, int snapshot)
   gal->FOFMvirModifier = 1.0;
   gal->BlackHoleAccretedHotMass = 0.0;
   gal->BlackHoleAccretedColdMass = 0.0;
+#if USE_MINI_HALOS
+  gal->SfrIII = 0.0;
+  gal->FescIIIWeightedSfr = 0.0;
+#endif
 
   // Update the stellar mass weighted mean age values.  This only needs to be
   // done for snapshots shich are passing out of what we are able to track

@@ -4,14 +4,13 @@
 #include "core/misc_tools.h"
 #include "meraxes.h"
 
-double calculate_BHemissivity(double BlackHoleMass, double accreted_mass)
+void calculate_BHemissivity(double BlackHoleMass, double accreted_mass, double *emissivity, double *accretion_time)
 {
-  double accretion_time;
   double Lbol; // bolometric luminotisy
   double kb;   // bolometric correction
   physics_params_t* physics = &(run_globals.params.physics);
 
-  accretion_time = log1p(accreted_mass / BlackHoleMass) * 450.514890 * ETA / physics->EddingtonRatio; // Myr
+  *accretion_time = log1p(accreted_mass / BlackHoleMass) * 450.514890 * ETA / physics->EddingtonRatio; // Myr
 
   // Bolometric luminosity in 1e10 Lsun at the MIDDLE of accretion time
   // TODO: this introduce inconsistency compared to the calculation of luminosity.
@@ -20,7 +19,8 @@ double calculate_BHemissivity(double BlackHoleMass, double accreted_mass)
          run_globals.params.Hubble_h * LUMINOSITY_CONVERTOR;
   kb = 6.25 * pow(Lbol, -0.37) + 9.0 * pow(Lbol, -0.012);
 
-  return physics->quasar_fobs * Lbol / kb * LB2EMISSIVITY * accretion_time; // 1e60 photon numbers
+  *emissivity = physics->quasar_fobs * Lbol / kb * LB2EMISSIVITY * *accretion_time; // 1e60 photon numbers
+  *accretion_time /= (run_globals.units.UnitTime_in_Megayears / run_globals.params.Hubble_h); // internal units
 }
 
 // quasar feedback suggested by Croton et al. 2016
@@ -164,7 +164,7 @@ void previous_merger_driven_BH_growth(galaxy_t* gal)
   // If there is any cold gas to feed the black hole...
   double m_reheat;
   double accreted_mass;
-  double BHemissivity;
+  double BHemissivity, accretion_time;
   double Vvir;
   run_units_t* units = &(run_globals.units);
 
@@ -188,11 +188,14 @@ void previous_merger_driven_BH_growth(galaxy_t* gal)
   gal->BlackHoleAccretingColdMass -= accreted_mass;
 
   // N_gamma,q * N_bh; later 1e60*BHemissivity * PROTONMASS/1e10/SOLAR_MASS will be N_gamma,q * M_bh
-  BHemissivity = calculate_BHemissivity(gal->BlackHoleMass, accreted_mass);
+  calculate_BHemissivity(gal->BlackHoleMass, accreted_mass, &BHemissivity, &accretion_time);
+  // historical reason for us to store nion rather than the emissivity in BHemissivity...
   gal->BHemissivity += BHemissivity;
   gal->BlackHoleMass += (1. - ETA) * accreted_mass;
   gal->EffectiveBHM +=
     BHemissivity * EMISSIVITY_CONVERTOR * gal->FescBH / run_globals.params.physics.ReionNionPhotPerBary;
+  gal->EffectiveBHAR +=
+    BHemissivity / accretion_time * EMISSIVITY_CONVERTOR * gal->FescBH / run_globals.params.physics.ReionNionPhotPerBary;
 
   // quasar mode feedback
   m_reheat = run_globals.params.physics.QuasarModeEff * 2. * ETA * run_globals.Csquare * accreted_mass / Vvir / Vvir;

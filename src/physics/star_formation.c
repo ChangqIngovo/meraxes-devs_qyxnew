@@ -47,9 +47,6 @@ void update_reservoirs_from_sf(galaxy_t* gal, double new_stars, int snapshot, SF
 
     // update the galaxy's SFR value
     double sfr = new_stars / gal->dt;
-    gal->Sfr += sfr;
-    assert(gal->Sfr >= 0);
-
     gal->ColdGas -= new_stars;
     gal->MetalsColdGas -= new_stars * metallicity;
     gal->StellarMass += new_stars;
@@ -58,12 +55,21 @@ void update_reservoirs_from_sf(galaxy_t* gal, double new_stars, int snapshot, SF
 #if USE_MINI_HALOS
     if (gal->Galaxy_Population == 2) {
       gal->StellarMass_II += new_stars;
+      gal->Sfr += sfr;
+      assert(gal->Sfr >= 0);
       gal->GrossStellarMass += new_stars;
+      gal->FescWeightedSfr += sfr * gal->Fesc;
     } else if (gal->Galaxy_Population == 3) {
       gal->StellarMass_III += new_stars;
+      gal->SfrIII += sfr;
+      assert(gal->SfrIII >= 0);
       gal->GrossStellarMassIII += new_stars;
+      gal->FescIIIWeightedSfr += sfr * gal->FescIII;
     }
 #else
+    gal->Sfr += sfr;
+    assert(gal->Sfr >= 0);
+    gal->FescWeightedSfr += sfr * gal->Fesc;
     gal->GrossStellarMass +=
       new_stars; // If you are not distinguishing III/II you just have one variable which is the total one
 #endif

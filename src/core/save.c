@@ -76,6 +76,7 @@ void prepare_galaxy_for_output(galaxy_t gal, galaxy_output_t* galout, int i_snap
   galout->DiskScaleLength = (float)(gal.DiskScaleLength);
   galout->MetalsStellarMass = (float)(gal.MetalsStellarMass);
   galout->Sfr = (float)(gal.Sfr * units->UnitMass_in_g / units->UnitTime_in_s * SEC_PER_YEAR / SOLAR_MASS);
+  galout->FescWeightedSfr = (float)(gal.FescWeightedSfr * units->UnitMass_in_g / units->UnitTime_in_s * SEC_PER_YEAR / SOLAR_MASS);
   galout->EjectedGas = (float)(gal.EjectedGas);
   galout->MetalsEjectedGas = (float)(gal.MetalsEjectedGas);
   galout->Rcool = (float)(gal.Rcool);
@@ -93,6 +94,7 @@ void prepare_galaxy_for_output(galaxy_t gal, galaxy_output_t* galout, int i_snap
   galout->GrossStellarMassIII = (float)(gal.GrossStellarMassIII);
   galout->FescIII = (float)(gal.FescIII);
   galout->FescIIIWeightedGSM = (float)(gal.FescIIIWeightedGSM);
+  galout->FescIIIWeightedSfr = (float)(gal.FescIIIWeightedSfr * units->UnitMass_in_g / units->UnitTime_in_s * SEC_PER_YEAR / SOLAR_MASS);
 
   galout->MvirCrit_MC = (float)(gal.MvirCrit_MC);
 
@@ -134,9 +136,9 @@ void calc_hdf5_props()
     galaxy_output_t galout;
     int i; // dummy
 
-    h5props->n_props = 49;
+    h5props->n_props = 50;
 #if USE_MINI_HALOS
-    h5props->n_props += 14; // Double check later
+    h5props->n_props += 15; // Double check later
 #endif
 
 #ifdef CALC_MAGS
@@ -391,6 +393,13 @@ void calc_hdf5_props()
     h5props->field_units[i] = "1e10 solMass";
     h5props->field_h_conv[i] = "v/h";
     h5props->field_types[i++] = H5T_NATIVE_FLOAT;
+
+    h5props->dst_offsets[i] = HOFFSET(galaxy_output_t, FescIIIWeightedSfr);
+    h5props->dst_field_sizes[i] = sizeof(galout.FescIIIWeightedSfr);
+    h5props->field_names[i] = "FescIIIWeightedSfr";
+    h5props->field_units[i] = "solMass/yr";
+    h5props->field_h_conv[i] = "None";
+    h5props->field_types[i++] = H5T_NATIVE_FLOAT;
 #endif
 
     h5props->dst_offsets[i] = HOFFSET(galaxy_output_t, GrossStellarMass);
@@ -410,6 +419,13 @@ void calc_hdf5_props()
     h5props->dst_offsets[i] = HOFFSET(galaxy_output_t, Sfr);
     h5props->dst_field_sizes[i] = sizeof(galout.Sfr);
     h5props->field_names[i] = "Sfr";
+    h5props->field_units[i] = "solMass/yr";
+    h5props->field_h_conv[i] = "None";
+    h5props->field_types[i++] = H5T_NATIVE_FLOAT;
+
+    h5props->dst_offsets[i] = HOFFSET(galaxy_output_t, FescWeightedSfr);
+    h5props->dst_field_sizes[i] = sizeof(galout.FescWeightedSfr);
+    h5props->field_names[i] = "FescWeightedSfr";
     h5props->field_units[i] = "solMass/yr";
     h5props->field_h_conv[i] = "None";
     h5props->field_types[i++] = H5T_NATIVE_FLOAT;

@@ -588,6 +588,7 @@ typedef struct galaxy_t
   double GrossStellarMass;
   double Fesc;
   double FescWeightedGSM;
+  double FescWeightedSfr;
   double MetalsStellarMass;
   double DiskScaleLength;
   double Sfr;
@@ -597,6 +598,7 @@ typedef struct galaxy_t
   double FescBH;
   double BHemissivity;
   double EffectiveBHM;
+  double EffectiveBHAR;
   double BlackHoleAccretedHotMass;
   double BlackHoleAccretedColdMass;
   double BlackHoleAccretingColdMass;
@@ -605,11 +607,13 @@ typedef struct galaxy_t
                          // = 2)
 #if USE_MINI_HALOS
   // Differentiation Pop III / Pop II
+  double SfrIII;
   double StellarMass_II;
   double StellarMass_III;
   double GrossStellarMassIII;
   double FescIII;
   double FescIIIWeightedGSM;
+  double FescIIIWeightedSfr;
 
   double Remnant_Mass; // Coming from Pop III with M between 40 and 140 and larger than 260 Msol and remnant of CCSN
                        // [8,40]Msun. Atm those are silent.

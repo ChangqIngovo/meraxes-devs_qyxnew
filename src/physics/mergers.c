@@ -179,16 +179,19 @@ void merge_with_target(galaxy_t* gal, int* dead_gals, int snapshot)
   // Add galaxies together
   parent->StellarMass += gal->StellarMass;
 #if USE_MINI_HALOS
+  parent->SfrIII += gal->SfrIII;
   parent->StellarMass_II += gal->StellarMass_II;
   parent->StellarMass_III += gal->StellarMass_III;
   parent->Remnant_Mass += gal->Remnant_Mass;
   parent->GrossStellarMassIII += gal->GrossStellarMassIII;
   parent->FescIIIWeightedGSM += gal->FescIIIWeightedGSM;
+  parent->FescIIIWeightedSfr += gal->FescIIIWeightedSfr;
 #endif
   parent->GrossStellarMass += gal->GrossStellarMass;
   parent->FescWeightedGSM += gal->FescWeightedGSM;
   parent->MetalsStellarMass += gal->MetalsStellarMass;
   parent->Sfr += gal->Sfr;
+  parent->FescWeightedSfr += gal->Sfr * gal->Fesc;
   parent->HotGas += gal->HotGas;
   parent->MetalsHotGas += gal->MetalsHotGas;
   parent->ColdGas += gal->ColdGas;
@@ -201,6 +204,7 @@ void merge_with_target(galaxy_t* gal, int* dead_gals, int snapshot)
   parent->BHemissivity += gal->BHemissivity;
   parent->BlackHoleMass += gal->BlackHoleMass;
   parent->EffectiveBHM += gal->EffectiveBHM;
+  parent->EffectiveBHAR += gal->EffectiveBHAR;
   parent->mwmsa_num += gal->mwmsa_num;
   parent->mwmsa_denom += gal->mwmsa_denom;
   parent->MergerBurstMass += gal->MergerBurstMass;

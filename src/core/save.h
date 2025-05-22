@@ -47,6 +47,7 @@ typedef struct galaxy_output_t
   float GrossStellarMass;
   float Fesc;
   float FescWeightedGSM;
+  float FescWeightedSfr;
   float MetalsStellarMass;
   float Sfr;
   float EjectedGas;
@@ -64,6 +65,7 @@ typedef struct galaxy_output_t
   float GrossStellarMassIII;
   float FescIII;
   float FescIIIWeightedGSM;
+  float FescIIIWeightedSfr;
 
   float RmetalBubble;
   int Flag_ExtMetEnr;

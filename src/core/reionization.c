@@ -47,6 +47,7 @@ void update_galaxy_fesc_vals(galaxy_t* gal, double new_stars, int snapshot)
       if (gal->StellarMass > 0.0) {
         fesc *= pow((gal->StellarMass / run_globals.params.Hubble_h), params->EscapeFracPropScaling);
 #if USE_MINI_HALOS
+        // TODO: why is this not III
         fescIII *= pow((gal->StellarMass / run_globals.params.Hubble_h), params->EscapeFracPropScaling);
 #endif
       } else {
@@ -58,21 +59,21 @@ void update_galaxy_fesc_vals(galaxy_t* gal, double new_stars, int snapshot)
 
       break;
     case 3: // star formation rate (Msun / yr)
-      if (gal->Sfr > 0.0) {
+      if (gal->Sfr > 0.0) 
         fesc *=
           pow(gal->Sfr * run_globals.units.UnitMass_in_g / run_globals.units.UnitTime_in_s * SEC_PER_YEAR / SOLAR_MASS,
               params->EscapeFracPropScaling);
-#if USE_MINI_HALOS
-        fescIII *=
-          pow(gal->Sfr * run_globals.units.UnitMass_in_g / run_globals.units.UnitTime_in_s * SEC_PER_YEAR / SOLAR_MASS,
-              params->EscapeFracPropScaling);
-#endif
-      } else {
+      else
         fesc = 0.0;
 #if USE_MINI_HALOS
+      if (gal->SfrIII > 0.0) 
+        fescIII *=
+          pow(gal->SfrIII * run_globals.units.UnitMass_in_g / run_globals.units.UnitTime_in_s * SEC_PER_YEAR / SOLAR_MASS,
+              params->EscapeFracPropScaling);
+      else
         fescIII = 0.0;
 #endif
-      }
+      
       break;
     case 4: // cold gas density (Msun / pc^2)
       if ((gal->ColdGas > 0.0) && (gal->DiskScaleLength > 0.0)) {
@@ -105,19 +106,19 @@ void update_galaxy_fesc_vals(galaxy_t* gal, double new_stars, int snapshot)
       }
       break;
     case 6: // specific star formation rate (10/ Gyr)
-      if ((gal->Sfr > 0.0) && (gal->StellarMass > 0.0)) {
+      if ((gal->Sfr > 0.0) && (gal->StellarMass > 0.0)) 
         fesc *= pow(gal->Sfr / gal->StellarMass / run_globals.units.UnitTime_in_s * SEC_PER_MEGAYEAR * 100,
                     params->EscapeFracPropScaling);
-#if USE_MINI_HALOS
-        fescIII *= pow(gal->Sfr / gal->StellarMass / run_globals.units.UnitTime_in_s * SEC_PER_MEGAYEAR * 100,
-                       params->EscapeFracPropScaling);
-#endif
-      } else {
+      else
         fesc = 0.0;
 #if USE_MINI_HALOS
+      // TODO: why are stellar masses not III
+      if ((gal->SfrIII > 0.0) && (gal->StellarMass > 0.0)) 
+        fescIII *= pow(gal->SfrIII / gal->StellarMass / run_globals.units.UnitTime_in_s * SEC_PER_MEGAYEAR * 100,
+                       params->EscapeFracPropScaling);
+      else
         fescIII = 0.0;
 #endif
-      }
       break;
     default:
       mlog_error("Unrecognised EscapeFracDependency parameter value.");
@@ -1367,7 +1368,7 @@ void construct_baryon_grids(int snapshot, int local_ngals)
   float* sfr_histories_grid = run_globals.reion_grids.sfr_histories;
   float* weighted_sfr_grid = run_globals.reion_grids.weighted_sfr;
   int ReionGridDim = run_globals.params.ReionGridDim;
-  double sfr_timescale = run_globals.params.ReionSfrTimescale * hubble_time(snapshot);
+  //double sfr_timescale = run_globals.params.ReionSfrTimescale * hubble_time(snapshot);
 #if USE_MINI_HALOS
   float* stellarIII_grid = run_globals.reion_grids.starsIII;
   float* sfrIII_grid = run_globals.reion_grids.sfrIII;
@@ -1497,28 +1498,33 @@ void construct_baryon_grids(int snapshot, int local_ngals)
 
             case prop_weighted_sfrIII:
 
-              buffer[ind] += gal->FescIIIWeightedGSM;
+              //buffer[ind] += gal->FescIIIWeightedGSM;
+              buffer[ind] += gal->FescIIIWeightedSfr;
 
               break;
 
             case prop_sfrIII:
 
-              buffer[ind] += gal->GrossStellarMassIII;
+              //buffer[ind] += gal->GrossStellarMassIII;
+              buffer[ind] += gal->SfrIII;
               // this sfr grid is used for X-ray and Lyman, PopIII.
               break;
 #endif
             case prop_weighted_sfr:
-              buffer[ind] += (gal->FescWeightedGSM);
+              //buffer[ind] += gal->FescWeightedGSM;
+              buffer[ind] += gal->FescWeightedSfr;
               // for ionizing_source_formation_rate_grid, need further convertion due to different UV spectral index of
               // quasar and stellar component
               if (run_globals.params.physics.Flag_BHFeedback)
                 if (gal->BlackHoleMass >= run_globals.params.physics.BlackHoleMassLimitReion)
-                  buffer[ind] += gal->EffectiveBHM * run_globals.params.physics.ReionAlphaUVBH /
-                                 run_globals.params.physics.ReionAlphaUV;
+                  //buffer[ind] += gal->EffectiveBHM * run_globals.params.physics.ReionAlphaUVBH /
+                  buffer[ind] += gal->EffectiveBHAR * run_globals.params.physics.ReionAlphaUVBH /
+                                 run_globals.params.physics.ReionAlphaUV; // TODO: not tested yet!
               break;
 
             case prop_sfr:
-              buffer[ind] += gal->GrossStellarMass;
+              //buffer[ind] += gal->GrossStellarMass;
+              buffer[ind] += gal->Sfr;
               // this sfr grid is used for X-ray and Lyman, PopII.
               break;
 
@@ -1548,7 +1554,8 @@ void construct_baryon_grids(int snapshot, int local_ngals)
               for (int iy = 0; iy < ReionGridDim; iy++)
                 for (int iz = 0; iz < ReionGridDim; iz++) {
                   double val = (double)buffer[grid_index(ix, iy, iz, ReionGridDim, INDEX_REAL)];
-                  val = (val > 0) ? val / sfr_timescale : 0;
+                  //val = (val > 0) ? val / sfr_timescale : 0;
+                  if (val < 0 ) val = 0;
                   weighted_sfr_grid[grid_index(ix, iy, iz, ReionGridDim, INDEX_PADDED)] = (float)val;
                 }
             break;
@@ -1558,7 +1565,8 @@ void construct_baryon_grids(int snapshot, int local_ngals)
               for (int iy = 0; iy < ReionGridDim; iy++)
                 for (int iz = 0; iz < ReionGridDim; iz++) {
                   double val = (double)buffer[grid_index(ix, iy, iz, ReionGridDim, INDEX_REAL)];
-                  val = (val > 0) ? val / sfr_timescale : 0;
+                  //val = (val > 0) ? val / sfr_timescale : 0;
+                  if (val < 0 ) val = 0;
                   weighted_sfrIII_grid[grid_index(ix, iy, iz, ReionGridDim, INDEX_PADDED)] = (float)val;
                 }
             break;
@@ -1568,7 +1576,8 @@ void construct_baryon_grids(int snapshot, int local_ngals)
               for (int iy = 0; iy < ReionGridDim; iy++)
                 for (int iz = 0; iz < ReionGridDim; iz++) {
                   double val = (double)buffer[grid_index(ix, iy, iz, ReionGridDim, INDEX_REAL)];
-                  val = (val > 0) ? val / sfr_timescale : 0;
+                  //val = (val > 0) ? val / sfr_timescale : 0;
+                  if (val < 0 ) val = 0;
                   sfrIII_grid[grid_index(ix, iy, iz, ReionGridDim, INDEX_PADDED)] = (float)val;
                   sfrIII_histories_grid[grid_index(ix, iy, iz, ReionGridDim, INDEX_PADDED)] = (float)val;
                 }
@@ -1590,7 +1599,8 @@ void construct_baryon_grids(int snapshot, int local_ngals)
               for (int iy = 0; iy < ReionGridDim; iy++)
                 for (int iz = 0; iz < ReionGridDim; iz++) {
                   double val = (double)buffer[grid_index(ix, iy, iz, ReionGridDim, INDEX_REAL)];
-                  val = (val > 0) ? val / sfr_timescale : 0;
+                  //val = (val > 0) ? val / sfr_timescale : 0;
+                  if (val < 0 ) val = 0;
                   sfr_grid[grid_index(ix, iy, iz, ReionGridDim, INDEX_PADDED)] = (float)val;
                   sfr_histories_grid[grid_index(ix, iy, iz, ReionGridDim, INDEX_PADDED)] = (float)val;
                 }
