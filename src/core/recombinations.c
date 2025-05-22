@@ -65,7 +65,7 @@ int splined_recombination(double z_eff, double gamma12_bg, double temp, double *
   }
 
   int idx = z_ct * RR_T_NPTS + t_ct;
-  *recombination_rate = sl_spline_eval(RR_spline[idx], lnGamma, RR_acc[idx]);
+  *recombination_rate = gsl_spline_eval(RR_spline[idx], lnGamma, RR_acc[idx]);
   *residual_xH = gsl_spline_eval(RNH_spline[idx], lnGamma, RNH_acc[idx]);
   //*clumping_factor = gsl_spline_eval(CF_spline[iidx], lnGamma, CF_acc[idx]);
 
