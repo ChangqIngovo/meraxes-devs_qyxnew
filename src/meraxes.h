@@ -285,6 +285,7 @@ typedef struct run_params_t
   int Flag_IncludeRecombinations;
   int Flag_EvolvingReionRBubbleMax;
   int Flag_InstantaneousSFR;
+  int Flag_TemperatureDependentRec;
   int Flag_Compute21cmBrightTemp;
   int Flag_ComputePS;
   int Flag_IncludePecVelsFor21cm;

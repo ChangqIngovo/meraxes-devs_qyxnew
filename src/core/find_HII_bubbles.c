@@ -493,6 +493,7 @@ void _find_HII_bubbles(const int snapshot)
   double mass_weighted_global_residual_xH = 0.0;
 
   double Hubble_h = run_globals.params.Hubble_h;
+  double temp;
 
   for (int ix = 0; ix < local_nix; ix++)
     for (int iy = 0; iy < ReionGridDim; iy++)
@@ -531,7 +532,11 @@ void _find_HII_bubbles(const int snapshot)
         if (run_globals.params.Flag_IncludeRecombinations) {
           // Store the resultant recombination cell
           z_eff = (1. + redshift) * pow(density_over_mean, 1.0 / 3.0) - 1;
-          if (splined_recombination(z_eff, (double)Gamma12[i_real] * Hubble_h * Hubble_h, (double)temp_kinetic_all_gas[i_real], &recombination_rate, &rnh) != 1){
+          if (run_globals.params.Flag_TemperatureDependentRec)
+            temp = (double)temp_kinetic_all_gas[i_real];
+          else
+            temp = 1e4;
+          if (splined_recombination(z_eff, (double)Gamma12[i_real] * Hubble_h * Hubble_h, temp, &recombination_rate, &rnh) != 1){
             mlog_error("splined_recombination failed. Aborting...");
             ABORT(EXIT_FAILURE);
           }
