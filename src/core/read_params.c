@@ -228,6 +228,10 @@ void read_parameter_file(char* fname, int mode)
       required_tag[n_param] = 1;
       params_type[n_param++] = PARAM_TYPE_STRING;
 
+      strcpy(params_tag[n_param], "RecombinationDir");
+      params_addr[n_param] = run_params->RecombinationDir;
+      required_tag[n_param] = 1;
+      params_type[n_param++] = PARAM_TYPE_STRING;
       strcpy(params_tag[n_param], "StellarFeedbackDir");
       params_addr[n_param] = run_params->StellarFeedbackDir;
       required_tag[n_param] = 1;

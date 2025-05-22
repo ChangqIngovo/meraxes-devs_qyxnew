@@ -227,6 +227,7 @@ typedef struct run_params_t
   double BirthCloudLifetime;
   double DeltaT; // New Parameter added to consider different time of observation! Very important for Pop. III
   char CoolingFuncsDir[STRLEN];
+  char RecombinationDir[STRLEN];
   char StellarFeedbackDir[STRLEN];
   char TablesForXHeatingDir[STRLEN];
   char IMF[STRLEN];
