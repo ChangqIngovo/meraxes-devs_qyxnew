@@ -75,7 +75,6 @@ void init_MHR()
 {
   int z_ct, gamma_ct, t_ct;
   double z, gamma, temp;
-  int loaded_from_disk = 0;
 
   mlog("Initialising MHR parameter and recombination rate LUTs...", MLOG_MESG | MLOG_TIMERSTART);
 
@@ -85,21 +84,25 @@ void init_MHR()
   init_A_MHR();    /*initializes the lookup table for the A paremeter in MHR00 model*/
 
   if (run_globals.mpi_rank == 0) {
+    char GAMMA_FILENAME[STRLEN + 11];
     char RR_FILENAME[STRLEN + 11];
     char CF_FILENAME[STRLEN + 11];
     char RNH_FILENAME[STRLEN + 11];
+    sprintf(GAMMA_FILENAME, "%s/lnGamma_table.bin", run_globals.params.RecombinationDir);
     sprintf(RR_FILENAME, "%s/RR_table.bin", run_globals.params.RecombinationDir);
     sprintf(CF_FILENAME, "%s/CF_table.bin", run_globals.params.RecombinationDir);
     sprintf(RNH_FILENAME, "%s/RNH_table.bin", run_globals.params.RecombinationDir);
+    FILE *gamma_fp = fopen(GAMMA_FILENAME, "rb");
     FILE *rr_fp = fopen(RR_FILENAME, "rb");
     FILE *cf_fp = fopen(CF_FILENAME, "rb");
     FILE *rnh_fp = fopen(RNH_FILENAME, "rb");
 
-    if (rr_fp && cf_fp && rnh_fp) {
-        fread(RR_table, sizeof(float), RR_Z_NPTS * RR_T_NPTS * RR_lnGamma_NPTS, rr_fp);
-        fread(CF_table, sizeof(float), RR_Z_NPTS * RR_T_NPTS * RR_lnGamma_NPTS, cf_fp);
-        fread(RNH_table, sizeof(float), RR_Z_NPTS * RR_T_NPTS * RR_lnGamma_NPTS, rnh_fp);
-        loaded_from_disk = 1;
+    if (gamma_fp && rr_fp && cf_fp && rnh_fp) {
+        fread(lnGamma_values, sizeof(double), RR_lnGamma_NPTS, gamma_fp);
+        fread(RR_table, sizeof(double), RR_Z_NPTS * RR_T_NPTS * RR_lnGamma_NPTS, rr_fp);
+        fread(CF_table, sizeof(double), RR_Z_NPTS * RR_T_NPTS * RR_lnGamma_NPTS, cf_fp);
+        fread(RNH_table, sizeof(double), RR_Z_NPTS * RR_T_NPTS * RR_lnGamma_NPTS, rnh_fp);
+        fclose(gamma_fp);
         fclose(rr_fp);
         fclose(cf_fp);
         fclose(rnh_fp);
@@ -108,6 +111,9 @@ void init_MHR()
     else{
       mlog("Recomputing RR_table and RNH_table...", MLOG_MESG | MLOG_TIMERSTART);
 
+      for (gamma_ct = 0; gamma_ct < RR_lnGamma_NPTS; gamma_ct++)
+        lnGamma_values[gamma_ct] = RR_lnGamma_min + gamma_ct * RR_DEL_lnGamma; // ln of Gamma12
+
       for (z_ct = 0; z_ct < RR_Z_NPTS; z_ct++) {
         z = z_ct * RR_DEL_Z + RR_Z_END; // redshift corresponding to index z_ct of the array
         for (t_ct = 0; t_ct < RR_T_NPTS; t_ct++){
@@ -115,8 +121,7 @@ void init_MHR()
 
           // Intialize the Gamma values
           for (gamma_ct = 0; gamma_ct < RR_lnGamma_NPTS; gamma_ct++) {
-            lnGamma_values[gamma_ct] = RR_lnGamma_min + gamma_ct * RR_DEL_lnGamma; // ln of Gamma12
-            gamma = (float)exp(lnGamma_values[gamma_ct]);
+            gamma = exp(lnGamma_values[gamma_ct]);
             RR_table[z_ct][t_ct][gamma_ct] = recombination_rate(z, gamma, temp, 1);
             CF_table[z_ct][t_ct][gamma_ct] = clumping_factor(z, gamma, temp, 1);
             RNH_table[z_ct][t_ct][gamma_ct] = residual_neutral_hydrogen(z, gamma, temp, 1);
@@ -126,13 +131,16 @@ void init_MHR()
       }
 
       // Save to disk
+      FILE *gamma_fp = fopen(GAMMA_FILENAME, "wb");
       FILE *rr_fp = fopen(RR_FILENAME, "wb");
       FILE *cf_fp = fopen(CF_FILENAME, "wb");
       FILE *rnh_fp = fopen(RNH_FILENAME, "wb");
-      if (rr_fp && rnh_fp) {
-          fwrite(RR_table, sizeof(float), RR_Z_NPTS * RR_T_NPTS * RR_lnGamma_NPTS, rr_fp);
-          fwrite(CF_table, sizeof(float), RR_Z_NPTS * RR_T_NPTS * RR_lnGamma_NPTS, cf_fp);
-          fwrite(RNH_table, sizeof(float), RR_Z_NPTS * RR_T_NPTS * RR_lnGamma_NPTS, rnh_fp);
+      if (gamma_fp && rr_fp && cf_fp && rnh_fp) {
+          fwrite(lnGamma_values, sizeof(double), RR_lnGamma_NPTS, gamma_fp);
+          fwrite(RR_table, sizeof(double), RR_Z_NPTS * RR_T_NPTS * RR_lnGamma_NPTS, rr_fp);
+          fwrite(CF_table, sizeof(double), RR_Z_NPTS * RR_T_NPTS * RR_lnGamma_NPTS, cf_fp);
+          fwrite(RNH_table, sizeof(double), RR_Z_NPTS * RR_T_NPTS * RR_lnGamma_NPTS, rnh_fp);
+          fclose(gamma_fp);
           fclose(rr_fp);
           fclose(cf_fp);
           fclose(rnh_fp);
@@ -146,18 +154,15 @@ void init_MHR()
     mlog("...done.", MLOG_MESG | MLOG_TIMERSTOP);
   }
 
-  MPI_Bcast(RR_table, RR_Z_NPTS * RR_T_NPTS * RR_lnGamma_NPTS, MPI_FLOAT, 0, MPI_COMM_WORLD);
-  MPI_Bcast(CF_table, RR_Z_NPTS * RR_T_NPTS * RR_lnGamma_NPTS, MPI_FLOAT, 0, MPI_COMM_WORLD);
-  MPI_Bcast(RNH_table, RR_Z_NPTS * RR_T_NPTS * RR_lnGamma_NPTS, MPI_FLOAT, 0, MPI_COMM_WORLD);
-
+  MPI_Bcast(lnGamma_values, RR_lnGamma_NPTS, MPI_DOUBLE, 0, run_globals.mpi_comm);
+  MPI_Bcast(RR_table, RR_Z_NPTS * RR_T_NPTS * RR_lnGamma_NPTS, MPI_DOUBLE, 0, run_globals.mpi_comm);
+  MPI_Bcast(CF_table, RR_Z_NPTS * RR_T_NPTS * RR_lnGamma_NPTS, MPI_DOUBLE, 0, run_globals.mpi_comm);
+  MPI_Bcast(RNH_table, RR_Z_NPTS * RR_T_NPTS * RR_lnGamma_NPTS, MPI_DOUBLE, 0, run_globals.mpi_comm);
 
   // now the recombination rate look up tables
   for (z_ct = 0; z_ct < RR_Z_NPTS; z_ct++) {
     for (t_ct = 0; t_ct < RR_T_NPTS; t_ct++){
     
-      for (gamma_ct = 0; gamma_ct < RR_lnGamma_NPTS; gamma_ct++)
-        lnGamma_values[gamma_ct] = RR_lnGamma_min + gamma_ct * RR_DEL_lnGamma; // ln of Gamma12
-
       // set up the spline in gamma
       RR_acc[z_ct][t_ct] = gsl_interp_accel_alloc();
       RR_spline[z_ct][t_ct] = gsl_spline_alloc(gsl_interp_cspline, RR_lnGamma_NPTS);
