@@ -139,7 +139,7 @@ void init_MHR()
           mlog("Saved RR_table and RNH_table to disk.", MLOG_MESG);
       } 
       else
-          mlog("Warning: Failed to save lookup tables to disk.", MLOG_WARN);
+          mlog("Warning: Failed to save lookup tables to disk.", MLOG_MESG);
 
     }
 
