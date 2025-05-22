@@ -51,7 +51,7 @@ int splined_recombination(double z_eff, double gamma12_bg, double temp, double *
     *residual_xH = 1e4;
     return 1;
   } else if (t_ct >= RR_T_NPTS) {
-    mlog("WARNING: splined_recombination_rate: temperature %g is outside of array right bound", MLOG_MESG, temp);
+    //mlog("WARNING: splined_recombination_rate: temperature %g is outside of array right bound", MLOG_MESG, temp);
     t_ct = RR_T_NPTS - 1;
   }
 

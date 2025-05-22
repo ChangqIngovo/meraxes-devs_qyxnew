@@ -23,7 +23,7 @@
 // number of points in redshift axis;  we will only interpolate over gamma, and just index sample in redshift
 #define RR_Z_NPTS (int)(350)
 #define RR_DEL_Z (float)(0.1)
-#define RR_Z_END (float)(5.0) // added zend so that the 300 points span z=5, 5.1, ... 39.9.
+#define RR_Z_END (float)(4.0) // added zend so that the 300 points span z=5, 5.1, ... 38.9.
 
 // same, just index sample in temperature
 #define RR_T_NPTS (int)(250)
