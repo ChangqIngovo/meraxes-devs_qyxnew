@@ -22,8 +22,10 @@ static float current_mwmsa(galaxy_t* gal, int i_snap)
     mwmsa_num += gal->NewStars[ii] * LTTime[jj];
     mwmsa_denom += gal->NewStars[ii];
   }
-
-  return (float)((mwmsa_num / mwmsa_denom) - LTTime[snapshot]);
+  if (mwmsa_denom >0)
+      return (float)((mwmsa_num / mwmsa_denom) - LTTime[snapshot]);
+  else
+      return 0
 }
 
 void prepare_galaxy_for_output(galaxy_t gal, galaxy_output_t* galout, int i_snap)
