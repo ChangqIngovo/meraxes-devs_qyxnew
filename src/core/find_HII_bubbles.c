@@ -427,13 +427,13 @@ void _find_HII_bubbles(const int snapshot)
 #if USE_MINI_HALOS
                 Gamma12[i_real] += (float)(Gamma_R_prefactorIII * weighted_sfr_densityIII);
 #endif
+                // Record radius
+                r_bubble[i_real] = (float)R;
             }
 
             // Mark as ionised
             xH[i_real] = 0;
 
-            // Record radius
-            r_bubble[i_real] = (float)R;
           }
           // Check if this is the last filtering step.
           // If so, assign partial ionisations to those cells which aren't fully ionised
@@ -536,7 +536,7 @@ void _find_HII_bubbles(const int snapshot)
             ABORT(EXIT_FAILURE);
           }
           N_rec[i_padded] += (float)recombination_rate * fabs_dtdz * zstep * (1. - (float)cell_xH);
-		  residual_xH[i_real] = (float)rnh;
+          residual_xH[i_real] = (float)rnh;
         }
         volume_weighted_global_temp_kinetic_all_gas += (double)temp_kinetic_all_gas[i_real];
         volume_weighted_global_N_rec += (double)N_rec[i_padded];
