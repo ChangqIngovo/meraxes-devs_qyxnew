@@ -285,11 +285,13 @@ void call_find_HII_bubbles(int snapshot, int nout_gals, timer_info* timer)
 
   mlog("global quantities = volume-weighted VS mass-weighted", MLOG_MESG);
   mlog("xH = %g VS %g", MLOG_MESG, grids->volume_weighted_global_xH, grids->mass_weighted_global_xH);
-  mlog("Gamma12 = %g VS %g (h**2 1e-12 /s)", MLOG_MESG, grids->volume_weighted_global_Gamma12, grids->mass_weighted_global_Gamma12);
   mlog("r_bubble = %g VS %g (h**-1 Mpc)", MLOG_MESG, grids->volume_weighted_global_r_bubble, grids->mass_weighted_global_r_bubble);
   mlog("temp_kinetic_all_gas = %g VS %g (K)", MLOG_MESG, grids->volume_weighted_global_temp_kinetic_all_gas);
-  mlog("N_rec = %g VS %g (/N_b)", MLOG_MESG, grids->volume_weighted_global_N_rec, grids->mass_weighted_global_N_rec);
-  mlog("residual_xH = %g VS %g (x10**-4)", MLOG_MESG, grids->volume_weighted_global_residual_xH, grids->mass_weighted_global_residual_xH);
+  if (run_globals.params.Flag_IncludeRecombinations) {
+    mlog("Gamma12 = %g VS %g (h**2 1e-12 /s)", MLOG_MESG, grids->volume_weighted_global_Gamma12, grids->mass_weighted_global_Gamma12);
+    mlog("N_rec = %g VS %g (/N_b)", MLOG_MESG, grids->volume_weighted_global_N_rec, grids->mass_weighted_global_N_rec);
+    mlog("residual_xH = %g VS %g (x10**-4)", MLOG_MESG, grids->volume_weighted_global_residual_xH, grids->mass_weighted_global_residual_xH);
+  }
 
   mlog("sfr = %g (Msun/yr)", MLOG_MESG, grids->volume_weighted_global_weighted_sfr);
 #if USE_MINI_HALOS
@@ -1496,14 +1498,14 @@ void construct_baryon_grids(int snapshot, int local_ngals)
             case prop_weighted_sfrIII:
               if (run_globals.params.Flag_InstantaneousSFR)
                 buffer[ind] += gal->FescIIIWeightedSfr;
-			  else
+              else
                 buffer[ind] += gal->FescIIIWeightedGSM;
               break;
 
             case prop_sfrIII:
               if (run_globals.params.Flag_InstantaneousSFR)
                 buffer[ind] += gal->SfrIII;
-			  else
+              else
                 buffer[ind] += gal->GrossStellarMassIII;
               // this sfr grid is used for X-ray and Lyman, PopIII.
               break;
@@ -1517,20 +1519,20 @@ void construct_baryon_grids(int snapshot, int local_ngals)
                   if (gal->BlackHoleMass >= run_globals.params.physics.BlackHoleMassLimitReion)
                     buffer[ind] += gal->EffectiveBHAR * run_globals.params.physics.ReionAlphaUVBH /
                                    run_globals.params.physics.ReionAlphaUV; // TODO: not tested yet!
-			  }
-			  else{
+              }
+              else{
                 buffer[ind] += gal->FescWeightedGSM;
                 if (run_globals.params.physics.Flag_BHFeedback)
                   if (gal->BlackHoleMass >= run_globals.params.physics.BlackHoleMassLimitReion)
                     buffer[ind] += gal->EffectiveBHM * run_globals.params.physics.ReionAlphaUVBH /
                                    run_globals.params.physics.ReionAlphaUV;
-			  }
+              }
               break;
 
             case prop_sfr:
               if (run_globals.params.Flag_InstantaneousSFR)
                 buffer[ind] += gal->Sfr;
-			  else
+              else
                buffer[ind] += gal->GrossStellarMass;
               // this sfr grid is used for X-ray and Lyman, PopII.
               break;
@@ -1856,18 +1858,20 @@ void save_reion_output_grids(int snapshot)
 
   // create and write the datasets
   write_grid_float("xH", grids->xH, file_id, fspace_id, memspace_id, dcpl_id);
-  write_grid_float("z_at_ionization", grids->z_at_ionization, file_id, fspace_id, memspace_id, dcpl_id);
   write_grid_float("r_bubble", grids->r_bubble, file_id, fspace_id, memspace_id, dcpl_id);
   write_grid_float("temp_kinetic_all_gas", grids->temp_kinetic_all_gas, file_id, fspace_id, memspace_id, dcpl_id);
-  write_grid_float("residual_xH", grids->residual_xH, file_id, fspace_id, memspace_id, dcpl_id);
-  write_grid_float("Gamma12", grids->Gamma12, file_id, fspace_id, memspace_id, dcpl_id);
+  if (run_globals.params.Flag_IncludeRecombinations) {
+    write_grid_float("z_at_ionization", grids->z_at_ionization, file_id, fspace_id, memspace_id, dcpl_id);
+    write_grid_float("residual_xH", grids->residual_xH, file_id, fspace_id, memspace_id, dcpl_id);
+    write_grid_float("Gamma12", grids->Gamma12, file_id, fspace_id, memspace_id, dcpl_id);
 
-  for (int ii = 0; ii < local_nix; ii++)
-    for (int jj = 0; jj < ReionGridDim; jj++)
-      for (int kk = 0; kk < ReionGridDim; kk++)
-        grid[grid_index(ii, jj, kk, ReionGridDim, INDEX_REAL)] =
-          (grids->N_rec)[grid_index(ii, jj, kk, ReionGridDim, INDEX_PADDED)];
-  write_grid_float("N_rec", grid, file_id, fspace_id, memspace_id, dcpl_id);
+    for (int ii = 0; ii < local_nix; ii++)
+      for (int jj = 0; jj < ReionGridDim; jj++)
+        for (int kk = 0; kk < ReionGridDim; kk++)
+          grid[grid_index(ii, jj, kk, ReionGridDim, INDEX_REAL)] =
+              (grids->N_rec)[grid_index(ii, jj, kk, ReionGridDim, INDEX_PADDED)];
+    write_grid_float("N_rec", grid, file_id, fspace_id, memspace_id, dcpl_id);
+  }
 
   if (run_globals.params.ReionUVBFlag) {
     write_grid_float("J_21_at_ionization", grids->J_21_at_ionization, file_id, fspace_id, memspace_id, dcpl_id);
@@ -1957,18 +1961,20 @@ void save_reion_output_grids(int snapshot)
   }
 
   H5LTset_attribute_double(file_id, "xH", "volume_weighted_global_xH", &(grids->volume_weighted_global_xH), 1);
-  H5LTset_attribute_double(file_id, "r_bubble", "volume_weighted_global_r_bubble", &(grids->volume_weighted_global_r_bubble), 1);
-  H5LTset_attribute_double(file_id, "Gamma12", "volume_weighted_global_Gamma12", &(grids->volume_weighted_global_Gamma12), 1);
-  H5LTset_attribute_double(file_id, "temp_kinetic_all_gas", "volume_weighted_global_temp_kinetic_all_gas", &(grids->volume_weighted_global_temp_kinetic_all_gas), 1);
-  H5LTset_attribute_double(file_id, "N_rec", "volume_weighted_global_N_rec", &(grids->volume_weighted_global_N_rec), 1);
-  H5LTset_attribute_double(file_id, "residual_xH", "volume_weighted_global_residual_xH", &(grids->volume_weighted_global_residual_xH), 1);
-
   H5LTset_attribute_double(file_id, "xH", "mass_weighted_global_xH", &(grids->mass_weighted_global_xH), 1);
+  H5LTset_attribute_double(file_id, "r_bubble", "volume_weighted_global_r_bubble", &(grids->volume_weighted_global_r_bubble), 1);
   H5LTset_attribute_double(file_id, "r_bubble", "mass_weighted_global_r_bubble", &(grids->mass_weighted_global_r_bubble), 1);
-  H5LTset_attribute_double(file_id, "Gamma12", "mass_weighted_global_Gamma12", &(grids->mass_weighted_global_Gamma12), 1);
+  H5LTset_attribute_double(file_id, "temp_kinetic_all_gas", "volume_weighted_global_temp_kinetic_all_gas", &(grids->volume_weighted_global_temp_kinetic_all_gas), 1);
   H5LTset_attribute_double(file_id, "temp_kinetic_all_gas", "mass_weighted_global_temp_kinetic_all_gas", &(grids->mass_weighted_global_temp_kinetic_all_gas), 1);
-  H5LTset_attribute_double(file_id, "N_rec", "mass_weighted_global_N_rec", &(grids->mass_weighted_global_N_rec), 1);
-  H5LTset_attribute_double(file_id, "residual_xH", "mass_weighted_global_residual_xH", &(grids->mass_weighted_global_residual_xH), 1);
+
+  if (run_globals.params.Flag_IncludeRecombinations) {
+    H5LTset_attribute_double(file_id, "Gamma12", "volume_weighted_global_Gamma12", &(grids->volume_weighted_global_Gamma12), 1);
+    H5LTset_attribute_double(file_id, "Gamma12", "mass_weighted_global_Gamma12", &(grids->mass_weighted_global_Gamma12), 1);
+    H5LTset_attribute_double(file_id, "N_rec", "volume_weighted_global_N_rec", &(grids->volume_weighted_global_N_rec), 1);
+    H5LTset_attribute_double(file_id, "N_rec", "mass_weighted_global_N_rec", &(grids->mass_weighted_global_N_rec), 1);
+    H5LTset_attribute_double(file_id, "residual_xH", "volume_weighted_global_residual_xH", &(grids->volume_weighted_global_residual_xH), 1);
+    H5LTset_attribute_double(file_id, "residual_xH", "mass_weighted_global_residual_xH", &(grids->mass_weighted_global_residual_xH), 1);
+  }
 
   H5LTset_attribute_double(file_id, "weighted_sfr", "volume_weighted_global_weighted_sfr", &(grids->volume_weighted_global_weighted_sfr), 1);
 #if USE_MINI_HALOS

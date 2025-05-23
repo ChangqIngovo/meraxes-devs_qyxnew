@@ -164,11 +164,11 @@ void init_MHR()
           //mlog("z=%.2f, temp = %.2f x 1e4 K, Gamma12=%.2f, residual xH=%g", MLOG_MESG, z, temp, gamma, RNH_table[idx][gamma_ct]);
         }
       }
-      MPI_Allgatherv(local_RR, local_count * RR_T_NPTS * RR_lnGamma_NPTS, MPI_DOUBLE,
+      MPI_Allgatherv(local_RR, local_count * RR_lnGamma_NPTS, MPI_DOUBLE,
                      RR_table, recvcounts, displs, MPI_DOUBLE, run_globals.mpi_comm);
-      MPI_Allgatherv(local_CF, local_count * RR_T_NPTS * RR_lnGamma_NPTS, MPI_DOUBLE,
+      MPI_Allgatherv(local_CF, local_count * RR_lnGamma_NPTS, MPI_DOUBLE,
                      CF_table, recvcounts, displs, MPI_DOUBLE, run_globals.mpi_comm);
-      MPI_Allgatherv(local_RNH, local_count * RR_T_NPTS * RR_lnGamma_NPTS, MPI_DOUBLE,
+      MPI_Allgatherv(local_RNH, local_count * RR_lnGamma_NPTS, MPI_DOUBLE,
                      RNH_table, recvcounts, displs, MPI_DOUBLE, run_globals.mpi_comm);
       free(local_RR);
       free(local_CF);
@@ -202,10 +202,11 @@ void init_MHR()
       }
       mlog("...done.", MLOG_CONT | MLOG_TIMERSTOP);
   }
-
-  MPI_Bcast(RR_table, RR_Z_NPTS * RR_T_NPTS * RR_lnGamma_NPTS, MPI_DOUBLE, 0, run_globals.mpi_comm);
-  MPI_Bcast(CF_table, RR_Z_NPTS * RR_T_NPTS * RR_lnGamma_NPTS, MPI_DOUBLE, 0, run_globals.mpi_comm);
-  MPI_Bcast(RNH_table, RR_Z_NPTS * RR_T_NPTS * RR_lnGamma_NPTS, MPI_DOUBLE, 0, run_globals.mpi_comm);
+  else{
+      MPI_Bcast(RR_table, RR_Z_NPTS * RR_T_NPTS * RR_lnGamma_NPTS, MPI_DOUBLE, 0, run_globals.mpi_comm);
+      MPI_Bcast(CF_table, RR_Z_NPTS * RR_T_NPTS * RR_lnGamma_NPTS, MPI_DOUBLE, 0, run_globals.mpi_comm);
+      MPI_Bcast(RNH_table, RR_Z_NPTS * RR_T_NPTS * RR_lnGamma_NPTS, MPI_DOUBLE, 0, run_globals.mpi_comm);
+  }
 
   // now the recombination rate look up tables
   for (z_ct = 0; z_ct < RR_Z_NPTS; z_ct++) {
