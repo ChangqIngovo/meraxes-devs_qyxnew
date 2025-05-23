@@ -161,7 +161,6 @@ void init_MHR()
           local_CF[local_idx]  = clumping_factor(z, gamma, temp, 1);
           local_RNH[local_idx] = residual_neutral_hydrogen(z, gamma, temp, 1);
           // NOTE: although the table is more linear when taken log, it's faster otherwise have to do exp() 
-          //mlog("z=%.2f, temp = %.2f x 1e4 K, Gamma12=%.2f, residual xH=%g", MLOG_MESG, z, temp, gamma, RNH_table[idx][gamma_ct]);
         }
       }
       MPI_Allgatherv(local_RR, local_count * RR_lnGamma_NPTS, MPI_DOUBLE,
@@ -213,6 +212,11 @@ void init_MHR()
     for (t_ct = 0; t_ct < RR_T_NPTS; t_ct++){
       idx = z_ct * RR_T_NPTS + t_ct;
     
+      //for (gamma_ct = 0; gamma_ct < RR_lnGamma_NPTS; gamma_ct++) {
+      //  gamma = exp(lnGamma_values[gamma_ct]);
+      //  mlog("z=%.2f, temp = %.2f x 1e4 K, Gamma12=%.2f, recomibiation rate=%g, clumping factor=%g, residual xH=%g", MLOG_MESG, z, temp, gamma, RR_table[idx][gamma_ct], CF_table[idx][gamma_ct], RNH_table[idx][gamma_ct]);
+      //}
+
       // set up the spline in gamma
       RR_acc[idx] = gsl_interp_accel_alloc();
       RR_spline[idx] = gsl_spline_alloc(gsl_interp_cspline, RR_lnGamma_NPTS);
