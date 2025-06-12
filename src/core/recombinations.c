@@ -63,8 +63,8 @@ int splined_recombination(double z_eff, double gamma12_bg, double temp, double *
   }
 
   int idx = z_ct * RR_T_NPTS + t_ct;
-  *recombination_rate = gsl_spline_eval(RR_spline[idx], lnGamma, RR_acc[idx]);
-  *residual_xH = gsl_spline_eval(RNH_spline[idx], lnGamma, RNH_acc[idx]);
+  *recombination_rate = exp(gsl_spline_eval(RR_spline[idx], lnGamma, RR_acc[idx]));
+  *residual_xH = exp(gsl_spline_eval(RNH_spline[idx], lnGamma, RNH_acc[idx]));
   //*clumping_factor = gsl_spline_eval(CF_spline[iidx], lnGamma, CF_acc[idx]);
 
   return 1;
@@ -166,9 +166,9 @@ void init_MHR()
           gamma = exp(lnGamma_values[gamma_ct]);
 
           local_idx = (idx - local_start) * RR_lnGamma_NPTS + gamma_ct;
-          local_RR[local_idx]  = recombination_rate(z, gamma, temp, 1);
-          local_CF[local_idx]  = clumping_factor(z, gamma, temp, 1);
-          local_RNH[local_idx] = residual_neutral_hydrogen(z, gamma, temp, 1);
+          local_RR[local_idx]  = log(recombination_rate(z, gamma, temp, 1));
+          local_CF[local_idx]  = log(clumping_factor(z, gamma, temp, 1));
+          local_RNH[local_idx] = log(residual_neutral_hydrogen(z, gamma, temp, 1));
           // NOTE: although the table is more linear when taken log, it's faster otherwise have to do exp() 
         }
       }
