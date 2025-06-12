@@ -20,7 +20,6 @@
 #define C_NPTS (int)(12)
 #define beta_NPTS (int)(5)
 
-// NOTE: Anything changing here needs to rebuild the table on disc!!!
 // number of points in redshift axis;  we will only interpolate over gamma, and just index sample in redshift
 #define RR_Z_NPTS (int)(400)
 #define RR_DEL_Z (float)(0.1)
@@ -35,7 +34,7 @@
 #define RR_lnGamma_NPTS (int)(150)
 
 // min ln gamma12 used
-#define RR_lnGamma_min (double)(-10)
+#define RR_lnGamma_min (float)(-10)
 
 #define RR_DEL_lnGamma (float)(0.1)
 

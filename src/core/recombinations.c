@@ -100,10 +100,10 @@ void init_MHR()
   }
 
   if (run_globals.mpi_rank == 0) {
-    sprintf(GAMMA_FILENAME, "%s/lnGamma_table.bin", run_globals.params.RecombinationDir);
-    sprintf(RR_FILENAME, "%s/RR_table.bin", run_globals.params.RecombinationDir);
-    sprintf(CF_FILENAME, "%s/CF_table.bin", run_globals.params.RecombinationDir);
-    sprintf(RNH_FILENAME, "%s/RNH_table.bin", run_globals.params.RecombinationDir);
+    sprintf(GAMMA_FILENAME, "%s/lnGamma_table_%g-%d-%g.bin", run_globals.params.RecombinationDir, RR_lnGamma_min, RR_lnGamma_NPTS, RR_DEL_lnGamma);
+    sprintf(RR_FILENAME, "%s/RR_table_%g-%d-%g_%g-%d-%g_%g-%d-%g.bin", run_globals.params.RecombinationDir, RR_lnGamma_min, RR_lnGamma_NPTS, RR_DEL_lnGamma, RR_Z_END, RR_Z_NPTS, RR_DEL_Z, RR_T_STA, RR_T_NPTS, RR_DEL_T);
+    sprintf(CF_FILENAME, "%s/CF_table_%g-%d-%g_%g-%d-%g_%g-%d-%g.bin", run_globals.params.RecombinationDir, RR_lnGamma_min, RR_lnGamma_NPTS, RR_DEL_lnGamma, RR_Z_END, RR_Z_NPTS, RR_DEL_Z, RR_T_STA, RR_T_NPTS, RR_DEL_T);
+    sprintf(RNH_FILENAME, "%s/RNH_table_%g-%d-%g_%g-%d-%g_%g-%d-%g.bin", run_globals.params.RecombinationDir, RR_lnGamma_min, RR_lnGamma_NPTS, RR_DEL_lnGamma, RR_Z_END, RR_Z_NPTS, RR_DEL_Z, RR_T_STA, RR_T_NPTS, RR_DEL_T);
     gamma_fp = fopen(GAMMA_FILENAME, "rb");
     rr_fp = fopen(RR_FILENAME, "rb");
     cf_fp = fopen(CF_FILENAME, "rb");
