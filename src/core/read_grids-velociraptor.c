@@ -90,20 +90,14 @@ static int read_swift(const enum grid_prop property, const int snapshot, float* 
   double box_size[3] = { 0 };
 
   if (run_globals.mpi_rank == 0) {
-    if (dir) {
-      grid_dim = run_globals.params.ReionGridDim;
+    grid_dim = run_globals.params.ReionGridDim;
+    if (dir)
       closedir(dir);
-    }
-    else{
-      char data[20] = { '\0' };
-      status = H5LTget_attribute_string(file_id, "/Parameters", "DensityGrids:grid_dim", data);
-      assert(status >= 0);
-      grid_dim = atoi(data);
-	}
   
     status = H5LTget_attribute_double(file_id, "/Header", "BoxSize", box_size);
     assert(status >= 0);
   }
+  mlog("Using file %s", MLOG_MESG, fname);
   // TODO: If this fix works then apply it to read_vr_multi below
   MPI_Bcast(&grid_dim, 1, MPI_INT, 0, run_globals.mpi_comm);
   MPI_Bcast(box_size, 3, MPI_DOUBLE, 0, run_globals.mpi_comm);
