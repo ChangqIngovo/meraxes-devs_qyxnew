@@ -162,6 +162,7 @@ void _find_HII_bubbles(const int snapshot)
   fftwf_complex* stars_filtered = run_globals.reion_grids.stars_filtered;
   fftwf_execute(run_globals.reion_grids.stars_forward_plan);
 
+  float* weighted_sfr = run_globals.reion_grids.weighted_sfr;
   fftwf_complex* weighted_sfr_unfiltered = run_globals.reion_grids.weighted_sfr_unfiltered;
   fftwf_complex* weighted_sfr_filtered = run_globals.reion_grids.weighted_sfr_filtered;
   fftwf_execute(run_globals.reion_grids.weighted_sfr_forward_plan);
@@ -171,6 +172,7 @@ void _find_HII_bubbles(const int snapshot)
   fftwf_complex* starsIII_filtered = run_globals.reion_grids.starsIII_filtered;
   fftwf_execute(run_globals.reion_grids.starsIII_forward_plan);
 
+  float* weighted_sfrIII = run_globals.reion_grids.weighted_sfrIII;
   fftwf_complex* weighted_sfrIII_unfiltered = run_globals.reion_grids.weighted_sfrIII_unfiltered;
   fftwf_complex* weighted_sfrIII_filtered = run_globals.reion_grids.weighted_sfrIII_filtered;
   fftwf_execute(run_globals.reion_grids.weighted_sfrIII_forward_plan);
@@ -193,10 +195,6 @@ void _find_HII_bubbles(const int snapshot)
   float* temp_kinetic_all_gas = run_globals.reion_grids.temp_kinetic_all_gas;
   float* z_in = run_globals.reion_grids.z_at_ionization;
   float* N_rec = run_globals.reion_grids.N_rec;
-  float* weighted_sfr = run_globals.reion_grids.weighted_sfr;
-#if USE_MINI_HALOS
-  float* weighted_sfrIII = run_globals.reion_grids.weighted_sfrIII;
-#endif
   float* residual_xH = run_globals.reion_grids.residual_xH;
   fftwf_complex* N_rec_unfiltered = NULL;
   fftwf_complex* N_rec_filtered = NULL;
@@ -503,7 +501,7 @@ void _find_HII_bubbles(const int snapshot)
         double cell_xH = (double)(xH[i_real]);
         volume_weighted_global_xH += cell_xH;
         volume_weighted_global_r_bubble += (double)r_bubble[i_real];
-        volume_weighted_global_weighted_sfr += (double)weighted_sfr[i_padded];
+        volume_weighted_global_weighted_sfr += (double)((float*)weighted_sfr)[i_padded];
 #if USE_MINI_HALOS
         volume_weighted_global_weighted_sfrIII += (double)weighted_sfrIII[i_padded];
 #endif
