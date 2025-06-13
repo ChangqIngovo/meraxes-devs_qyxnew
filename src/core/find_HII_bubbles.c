@@ -576,11 +576,11 @@ void _find_HII_bubbles(const int snapshot)
   volume_weighted_global_residual_xH /= total_n_cells;
 
   mass_weighted_global_xH /= mass_weight;
-  mass_weighted_global_Gamma12 /= total_n_cells;
-  mass_weighted_global_r_bubble /= total_n_cells;
-  mass_weighted_global_temp_kinetic_all_gas /= total_n_cells;
-  mass_weighted_global_N_rec /= total_n_cells;
-  mass_weighted_global_residual_xH /= total_n_cells;
+  mass_weighted_global_Gamma12 /= mass_weight;
+  mass_weighted_global_r_bubble /= mass_weight;
+  mass_weighted_global_temp_kinetic_all_gas /= mass_weight;
+  mass_weighted_global_N_rec /= mass_weight;
+  mass_weighted_global_residual_xH /= mass_weight;
 
   run_globals.reion_grids.volume_weighted_global_xH = volume_weighted_global_xH;
   run_globals.reion_grids.volume_weighted_global_Gamma12 = volume_weighted_global_Gamma12;
