@@ -437,7 +437,7 @@ void _find_HII_bubbles(const int snapshot)
           // If so, assign partial ionisations to those cells which aren't fully ionised
           else if (flag_last_filter_step && (xH[i_real] > REL_TOL)) {
             if (run_globals.params.Flag_IncludeSpinTemp)
-                temp_kinetic_all_gas[i_real] = ComputePartiallyIoinizedTemperature(temp_kinetic_all_gas[i_real], xH[i_real]);
+                temp_kinetic_all_gas[i_real] = ComputePartiallyIoinizedTemperature(Tk_box[i_real], xH[i_real]);
             else
                 temp_kinetic_all_gas[i_real] = ComputePartiallyIoinizedTemperature(TK*(1. + cT_ad*deltax[i_padded]), xH[i_real]);
 
