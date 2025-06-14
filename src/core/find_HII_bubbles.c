@@ -109,7 +109,7 @@ void _find_HII_bubbles(const int snapshot)
   double Gamma_R_prefactorIII;
 #endif
 
-  double recombination_rate, clumping_factor, rec, z_eff, rnh;
+  double recombination_rate, cf, rec, z_eff, rnh;
 
   const double redshift = run_globals.ZZ[snapshot];
   double prev_redshift;
@@ -196,6 +196,7 @@ void _find_HII_bubbles(const int snapshot)
   float* z_in = run_globals.reion_grids.z_at_ionization;
   float* N_rec = run_globals.reion_grids.N_rec;
   float* residual_xH = run_globals.reion_grids.residual_xH;
+  float* clumping_factor = run_globals.reion_grids.clumping_factor;
   fftwf_complex* N_rec_unfiltered = NULL;
   fftwf_complex* N_rec_filtered = NULL;
   if (run_globals.params.Flag_IncludeRecombinations) {
@@ -481,6 +482,7 @@ void _find_HII_bubbles(const int snapshot)
   double volume_weighted_global_temp_kinetic_all_gas = 0.0;
   double volume_weighted_global_N_rec = 0.0;
   double volume_weighted_global_residual_xH = 0.0;
+  double volume_weighted_global_clumping_factor = 0.0;
 
   double mass_weight = 0.0;
   double mass_weighted_global_xH = 0.0;
@@ -489,6 +491,7 @@ void _find_HII_bubbles(const int snapshot)
   double mass_weighted_global_temp_kinetic_all_gas = 0.0;
   double mass_weighted_global_N_rec = 0.0;
   double mass_weighted_global_residual_xH = 0.0;
+  double mass_weighted_global_clumping_factor = 0.0;
 
   double Hubble_h = run_globals.params.Hubble_h;
   double temp;
@@ -534,18 +537,21 @@ void _find_HII_bubbles(const int snapshot)
             temp = (double)temp_kinetic_all_gas[i_real];
           else
             temp = 1e4;
-          if (splined_recombination(z_eff, (double)Gamma12[i_real] * Hubble_h * Hubble_h, temp, &recombination_rate, &rnh) != 1){
+          if (splined_recombination(z_eff, (double)Gamma12[i_real] * Hubble_h * Hubble_h, temp, &recombination_rate, &rnh, &cf) != 1){
             mlog_error("splined_recombination failed. Aborting...");
             ABORT(EXIT_FAILURE);
           }
           N_rec[i_padded] += (float)recombination_rate * fabs_dtdz * zstep * (1. - (float)cell_xH);
           residual_xH[i_real] = (float)rnh;
+          clumping_factor[i_real] = (float)cf;
 
           volume_weighted_global_N_rec += (double)N_rec[i_padded];
           volume_weighted_global_residual_xH += (double)residual_xH[i_real];
+          volume_weighted_global_clumping_factor += (double)clumping_factor[i_real];
           volume_weighted_global_Gamma12 += (double)Gamma12[i_real];
           mass_weighted_global_N_rec += (double)N_rec[i_padded] * density_over_mean;
           mass_weighted_global_residual_xH += (double)residual_xH[i_real] * density_over_mean;
+          mass_weighted_global_clumping_factor += (double)clumping_factor[i_real] * density_over_mean;
           mass_weighted_global_Gamma12 += (double)Gamma12[i_real] * density_over_mean;
         }
       }
@@ -557,12 +563,14 @@ void _find_HII_bubbles(const int snapshot)
   MPI_Allreduce(MPI_IN_PLACE, &volume_weighted_global_temp_kinetic_all_gas, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
   MPI_Allreduce(MPI_IN_PLACE, &volume_weighted_global_N_rec, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
   MPI_Allreduce(MPI_IN_PLACE, &volume_weighted_global_residual_xH, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
+  MPI_Allreduce(MPI_IN_PLACE, &volume_weighted_global_clumping_factor, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
   MPI_Allreduce(MPI_IN_PLACE, &mass_weighted_global_xH, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
   MPI_Allreduce(MPI_IN_PLACE, &mass_weighted_global_Gamma12, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
   MPI_Allreduce(MPI_IN_PLACE, &mass_weighted_global_r_bubble, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
   MPI_Allreduce(MPI_IN_PLACE, &mass_weighted_global_temp_kinetic_all_gas, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
   MPI_Allreduce(MPI_IN_PLACE, &mass_weighted_global_N_rec, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
   MPI_Allreduce(MPI_IN_PLACE, &mass_weighted_global_residual_xH, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
+  MPI_Allreduce(MPI_IN_PLACE, &mass_weighted_global_clumping_factor, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
   MPI_Allreduce(MPI_IN_PLACE, &mass_weight, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
 
   volume_weighted_global_xH /= total_n_cells;
@@ -572,6 +580,7 @@ void _find_HII_bubbles(const int snapshot)
   volume_weighted_global_temp_kinetic_all_gas /= total_n_cells;
   volume_weighted_global_N_rec /= total_n_cells;
   volume_weighted_global_residual_xH /= total_n_cells;
+  volume_weighted_global_clumping_factor /= total_n_cells;
 
   mass_weighted_global_xH /= mass_weight;
   mass_weighted_global_Gamma12 /= mass_weight;
@@ -579,6 +588,7 @@ void _find_HII_bubbles(const int snapshot)
   mass_weighted_global_temp_kinetic_all_gas /= mass_weight;
   mass_weighted_global_N_rec /= mass_weight;
   mass_weighted_global_residual_xH /= mass_weight;
+  mass_weighted_global_clumping_factor /= mass_weight;
 
   run_globals.reion_grids.volume_weighted_global_xH = volume_weighted_global_xH;
   run_globals.reion_grids.volume_weighted_global_Gamma12 = volume_weighted_global_Gamma12;
@@ -587,6 +597,7 @@ void _find_HII_bubbles(const int snapshot)
   run_globals.reion_grids.volume_weighted_global_temp_kinetic_all_gas = volume_weighted_global_temp_kinetic_all_gas;
   run_globals.reion_grids.volume_weighted_global_N_rec = volume_weighted_global_N_rec;
   run_globals.reion_grids.volume_weighted_global_residual_xH = volume_weighted_global_residual_xH;
+  run_globals.reion_grids.volume_weighted_global_clumping_factor = volume_weighted_global_clumping_factor;
 
   run_globals.reion_grids.mass_weighted_global_xH = mass_weighted_global_xH;
   run_globals.reion_grids.mass_weighted_global_Gamma12 = mass_weighted_global_Gamma12;
@@ -594,6 +605,7 @@ void _find_HII_bubbles(const int snapshot)
   run_globals.reion_grids.mass_weighted_global_temp_kinetic_all_gas = mass_weighted_global_temp_kinetic_all_gas;
   run_globals.reion_grids.mass_weighted_global_N_rec = mass_weighted_global_N_rec;
   run_globals.reion_grids.mass_weighted_global_residual_xH = mass_weighted_global_residual_xH;
+  run_globals.reion_grids.mass_weighted_global_clumping_factor = mass_weighted_global_clumping_factor;
 
 #if USE_MINI_HALOS
   MPI_Allreduce(MPI_IN_PLACE, &volume_weighted_global_weighted_sfrIII, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);

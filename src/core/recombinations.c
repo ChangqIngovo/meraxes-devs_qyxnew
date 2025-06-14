@@ -27,7 +27,7 @@ double *lnGamma_values, *RR_table, *RNH_table, *CF_table;
 gsl_interp_accel **RR_acc, **RNH_acc, **CF_acc;
 gsl_spline **RR_spline, **RNH_spline, **CF_spline;
 
-int splined_recombination(double z_eff, double gamma12_bg, double temp, double *recombination_rate, double *residual_xH)
+int splined_recombination(double z_eff, double gamma12_bg, double temp, double *recombination_rate, double *residual_xH, double *clumping_factor)
 {
   int z_ct = (int)((z_eff-RR_Z_END) / RR_DEL_Z + 0.5); // round to nearest int
   int t_ct = (int)((log10(temp)-RR_T_STA) / RR_DEL_T + 0.5); // round to nearest int
@@ -65,7 +65,7 @@ int splined_recombination(double z_eff, double gamma12_bg, double temp, double *
   int idx = z_ct * RR_T_NPTS + t_ct;
   *recombination_rate = exp(gsl_spline_eval(RR_spline[idx], lnGamma, RR_acc[idx]));
   *residual_xH = exp(gsl_spline_eval(RNH_spline[idx], lnGamma, RNH_acc[idx]));
-  //*clumping_factor = gsl_spline_eval(CF_spline[iidx], lnGamma, CF_acc[idx]);
+  *clumping_factor = gsl_spline_eval(CF_spline[idx], lnGamma, CF_acc[idx]);
 
   return 1;
 }
@@ -317,7 +317,7 @@ double MHR_rr(double lnD, void* params)
   return n_H * PDelta * alpha * x_e * x_e * D * D; // note extra D since we are integrating over lnD
 }
 
-double MHR_cf(double lnD, void* params)
+double MHR_cf_numerator(double lnD, void* params)
 {
   double D = exp(lnD);
   RR_par p = *(RR_par*)params;
@@ -329,7 +329,22 @@ double MHR_cf(double lnD, void* params)
 
   PDelta = p.A * exp(-0.5 * pow((pow(D, -2.0 / 3.0) - p.C_0) / ((2.0 * 7.61 / (3.0 * (1.0 + z)))), 2)) * pow(D, p.beta);
 
-  return D * PDelta * x_e * x_e * D * D; // note extra D since we are integrating over lnD
+  return PDelta * x_e * x_e * D * D * D; // note extra D since we are integrating over lnD
+}
+
+double MHR_cf_denominator(double lnD, void* params)
+{
+  double D = exp(lnD);
+  RR_par p = *(RR_par*)params;
+  double z = p.z;
+  double gamma = Gamma_SS(p.gamma12_bg, D, p.T4, z);
+  double n_H = p.avenH * D;
+  double x_e = 1.0 - neutral_fraction(n_H, p.T4, gamma, p.usecaseB);
+  double PDelta;
+
+  PDelta = p.A * exp(-0.5 * pow((pow(D, -2.0 / 3.0) - p.C_0) / ((2.0 * 7.61 / (3.0 * (1.0 + z)))), 2)) * pow(D, p.beta);
+
+  return PDelta * x_e * D * D; // note extra D since we are integrating over lnD
 }
 
 double MHR_rnh(double lnD, void* params)
@@ -344,7 +359,7 @@ double MHR_rnh(double lnD, void* params)
 
   PDelta = p.A * exp(-0.5 * pow((pow(D, -2.0 / 3.0) - p.C_0) / ((2.0 * 7.61 / (3.0 * (1.0 + z)))), 2)) * pow(D, p.beta);
 
-  return 1e4 * D * PDelta * x_HI * D;
+  return 1e4 * PDelta * x_HI * D;
 }
 
 // returns the recombination rate per baryon (1/s), integrated over the MHR density PDF,
@@ -373,18 +388,25 @@ double recombination_rate(double z_eff, double gamma12_bg, double T4, int usecas
 double clumping_factor(double z_eff, double gamma12_bg, double T4, int usecaseB)
 {
   double result, error, lower_limit, upper_limit;
+  double denominator, numerator;
   gsl_function F;
   double rel_tol = 0.01; //<- relative tolerance
   gsl_integration_workspace* w = gsl_integration_workspace_alloc(1000);
   RR_par p = { z_eff, gamma12_bg, T4, A_MHR(z_eff), C_MHR(z_eff), beta_MHR(z_eff), No * pow(1 + z_eff, 3), usecaseB };
 
-  F.function = &MHR_cf;
   F.params = &p;
   lower_limit = log(0.01);
   upper_limit = log(200);
 
-  gsl_integration_qag(&F, lower_limit, upper_limit, 0, rel_tol, 1000, GSL_INTEG_GAUSS61, w, &result, &error);
+  F.function = &MHR_cf_numerator;
+  gsl_integration_qag(&F, lower_limit, upper_limit, 0, rel_tol, 1000, GSL_INTEG_GAUSS61, w, &numerator, &error);
+
+  F.function = &MHR_cf_denominator;
+  gsl_integration_qag(&F, lower_limit, upper_limit, 0, rel_tol, 1000, GSL_INTEG_GAUSS61, w, &denominator, &error);
+
   gsl_integration_workspace_free(w);
+
+  result = numerator / denominator / denominator;
 
   return result;
 }

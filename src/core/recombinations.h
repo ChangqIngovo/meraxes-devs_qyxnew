@@ -27,11 +27,11 @@
 // same, just index sample in temperature
 #define RR_T_NPTS (int)(100)
 #define RR_DEL_T (float)(0.03)
-#define RR_T_STA (float)(2) // added zend so that the 300 points span T=1e2, 1e2.3, ... 1e4.97
+#define RR_T_STA (float)(2.0) // added zend so that the 300 points span T=1e2, 1e2.3, ... 1e4.97
 
 // number of samples of gamma for the interpolation tables
 #define RR_lnGamma_NPTS (int)(150)
-#define RR_lnGamma_min (float)(-10)
+#define RR_lnGamma_min (float)(-10.0)
 #define RR_DEL_lnGamma (float)(0.1)
 
 #ifdef __cplusplus
@@ -46,7 +46,7 @@ extern "C"
                           double gamma12,
                           int usecaseB); // neutral fraction given H density (cm^-3), gas temperature (in 1e4 K), and
                                          // gamma12  (in 1e-12 s^-1). if usecase B, then use case B, otherwise case A
-  int splined_recombination(double z_eff, double gamma12_bg, double temp, double *recombination_rate, double *residual_xH); // assumes case B
+  int splined_recombination(double z_eff, double gamma12_bg, double temp, double *recombination_rate, double *residual_xH, double *clumping_factor); // assumes case B
   double recombination_rate(double z_eff, double gamma12_bg, double T4, int usecaseB);
   double clumping_factor(double z_eff, double gamma12_bg, double T4, int usecaseB);
   double residual_neutral_hydrogen(double z_eff, double gamma12_bg, double T4, int usecaseB);

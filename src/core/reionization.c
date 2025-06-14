@@ -291,6 +291,7 @@ void call_find_HII_bubbles(int snapshot, int nout_gals, timer_info* timer)
     mlog("Gamma12 = %g VS %g (h**2 1e-12 /s)", MLOG_MESG, grids->volume_weighted_global_Gamma12, grids->mass_weighted_global_Gamma12);
     mlog("N_rec = %g VS %g (/N_b)", MLOG_MESG, grids->volume_weighted_global_N_rec, grids->mass_weighted_global_N_rec);
     mlog("residual_xH = %g VS %g (x10**-4)", MLOG_MESG, grids->volume_weighted_global_residual_xH, grids->mass_weighted_global_residual_xH);
+    mlog("clumping_factor = %g VS %g", MLOG_MESG, grids->volume_weighted_global_clumping_factor, grids->mass_weighted_global_clumping_factor);
   }
 
   mlog("sfr = %g (Msun/yr)", MLOG_MESG, grids->volume_weighted_global_weighted_sfr);
@@ -405,6 +406,7 @@ void init_reion_grids()
       grids->z_re[ii] = 0.0;
       grids->Gamma12[ii] = 0.0;
       grids->residual_xH[ii] = 0;
+      grids->clumping_factor[ii] = 0;
     }
     if (run_globals.params.Flag_Compute21cmBrightTemp) {
       grids->delta_T[ii] = 0.0;
@@ -628,6 +630,7 @@ void malloc_reionization_grids()
   grids->z_re = NULL;
   grids->Gamma12 = NULL;
   grids->residual_xH = NULL;
+  grids->clumping_factor = NULL;
   grids->N_rec = NULL;
   grids->N_rec_filtered = NULL;
   grids->N_rec_unfiltered = NULL;
@@ -890,6 +893,7 @@ void malloc_reionization_grids()
       grids->z_re = fftwf_alloc_real((size_t)slab_n_real);
       grids->Gamma12 = fftwf_alloc_real((size_t)slab_n_real);
       grids->residual_xH = fftwf_alloc_real((size_t)slab_n_real);
+      grids->clumping_factor = fftwf_alloc_real((size_t)slab_n_real);
     }
 
     if (run_globals.params.Flag_Compute21cmBrightTemp) {
@@ -1024,6 +1028,7 @@ void free_reionization_grids()
     fftwf_free(grids->Gamma12);
     fftwf_free(grids->z_re);
     fftwf_free(grids->residual_xH);
+    fftwf_free(grids->clumping_factor);
 
     fftwf_destroy_plan(grids->N_rec_filtered_reverse_plan);
     fftwf_destroy_plan(grids->N_rec_forward_plan);
@@ -1863,6 +1868,7 @@ void save_reion_output_grids(int snapshot)
   if (run_globals.params.Flag_IncludeRecombinations) {
     write_grid_float("z_at_ionization", grids->z_at_ionization, file_id, fspace_id, memspace_id, dcpl_id);
     write_grid_float("residual_xH", grids->residual_xH, file_id, fspace_id, memspace_id, dcpl_id);
+    write_grid_float("clumping_factor", grids->clumping_factor, file_id, fspace_id, memspace_id, dcpl_id);
     write_grid_float("Gamma12", grids->Gamma12, file_id, fspace_id, memspace_id, dcpl_id);
 
     for (int ii = 0; ii < local_nix; ii++)
@@ -1974,6 +1980,8 @@ void save_reion_output_grids(int snapshot)
     H5LTset_attribute_double(file_id, "N_rec", "mass_weighted_global_N_rec", &(grids->mass_weighted_global_N_rec), 1);
     H5LTset_attribute_double(file_id, "residual_xH", "volume_weighted_global_residual_xH", &(grids->volume_weighted_global_residual_xH), 1);
     H5LTset_attribute_double(file_id, "residual_xH", "mass_weighted_global_residual_xH", &(grids->mass_weighted_global_residual_xH), 1);
+    H5LTset_attribute_double(file_id, "clumping_factor", "volume_weighted_global_clumping_factor", &(grids->volume_weighted_global_clumping_factor), 1);
+    H5LTset_attribute_double(file_id, "clumping_factor", "mass_weighted_global_clumping_factor", &(grids->mass_weighted_global_clumping_factor), 1);
   }
 
   H5LTset_attribute_double(file_id, "weighted_sfr", "volume_weighted_global_weighted_sfr", &(grids->volume_weighted_global_weighted_sfr), 1);
