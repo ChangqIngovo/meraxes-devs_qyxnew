@@ -167,7 +167,7 @@ void init_MHR()
 
           local_idx = (idx - local_start) * RR_lnGamma_NPTS + gamma_ct;
           local_RR[local_idx]  = log(recombination_rate(z, gamma, temp, 1));
-          local_CF[local_idx]  = log(clumping_factor(z, gamma, temp, 1));
+          local_CF[local_idx]  = clumping_factor(z, gamma, temp, 1);
           local_RNH[local_idx] = log(residual_neutral_hydrogen(z, gamma, temp, 1));
           // NOTE: although the table is more linear when taken log, it's faster otherwise have to do exp() 
         }
