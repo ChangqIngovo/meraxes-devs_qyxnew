@@ -195,7 +195,11 @@ void previous_merger_driven_BH_growth(galaxy_t* gal)
   gal->EffectiveBHM +=
     BHemissivity * EMISSIVITY_CONVERTOR * gal->FescBH / run_globals.params.physics.ReionNionPhotPerBary;
   gal->EffectiveBHAR +=
-    BHemissivity / accretion_time * EMISSIVITY_CONVERTOR * gal->FescBH / run_globals.params.physics.ReionNionPhotPerBary;
+    BHemissivity / gal->dt * EMISSIVITY_CONVERTOR * gal->FescBH / run_globals.params.physics.ReionNionPhotPerBary;
+  // YQ: Note, here it cannot be accretion_time because the quasar might not shine for the entire snapshot
+  // TODO: in principle, what we should do is have quasar dominating UVB (ReionAlphaUVBH) when t<accretion_time
+  // and galaxy dominating when t>accretion_time. However, that doesn't work (easily) for the cell... 
+  // let's just do average BHAR then and still do ReionAlphaUVBH and ReionAlphaUV seperately
 
   // quasar mode feedback
   m_reheat = run_globals.params.physics.QuasarModeEff * 2. * ETA * run_globals.Csquare * accreted_mass / Vvir / Vvir;

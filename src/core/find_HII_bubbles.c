@@ -394,7 +394,7 @@ void _find_HII_bubbles(const int snapshot)
             ((float*)x_e_filtered)[i_padded] = fminf(((float*)x_e_filtered)[i_padded], 0.999);
           }
           if (run_globals.params.physics.Flag_BHFeedback) {
-            ((float*)effective_bhm_filtered)[i_padded] = fmaxf(((float*)effective_ehm_filtered)[i_padded], 0.0);
+            ((float*)effective_bhm_filtered)[i_padded] = fmaxf(((float*)effective_bhm_filtered)[i_padded], 0.0);
             if (((float*)effective_bhm_filtered)[i_padded] < ABS_TOL) {
               ((float*)effective_bhm_filtered)[i_padded] = 0;
             }
