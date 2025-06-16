@@ -99,7 +99,7 @@ void _find_HII_bubbles(const int snapshot)
   double sfr_timescale = run_globals.params.ReionSfrTimescale * hubble_time(snapshot);
   double f_coll_effective_bhm=0.0;
   double neutral_fraction;
-  double Gamma_R_prefactor, f_coll_prefactor;
+  double Gamma_R_prefactor, f_coll_prefactor, Gamma_R_prefactor_BH;
   float thistk, TK;
   float cT_ad; //finding the adiabatic index at the initial redshift from 2302.08506 to fix adiabatic fluctuations.
 #if USE_MINI_HALOS
@@ -415,8 +415,10 @@ void _find_HII_bubbles(const int snapshot)
                         units->UnitLength_in_cm / pixel_volume;
     Gamma_R_prefactor *= (units->UnitMass_in_g / units->UnitTime_in_s) / PROTONMASS *
                          pow(units->UnitLength_in_cm, -3.) * ReionNionPhotPerBary;
-    J_21_aux_constant = Gamma_R_prefactor * PLANCK * 1e21 / (4.0 * M_PI) * ReionGammaHaloBias / sfr_timescale;
-    Gamma_R_prefactor *= SIGMA_HI / (run_globals.params.physics.ReionAlphaUV + 2.75) * 1e12;
+    Gamma_R_prefactor_BH = Gamma_R_prefactor;
+    J_21_aux_constant = Gamma_R_prefactor * PLANCK * 1e21 / (4.0 * M_PI) * ReionGammaHaloBias / sfr_timescale * run_globals.params.physics.ReionAlphaUV;
+    Gamma_R_prefactor *= SIGMA_HI * run_globals.params.physics.ReionAlphaUV / (run_globals.params.physics.ReionAlphaUV + 2.75) * 1e12;
+    Gamma_R_prefactor_BH *= SIGMA_HI * run_globals.params.physics.ReionAlphaUVBH / (run_globals.params.physics.ReionAlphaUVBH+2.75) * 1e12;
     f_coll_prefactor = ReionEfficiency * (4.0 / 3.0) * M_PI / pixel_volume / M_mean * R_cubed;
 #if USE_MINI_HALOS
     J_21_auxIII_constant = J_21_aux_constant / ReionNionPhotPerBary * ReionNionPhotPerBaryIII; // Is HaloBias the same for PopIII / Pop II?
@@ -464,12 +466,12 @@ void _find_HII_bubbles(const int snapshot)
             // If it is the first crossing of the ionisation barrier for this cell (largest R)
             // Store the ionisation background and the reionisation redshift for each cell
             if ( (xH[i_real] > REL_TOL) && (run_globals.params.Flag_IncludeRecombinations) ){
-                Gamma12[i_real] = ((float*)weighted_sfr_filtered)[i_padded] * (float)(Gamma_R_prefactor * run_globals.params.physics.ReionAlphaUV);
+                Gamma12[i_real] = ((float*)weighted_sfr_filtered)[i_padded] * (float)(Gamma_R_prefactor);
 #if USE_MINI_HALOS
-                Gamma12[i_real] += ((float*)weighted_sfrIII_filtered)[i_padded] * (float)(Gamma_R_prefactorIII * run_globals.params.physics.ReionAlphaUV);
+                Gamma12[i_real] += ((float*)weighted_sfrIII_filtered)[i_padded] * (float)(Gamma_R_prefactorIII);
 #endif
                 if (run_globals.params.physics.Flag_BHFeedback)
-                  Gamma12[i_real] += ((float*)effective_bhar_filtered)[i_padded] * (float)(Gamma_R_prefactor * run_globals.params.physics.ReionAlphaUVBH);
+                  Gamma12[i_real] += ((float*)effective_bhar_filtered)[i_padded] * (float)(Gamma_R_prefactor_BH);
                 // Record radius
                 r_bubble[i_real] = (float)R;
             }
@@ -503,12 +505,12 @@ void _find_HII_bubbles(const int snapshot)
           {
             z_in[i_real] = (float)redshift;
             if (flag_ReionUVBFlag){
-              J_21_at_ionization[i_real] = ((float*)stars_filtered)[i_padded] * (float)(run_globals.params.physics.ReionAlphaUV * J_21_aux_constant);
+              J_21_at_ionization[i_real] = ((float*)stars_filtered)[i_padded] * (float)(J_21_aux_constant);
 #if USE_MINI_HALOS
-              J_21_at_ionization[i_real] += ((float*)starsIII_filtered)[i_padded] * (float)(run_globals.params.physics.ReionAlphaUV * J_21_auxIII_constant);
+              J_21_at_ionization[i_real] += ((float*)starsIII_filtered)[i_padded] * (float)(J_21_auxIII_constant);
 #endif
               if (run_globals.params.physics.Flag_BHFeedback)
-                J_21_at_ionization[i_real] += ((float*)effective_bhm_filtered)[i_padded] * (float)(run_globals.params.physics.ReionAlphaUVBH * J_21_aux_constant);
+                J_21_at_ionization[i_real] += ((float*)effective_bhm_filtered)[i_padded] * (float)(J_21_aux_constant);
             }
           }
         }
