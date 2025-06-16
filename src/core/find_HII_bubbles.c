@@ -97,7 +97,7 @@ void _find_HII_bubbles(const int snapshot)
   double density_over_mean;
   double f_coll_stars;
   double sfr_timescale = run_globals.params.ReionSfrTimescale * hubble_time(snapshot);
-  double f_coll_bhm=0.0;
+  double f_coll_effective_bhm=0.0;
   double neutral_fraction;
   double Gamma_R_prefactor, f_coll_prefactor;
   float thistk, TK;
@@ -163,18 +163,20 @@ void _find_HII_bubbles(const int snapshot)
   fftwf_complex* stars_filtered = run_globals.reion_grids.stars_filtered;
   fftwf_execute(run_globals.reion_grids.stars_forward_plan);
 
-  fftwf_complex* bhm_unfiltered = NULL;
-  fftwf_complex* bhm_filtered = NULL;
-  fftwf_complex* bhar_unfiltered = NULL;
-  fftwf_complex* bhar_filtered = NULL;
+  fftwf_complex* effective_bhm_unfiltered = NULL;
+  fftwf_complex* effective_bhm_filtered = NULL;
+  fftwf_complex* effective_bhar_unfiltered = NULL;
+  fftwf_complex* effective_bhar_filtered = NULL;
+  float *effective_bhar = NULL;
   if (run_globals.params.physics.Flag_BHFeedback) {
-    bhm_unfiltered = run_globals.reion_grids.bhm_unfiltered;
-    bhm_filtered = run_globals.reion_grids.bhm_filtered;
-    fftwf_execute(run_globals.reion_grids.bhm_forward_plan);
+    effective_bhm_unfiltered = run_globals.reion_grids.effective_bhm_unfiltered;
+    effective_bhm_filtered = run_globals.reion_grids.effective_bhm_filtered;
+    fftwf_execute(run_globals.reion_grids.effective_bhm_forward_plan);
 
-    bhar_unfiltered = run_globals.reion_grids.bhar_unfiltered;
-    bhar_filtered = run_globals.reion_grids.bhar_filtered;
-    fftwf_execute(run_globals.reion_grids.bhar_forward_plan);
+    effective_bhar = run_globals.reion_grids.effective_bhar;
+    effective_bhar_unfiltered = run_globals.reion_grids.effective_bhar_unfiltered;
+    effective_bhar_filtered = run_globals.reion_grids.effective_bhar_filtered;
+    fftwf_execute(run_globals.reion_grids.effective_bhar_forward_plan);
   }
 
   float* weighted_sfr = run_globals.reion_grids.weighted_sfr;
@@ -238,8 +240,8 @@ void _find_HII_bubbles(const int snapshot)
       x_e_unfiltered[ii] /= total_n_cells;
     }
     if (run_globals.params.physics.Flag_BHFeedback) {
-      bhm_unfiltered[ii] /= total_n_cells;
-      bhar_unfiltered[ii] /= total_n_cells;
+      effective_bhm_unfiltered[ii] /= total_n_cells;
+      effective_bhar_unfiltered[ii] /= total_n_cells;
     }
   }
 
@@ -296,8 +298,8 @@ void _find_HII_bubbles(const int snapshot)
       memcpy(x_e_filtered, x_e_unfiltered, sizeof(fftwf_complex) * slab_n_complex);
     }
     if (run_globals.params.physics.Flag_BHFeedback) {
-      memcpy(bhm_filtered, bhm_unfiltered, sizeof(fftwf_complex) * slab_n_complex);
-      memcpy(bhar_filtered, bhar_unfiltered, sizeof(fftwf_complex) * slab_n_complex);
+      memcpy(effective_bhm_filtered, effective_bhm_unfiltered, sizeof(fftwf_complex) * slab_n_complex);
+      memcpy(effective_bhar_filtered, effective_bhar_unfiltered, sizeof(fftwf_complex) * slab_n_complex);
     }
 
     // do the filtering unless this is the last filter step
@@ -324,8 +326,8 @@ void _find_HII_bubbles(const int snapshot)
         filter(x_e_filtered, local_ix_start, local_nix, ReionGridDim, (float)R, run_globals.params.ReionFilterType);
       }
       if (run_globals.params.physics.Flag_BHFeedback) {
-        filter(bhm_filtered, local_ix_start, local_nix, ReionGridDim, (float)R, run_globals.params.ReionFilterType);
-        filter(bhar_filtered, local_ix_start, local_nix, ReionGridDim, (float)R, run_globals.params.ReionFilterType);
+        filter(effective_bhm_filtered, local_ix_start, local_nix, ReionGridDim, (float)R, run_globals.params.ReionFilterType);
+        filter(effective_bhar_filtered, local_ix_start, local_nix, ReionGridDim, (float)R, run_globals.params.ReionFilterType);
       }
     }
 
@@ -347,8 +349,8 @@ void _find_HII_bubbles(const int snapshot)
     }
 
     if (run_globals.params.physics.Flag_BHFeedback) {
-      fftwf_execute(run_globals.reion_grids.bhm_filtered_reverse_plan);
-      fftwf_execute(run_globals.reion_grids.bhar_filtered_reverse_plan);
+      fftwf_execute(run_globals.reion_grids.effective_bhm_filtered_reverse_plan);
+      fftwf_execute(run_globals.reion_grids.effective_bhar_filtered_reverse_plan);
     }
 
     // Perform sanity checks to account for aliasing effects
@@ -392,13 +394,13 @@ void _find_HII_bubbles(const int snapshot)
             ((float*)x_e_filtered)[i_padded] = fminf(((float*)x_e_filtered)[i_padded], 0.999);
           }
           if (run_globals.params.physics.Flag_BHFeedback) {
-            ((float*)bhm_filtered)[i_padded] = fmaxf(((float*)bhm_filtered)[i_padded], 0.0);
-            if (((float*)bhm_filtered)[i_padded] < ABS_TOL) {
-              ((float*)bhm_filtered)[i_padded] = 0;
+            ((float*)effective_bhm_filtered)[i_padded] = fmaxf(((float*)effective_ehm_filtered)[i_padded], 0.0);
+            if (((float*)effective_bhm_filtered)[i_padded] < ABS_TOL) {
+              ((float*)effective_bhm_filtered)[i_padded] = 0;
             }
-            ((float*)bhar_filtered)[i_padded] = fmaxf(((float*)bhar_filtered)[i_padded], 0.0);
-            if (((float*)bhar_filtered)[i_padded] < ABS_TOL) {
-              ((float*)bhar_filtered)[i_padded] = 0;
+            ((float*)effective_bhar_filtered)[i_padded] = fmaxf(((float*)effective_bhar_filtered)[i_padded], 0.0);
+            if (((float*)effective_bhar_filtered)[i_padded] < ABS_TOL) {
+              ((float*)effective_bhar_filtered)[i_padded] = 0;
             }
           }
         }
@@ -435,7 +437,7 @@ void _find_HII_bubbles(const int snapshot)
           f_coll_starsIII = (double)((float*)starsIII_filtered)[i_padded] / density_over_mean;
 #endif
           if (run_globals.params.physics.Flag_BHFeedback)
-            f_coll_bhm = (double)((float*)bhm_filtered)[i_padded] / density_over_mean;
+            f_coll_effective_bhm = (double)((float*)effective_bhm_filtered)[i_padded] / density_over_mean;
 
           // Calculate the recombinations within the cell
           if (run_globals.params.Flag_IncludeRecombinations) {
@@ -453,10 +455,10 @@ void _find_HII_bubbles(const int snapshot)
           // Check if ionised!
 
 #if USE_MINI_HALOS
-          if (((f_coll_bhm + f_coll_stars) * f_coll_prefactor + f_coll_starsIII * f_coll_prefactorIII) >
+          if (((f_coll_effective_bhm + f_coll_stars) * f_coll_prefactor + f_coll_starsIII * f_coll_prefactorIII) >
               neutral_fraction * (1. + rec)) // IONISED!!!!
 #else
-          if ((f_coll_bhm + f_coll_stars) * f_coll_prefactor > neutral_fraction * (1. + rec))
+          if ((f_coll_effective_bhm + f_coll_stars) * f_coll_prefactor > neutral_fraction * (1. + rec))
 #endif
           {
             // If it is the first crossing of the ionisation barrier for this cell (largest R)
@@ -467,7 +469,7 @@ void _find_HII_bubbles(const int snapshot)
                 Gamma12[i_real] += ((float*)weighted_sfrIII_filtered)[i_padded] * (float)(Gamma_R_prefactorIII * run_globals.params.physics.ReionAlphaUV);
 #endif
                 if (run_globals.params.physics.Flag_BHFeedback)
-                  Gamma12[i_real] += ((float*)bhar_filtered)[i_padded] * (float)(Gamma_R_prefactor * run_globals.params.physics.ReionAlphaUVBH);
+                  Gamma12[i_real] += ((float*)effective_bhar_filtered)[i_padded] * (float)(Gamma_R_prefactor * run_globals.params.physics.ReionAlphaUVBH);
                 // Record radius
                 r_bubble[i_real] = (float)R;
             }
@@ -488,7 +490,7 @@ void _find_HII_bubbles(const int snapshot)
 #if USE_MINI_HALOS
             xH[i_real] -= (float)(f_coll_starsIII * f_coll_prefactorIII);
 #endif
-            xH[i_real] -= (float)(f_coll_bhm * f_coll_prefactor);
+            xH[i_real] -= (float)(f_coll_effective_bhm * f_coll_prefactor);
             if (xH[i_real] < 0.) {
               xH[i_real] = (float)0.;
             } else if (xH[i_real] > 1.0) {
@@ -506,7 +508,7 @@ void _find_HII_bubbles(const int snapshot)
               J_21_at_ionization[i_real] += ((float*)starsIII_filtered)[i_padded] * (float)(run_globals.params.physics.ReionAlphaUV * J_21_auxIII_constant);
 #endif
               if (run_globals.params.physics.Flag_BHFeedback)
-                J_21_at_ionization[i_real] += ((float*)bhm_filtered)[i_padded] * (float)(run_globals.params.physics.ReionAlphaUVBH * J_21_aux_constant);
+                J_21_at_ionization[i_real] += ((float*)effective_bhm_filtered)[i_padded] * (float)(run_globals.params.physics.ReionAlphaUVBH * J_21_aux_constant);
             }
           }
         }
@@ -524,6 +526,7 @@ void _find_HII_bubbles(const int snapshot)
 #if USE_MINI_HALOS
   double volume_weighted_global_weighted_sfrIII = 0.0;
 #endif
+  double volume_weighted_global_effective_bhar = 0.0;
   double volume_weighted_global_temp_kinetic_all_gas = 0.0;
   double volume_weighted_global_N_rec = 0.0;
   double volume_weighted_global_residual_xH = 0.0;
@@ -553,6 +556,8 @@ void _find_HII_bubbles(const int snapshot)
 #if USE_MINI_HALOS
         volume_weighted_global_weighted_sfrIII += (double)weighted_sfrIII[i_padded];
 #endif
+        if (run_globals.params.physics.Flag_BHFeedback)
+          volume_weighted_global_effective_bhar += (double)((float*)effective_bhar)[i_padded];
 
         density_over_mean = 1.0 + (double)((float*)deltax)[i_padded];
         mass_weighted_global_xH += cell_xH * density_over_mean;
@@ -605,6 +610,7 @@ void _find_HII_bubbles(const int snapshot)
   MPI_Allreduce(MPI_IN_PLACE, &volume_weighted_global_Gamma12, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
   MPI_Allreduce(MPI_IN_PLACE, &volume_weighted_global_r_bubble, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
   MPI_Allreduce(MPI_IN_PLACE, &volume_weighted_global_weighted_sfr, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
+  MPI_Allreduce(MPI_IN_PLACE, &volume_weighted_global_effective_bhar, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
   MPI_Allreduce(MPI_IN_PLACE, &volume_weighted_global_temp_kinetic_all_gas, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
   MPI_Allreduce(MPI_IN_PLACE, &volume_weighted_global_N_rec, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
   MPI_Allreduce(MPI_IN_PLACE, &volume_weighted_global_residual_xH, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
@@ -622,6 +628,7 @@ void _find_HII_bubbles(const int snapshot)
   volume_weighted_global_Gamma12 /= total_n_cells;
   volume_weighted_global_r_bubble /= total_n_cells;
   volume_weighted_global_weighted_sfr /= total_n_cells;
+  volume_weighted_global_effective_bhar /= total_n_cells;
   volume_weighted_global_temp_kinetic_all_gas /= total_n_cells;
   volume_weighted_global_N_rec /= total_n_cells;
   volume_weighted_global_residual_xH /= total_n_cells;
@@ -639,6 +646,7 @@ void _find_HII_bubbles(const int snapshot)
   run_globals.reion_grids.volume_weighted_global_Gamma12 = volume_weighted_global_Gamma12;
   run_globals.reion_grids.volume_weighted_global_r_bubble = volume_weighted_global_r_bubble;
   run_globals.reion_grids.volume_weighted_global_weighted_sfr = volume_weighted_global_weighted_sfr;
+  run_globals.reion_grids.volume_weighted_global_effective_bhar = volume_weighted_global_effective_bhar;
   run_globals.reion_grids.volume_weighted_global_temp_kinetic_all_gas = volume_weighted_global_temp_kinetic_all_gas;
   run_globals.reion_grids.volume_weighted_global_N_rec = volume_weighted_global_N_rec;
   run_globals.reion_grids.volume_weighted_global_residual_xH = volume_weighted_global_residual_xH;

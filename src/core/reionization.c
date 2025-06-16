@@ -298,6 +298,7 @@ void call_find_HII_bubbles(int snapshot, int nout_gals, timer_info* timer)
 #if USE_MINI_HALOS
   mlog("sfrIII = %g (Msun/yr)", MLOG_MESG, grids->volume_weighted_global_weighted_sfrIII);
 #endif
+  mlog("bhar = %g (equivlently Msun/yr)", MLOG_MESG, grids->volume_weighted_global_effective_bhar);
   mlog("...done", MLOG_CLOSE | MLOG_TIMERSTOP);
 }
 
@@ -456,10 +457,10 @@ void init_reion_grids()
     grids->stars_filtered[ii] = 0 + 0I;
     grids->stars_unfiltered[ii] = 0 + 0I;
     if (run_globals.params.physics.Flag_BHFeedback) {
-      grids->bhm_filtered[ii] = 0 + 0I;
-      grids->bhm_unfiltered[ii] = 0 + 0I;
-      grids->bhar_filtered[ii] = 0 + 0I;
-      grids->bhar_unfiltered[ii] = 0 + 0I;
+      grids->effective_bhm_filtered[ii] = 0 + 0I;
+      grids->effective_bhm_unfiltered[ii] = 0 + 0I;
+      grids->effective_bhar_filtered[ii] = 0 + 0I;
+      grids->effective_bhar_unfiltered[ii] = 0 + 0I;
     }
     grids->deltax_filtered[ii] = 0 + 0I;
     grids->deltax_unfiltered[ii] = 0 + 0I;
@@ -494,8 +495,8 @@ void init_reion_grids()
     grids->deltax[ii] = 0;
     grids->stars[ii] = 0;
     if (run_globals.params.physics.Flag_BHFeedback) {
-      grids->bhm[ii] = 0;
-      grids->bhar[ii] = 0;
+      grids->effective_bhm[ii] = 0;
+      grids->effective_bhar[ii] = 0;
     }
     grids->weighted_sfr[ii] = 0;
 #if USE_MINI_HALOS
@@ -590,12 +591,12 @@ void malloc_reionization_grids()
   grids->stars = NULL;
   grids->stars_unfiltered = NULL;
   grids->stars_filtered = NULL;
-  grids->bhm = NULL;
-  grids->bhm_unfiltered = NULL;
-  grids->bhm_filtered = NULL;
-  grids->bhar = NULL;
-  grids->bhar_unfiltered = NULL;
-  grids->bhar_filtered = NULL;
+  grids->effective_bhm = NULL;
+  grids->effective_bhm_unfiltered = NULL;
+  grids->effective_bhm_filtered = NULL;
+  grids->effective_bhar = NULL;
+  grids->effective_bhar_unfiltered = NULL;
+  grids->effective_bhar_filtered = NULL;
   grids->deltax = NULL;
   grids->deltax_unfiltered = NULL;
   grids->deltax_filtered = NULL;
@@ -727,41 +728,41 @@ void malloc_reionization_grids()
                                                                    plan_flags);
 
     if (run_globals.params.physics.Flag_BHFeedback) {
-      grids->bhm = fftwf_alloc_real((size_t)slab_n_complex * 2);
-      grids->bhm_unfiltered = fftwf_alloc_complex((size_t)slab_n_complex);
-      grids->bhm_filtered = fftwf_alloc_complex((size_t)slab_n_complex);
+      grids->effective_bhm = fftwf_alloc_real((size_t)slab_n_complex * 2);
+      grids->effective_bhm_unfiltered = fftwf_alloc_complex((size_t)slab_n_complex);
+      grids->effective_bhm_filtered = fftwf_alloc_complex((size_t)slab_n_complex);
   
-      grids->bhm_forward_plan = fftwf_mpi_plan_dft_r2c_3d(ReionGridDim,
+      grids->effective_bhm_forward_plan = fftwf_mpi_plan_dft_r2c_3d(ReionGridDim,
                                                             ReionGridDim,
                                                             ReionGridDim,
-                                                            grids->bhm,
-                                                            grids->bhm_unfiltered,
+                                                            grids->effective_bhm,
+                                                            grids->effective_bhm_unfiltered,
                                                             run_globals.mpi_comm,
                                                             plan_flags);
-      grids->bhm_filtered_reverse_plan = fftwf_mpi_plan_dft_c2r_3d(ReionGridDim,
+      grids->effective_bhm_filtered_reverse_plan = fftwf_mpi_plan_dft_c2r_3d(ReionGridDim,
                                                                      ReionGridDim,
                                                                      ReionGridDim,
-                                                                     grids->bhm_filtered,
-                                                                     (float*)grids->bhm_filtered,
+                                                                     grids->effective_bhm_filtered,
+                                                                     (float*)grids->effective_bhm_filtered,
                                                                      run_globals.mpi_comm,
                                                                      plan_flags);
   
-      grids->bhar = fftwf_alloc_real((size_t)slab_n_complex * 2);
-      grids->bhar_unfiltered = fftwf_alloc_complex((size_t)slab_n_complex);
-      grids->bhar_filtered = fftwf_alloc_complex((size_t)slab_n_complex);
+      grids->effective_bhar = fftwf_alloc_real((size_t)slab_n_complex * 2);
+      grids->effective_bhar_unfiltered = fftwf_alloc_complex((size_t)slab_n_complex);
+      grids->effective_bhar_filtered = fftwf_alloc_complex((size_t)slab_n_complex);
   
-      grids->bhar_forward_plan = fftwf_mpi_plan_dft_r2c_3d(ReionGridDim,
+      grids->effective_bhar_forward_plan = fftwf_mpi_plan_dft_r2c_3d(ReionGridDim,
                                                             ReionGridDim,
                                                             ReionGridDim,
-                                                            grids->bhar,
-                                                            grids->bhar_unfiltered,
+                                                            grids->effective_bhar,
+                                                            grids->effective_bhar_unfiltered,
                                                             run_globals.mpi_comm,
                                                             plan_flags);
-      grids->bhar_filtered_reverse_plan = fftwf_mpi_plan_dft_c2r_3d(ReionGridDim,
+      grids->effective_bhar_filtered_reverse_plan = fftwf_mpi_plan_dft_c2r_3d(ReionGridDim,
                                                                      ReionGridDim,
                                                                      ReionGridDim,
-                                                                     grids->bhar_filtered,
-                                                                     (float*)grids->bhar_filtered,
+                                                                     grids->effective_bhar_filtered,
+                                                                     (float*)grids->effective_bhar_filtered,
                                                                      run_globals.mpi_comm,
                                                                      plan_flags);
   
@@ -1161,17 +1162,17 @@ void free_reionization_grids()
   fftwf_free(grids->stars);
 
   if (run_globals.params.physics.Flag_BHFeedback) {
-    fftwf_destroy_plan(grids->bhm_filtered_reverse_plan);
-    fftwf_destroy_plan(grids->bhm_forward_plan);
-    fftwf_free(grids->bhm_filtered);
-    fftwf_free(grids->bhm_unfiltered);
-    fftwf_free(grids->bhm);
+    fftwf_destroy_plan(grids->effective_bhm_filtered_reverse_plan);
+    fftwf_destroy_plan(grids->effective_bhm_forward_plan);
+    fftwf_free(grids->effective_bhm_filtered);
+    fftwf_free(grids->effective_bhm_unfiltered);
+    fftwf_free(grids->effective_bhm);
 
-    fftwf_destroy_plan(grids->bhar_filtered_reverse_plan);
-    fftwf_destroy_plan(grids->bhar_forward_plan);
-    fftwf_free(grids->bhar_filtered);
-    fftwf_free(grids->bhar_unfiltered);
-    fftwf_free(grids->bhar);
+    fftwf_destroy_plan(grids->effective_bhar_filtered_reverse_plan);
+    fftwf_destroy_plan(grids->effective_bhar_forward_plan);
+    fftwf_free(grids->effective_bhar_filtered);
+    fftwf_free(grids->effective_bhar_unfiltered);
+    fftwf_free(grids->effective_bhar);
   }
 
 #if USE_MINI_HALOS
@@ -1441,8 +1442,8 @@ void construct_baryon_grids(int snapshot, int local_ngals)
 {
   double box_size = run_globals.params.BoxSize;
   float* stellar_grid = run_globals.reion_grids.stars;
-  float* bhm_grid = run_globals.reion_grids.bhm;
-  float* bhar_grid = run_globals.reion_grids.bhar;
+  float* effective_bhm_grid = run_globals.reion_grids.effective_bhm;
+  float* effective_bhar_grid = run_globals.reion_grids.effective_bhar;
   float* sfr_grid = run_globals.reion_grids.sfr;
   float* sfr_histories_grid = run_globals.reion_grids.sfr_histories;
   float* weighted_sfr_grid = run_globals.reion_grids.weighted_sfr;
@@ -1495,8 +1496,8 @@ void construct_baryon_grids(int snapshot, int local_ngals)
   enum property
   {
     prop_stellar,
-    prop_bhm,
-    prop_bhar,
+    prop_effective_bhm,
+    prop_effective_bhar,
     prop_weighted_sfr,
 #if USE_MINI_HALOS
     prop_stellarIII,
@@ -1517,7 +1518,7 @@ void construct_baryon_grids(int snapshot, int local_ngals)
       continue;
 
     // no need to bh grids if not using BHFeedback
-    if ((!run_globals.params.physics.Flag_BHFeedback) && ((prop == prop_bhm) || (prop == prop_bhar)))
+    if ((!run_globals.params.physics.Flag_BHFeedback) && ((prop == prop_effective_bhm) || (prop == prop_effective_bhar)))
       continue;
 
     int i_gal = 0;
@@ -1566,7 +1567,7 @@ void construct_baryon_grids(int snapshot, int local_ngals)
               buffer[ind] += gal->FescWeightedGSM; // Only Pop II
               break;
 
-            case prop_bhm:
+            case prop_effective_bhm:
               if (gal->BlackHoleMass >= run_globals.params.physics.BlackHoleMassLimitReion)
                 buffer[ind] += gal->EffectiveBHM;
               else
@@ -1595,7 +1596,7 @@ void construct_baryon_grids(int snapshot, int local_ngals)
               buffer[ind] += gal->FescWeightedSfr;
               break;
 
-            case prop_bhar:
+            case prop_effective_bhar:
               // for ionizing_source_formation_rate_grid, need further convertion due to different UV spectral index of
               // quasar and stellar component
               if (gal->BlackHoleMass >= run_globals.params.physics.BlackHoleMassLimitReion)
@@ -1695,23 +1696,23 @@ void construct_baryon_grids(int snapshot, int local_ngals)
                 }
             break;
 
-          case prop_bhm:
+          case prop_effective_bhm:
             for (int ix = 0; ix < slab_nix[i_r]; ix++)
               for (int iy = 0; iy < ReionGridDim; iy++)
                 for (int iz = 0; iz < ReionGridDim; iz++) {
                   float val = buffer[grid_index(ix, iy, iz, ReionGridDim, INDEX_REAL)];
                   if (val < 0) val = 0;
-                  bhm_grid[grid_index(ix, iy, iz, ReionGridDim, INDEX_PADDED)] = val;
+                  effective_bhm_grid[grid_index(ix, iy, iz, ReionGridDim, INDEX_PADDED)] = val;
                 }
             break;
 
-          case prop_bhar:
+          case prop_effective_bhar:
             for (int ix = 0; ix < slab_nix[i_r]; ix++)
               for (int iy = 0; iy < ReionGridDim; iy++)
                 for (int iz = 0; iz < ReionGridDim; iz++) {
                   float val = buffer[grid_index(ix, iy, iz, ReionGridDim, INDEX_REAL)];
                   if (val < 0) val = 0;
-                  bhar_grid[grid_index(ix, iy, iz, ReionGridDim, INDEX_PADDED)] = val;
+                  effective_bhar_grid[grid_index(ix, iy, iz, ReionGridDim, INDEX_PADDED)] = val;
                 }
             break;
 
@@ -1839,15 +1840,15 @@ void save_reion_input_grids(int snapshot)
       for (int jj = 0; jj < ReionGridDim; jj++)
         for (int kk = 0; kk < ReionGridDim; kk++)
           grid[grid_index(ii, jj, kk, ReionGridDim, INDEX_REAL)] =
-            (grids->bhm)[grid_index(ii, jj, kk, ReionGridDim, INDEX_PADDED)];
-    write_grid_float("bhm", grid, file_id, fspace_id, memspace_id, dcpl_id);
+            (grids->effective_bhm)[grid_index(ii, jj, kk, ReionGridDim, INDEX_PADDED)];
+    write_grid_float("effective_bhm", grid, file_id, fspace_id, memspace_id, dcpl_id);
   
     for (int ii = 0; ii < local_nix; ii++)
       for (int jj = 0; jj < ReionGridDim; jj++)
         for (int kk = 0; kk < ReionGridDim; kk++)
           grid[grid_index(ii, jj, kk, ReionGridDim, INDEX_REAL)] =
-            (grids->bhar)[grid_index(ii, jj, kk, ReionGridDim, INDEX_PADDED)];
-    write_grid_float("bhar", grid, file_id, fspace_id, memspace_id, dcpl_id);
+            (grids->effective_bhar)[grid_index(ii, jj, kk, ReionGridDim, INDEX_PADDED)];
+    write_grid_float("effective_bhar", grid, file_id, fspace_id, memspace_id, dcpl_id);
   }
 
   for (int ii = 0; ii < local_nix; ii++)
