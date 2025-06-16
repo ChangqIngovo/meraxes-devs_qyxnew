@@ -298,7 +298,7 @@ void call_find_HII_bubbles(int snapshot, int nout_gals, timer_info* timer)
 #if USE_MINI_HALOS
   mlog("sfrIII = %g (Msun/yr)", MLOG_MESG, grids->volume_weighted_global_weighted_sfrIII);
 #endif
-  mlog("bhar = %g (equivlently Msun/yr)", MLOG_MESG, grids->volume_weighted_global_effective_bhar);
+  mlog("bhar = %g (equivlently Msun/yr)", MLOG_MESG, grids->volume_weighted_global_effective_bhar / run_globals.params.physics.ReionNionPhotPerBary);
   mlog("...done", MLOG_CLOSE | MLOG_TIMERSTOP);
 }
 
