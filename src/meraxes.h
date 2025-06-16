@@ -382,6 +382,17 @@ typedef struct reion_grids_t
   fftwf_plan stars_forward_plan;
   fftwf_plan stars_filtered_reverse_plan;
 
+  float* bhm;
+  fftwf_complex* bhm_unfiltered;
+  fftwf_complex* bhm_filtered;
+  fftwf_plan bhm_forward_plan;
+  fftwf_plan bhm_filtered_reverse_plan;
+  float* bhar;
+  fftwf_complex* bhar_unfiltered;
+  fftwf_complex* bhar_filtered;
+  fftwf_plan bhar_forward_plan;
+  fftwf_plan bhar_filtered_reverse_plan;
+
   float* deltax;
   fftwf_complex* deltax_unfiltered;
   fftwf_complex* deltax_filtered;
