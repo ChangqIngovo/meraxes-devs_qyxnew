@@ -224,8 +224,8 @@ Y_He                   : 0.24
 ReionRBubbleMin        : 0.4068
 ReionRBubbleMax        : 20.34
 ReionGammaHaloBias     : 2.0
-ReionAlphaUV           : 5.0
-ReionAlphaUVBH         : 1.57
+ReionAlphaUV           : 2.0
+ReionAlphaUVBH         : 2.0
 
 EscapeFracDependency       : 1  # 0->none, 1->redshift, 2->stellar mass, 3->sfr, 4->cold gas surface density, 5->mvir, 6->ssfr
 EscapeFracNorm             : 0.06
