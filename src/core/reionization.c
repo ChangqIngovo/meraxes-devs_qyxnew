@@ -2089,6 +2089,7 @@ void save_reion_output_grids(int snapshot)
 #if USE_MINI_HALOS
   H5LTset_attribute_double(file_id, "weighted_sfrIII", "volume_weighted_global_weighted_sfrIII", &(grids->volume_weighted_global_weighted_sfrIII), 1);
 #endif
+  H5LTset_attribute_double(file_id, "effective_bhar", "volume_weighted_global_effective_bhar", &(grids->volume_weighted_global_effective_bhar), 1);
 
   if (run_globals.params.Flag_IncludeSpinTemp) {
     H5LTset_attribute_double(file_id, "TS_box", "volume_ave_TS", &(grids->volume_ave_TS), 1);
