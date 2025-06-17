@@ -99,7 +99,7 @@ void _find_HII_bubbles(const int snapshot)
   double sfr_timescale = run_globals.params.ReionSfrTimescale * hubble_time(snapshot);
   double f_coll_effective_bhm=0.0;
   double neutral_fraction;
-  double Gamma_R_prefactor, f_coll_prefactor, Gamma_R_prefactor_BH, f_coll_prefactor_BH;
+  double Gamma_R_prefactor, f_coll_prefactor, Gamma_R_prefactor_BH;
   float thistk, TK;
   float cT_ad; //finding the adiabatic index at the initial redshift from 2302.08506 to fix adiabatic fluctuations.
 #if USE_MINI_HALOS
@@ -411,21 +411,18 @@ void _find_HII_bubbles(const int snapshot)
     double M_mean = RtoM(R);
     double R_cubed = R * R * R;
 
-    Gamma_R_prefactor_BH = (1.0 + redshift) * (1.0 + redshift) * R *
-                        units->UnitLength_in_cm / pixel_volume;
-    Gamma_R_prefactor_BH *= (units->UnitMass_in_g / units->UnitTime_in_s) / PROTONMASS *
-                         pow(units->UnitLength_in_cm, -3.);
-    Gamma_R_prefactor = Gamma_R_prefactor_BH * ReionNionPhotPerBary;
-    J_21_aux_constant = (float)(Gamma_R_prefactor * PLANCK * 1e21 / (4.0 * M_PI) * ReionGammaHaloBias / sfr_timescale * run_globals.params.physics.ReionAlphaUV);
-    J_21_aux_constant_BH = (float)(Gamma_R_prefactor_BH * PLANCK * 1e21 / (4.0 * M_PI) * ReionGammaHaloBias / sfr_timescale * run_globals.params.physics.ReionAlphaUVBH);
-    Gamma_R_prefactor *= SIGMA_HI * run_globals.params.physics.ReionAlphaUV / (run_globals.params.physics.ReionAlphaUV + 2.75) * 1e12;
+    Gamma_R_prefactor  = (1.0 + redshift) * (1.0 + redshift) * R * units->UnitLength_in_cm / pixel_volume * pow(units->UnitLength_in_cm, -3.);
+    Gamma_R_prefactor *= (units->UnitMass_in_g / units->UnitTime_in_s) / PROTONMASS * ReionNionPhotPerBary;
+    Gamma_R_prefactor_BH  = Gamma_R_prefactor;
+    J_21_aux_constant     = (float)(Gamma_R_prefactor * PLANCK * 1e21 / (4.0 * M_PI) * ReionGammaHaloBias / sfr_timescale * run_globals.params.physics.ReionAlphaUV);
+    J_21_aux_constant_BH  = (float)(Gamma_R_prefactor_BH * PLANCK * 1e21 / (4.0 * M_PI) * ReionGammaHaloBias / sfr_timescale * run_globals.params.physics.ReionAlphaUVBH);
+    Gamma_R_prefactor    *= SIGMA_HI * run_globals.params.physics.ReionAlphaUV / (run_globals.params.physics.ReionAlphaUV + 2.75) * 1e12;
     Gamma_R_prefactor_BH *= SIGMA_HI * run_globals.params.physics.ReionAlphaUVBH / (run_globals.params.physics.ReionAlphaUVBH+2.75) * 1e12;
-    f_coll_prefactor = ReionEfficiency * (4.0 / 3.0) * M_PI / pixel_volume / M_mean * R_cubed;
-    f_coll_prefactor_BH = (4.0 / 3.0) * M_PI / pixel_volume / M_mean * R_cubed;
+    f_coll_prefactor      = ReionEfficiency * (4.0 / 3.0) * M_PI / pixel_volume / M_mean * R_cubed;
 #if USE_MINI_HALOS
     J_21_auxIII_constant = J_21_aux_constant * (float)(ReionNionPhotPerBaryIII / ReionNionPhotPerBary); // Is HaloBias the same for PopIII / Pop II?
     Gamma_R_prefactorIII = Gamma_R_prefactor * ReionNionPhotPerBaryIII / ReionNionPhotPerBary;
-    f_coll_prefactorIII = f_coll_prefactor / ReionEfficiency * ReionEfficiencyIII;
+    f_coll_prefactorIII  = f_coll_prefactor / ReionEfficiency * ReionEfficiencyIII;
 #endif
 
     for (int ix = 0; ix < local_nix; ix++)
@@ -459,10 +456,10 @@ void _find_HII_bubbles(const int snapshot)
           // Check if ionised!
 
 #if USE_MINI_HALOS
-          if ((f_coll_effective_bhm * f_coll_prefactor_BH + f_coll_stars * f_coll_prefactor + f_coll_starsIII * f_coll_prefactorIII) >
+          if (((f_coll_effective_bhm + f_coll_stars) * f_coll_prefactor + f_coll_starsIII * f_coll_prefactorIII) >
               neutral_fraction * (1. + rec)) // IONISED!!!!
 #else
-          if (f_coll_effective_bhm * f_coll_prefactor_BH + f_coll_stars * f_coll_prefactor > neutral_fraction * (1. + rec))
+          if ((f_coll_effective_bhm + f_coll_stars) * f_coll_prefactor > neutral_fraction * (1. + rec))
 #endif
           {
             // If it is the first crossing of the ionisation barrier for this cell (largest R)
@@ -490,11 +487,10 @@ void _find_HII_bubbles(const int snapshot)
             else
                 temp_kinetic_all_gas[i_real] = ComputePartiallyIoinizedTemperature(TK*(1. + cT_ad*deltax[i_padded]), xH[i_real]);
 
-            xH[i_real] = (float)(neutral_fraction - f_coll_stars * f_coll_prefactor);
+            xH[i_real] = (float)(neutral_fraction - ( f_coll_effective_bhm + f_coll_stars) * f_coll_prefactor);
 #if USE_MINI_HALOS
             xH[i_real] -= (float)(f_coll_starsIII * f_coll_prefactorIII);
 #endif
-            xH[i_real] -= (float)(f_coll_effective_bhm * f_coll_prefactor_BH);
             if (xH[i_real] < 0.) {
               xH[i_real] = (float)0.;
             } else if (xH[i_real] > 1.0) {
