@@ -1276,7 +1276,6 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
     }
     gal = gal->Next;
   }
-  int flag_output = 0;
 
   // Write any remaining galaxies in the buffer
   if (buffer_count > 0) {
@@ -1300,15 +1299,9 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
   // Free the output buffer
   free(output_buffer);
 
-  if (run_globals.params.Flag_PatchyReion){
-    if (check_if_reionization_ongoing(run_globals.ListOutputSnaps[i_out]) &&
-       (run_globals.params.Flag_OutputGrids)){
+  if ((run_globals.params.Flag_PatchyReion) && check_if_reionization_ongoing(run_globals.ListOutputSnaps[i_out]) &&
+       (run_globals.params.Flag_OutputGrids))
       save_reion_output_grids(run_globals.ListOutputSnaps[i_out]);
-      flag_output = 1;
-    }
-    if ((!flag_output) && (run_globals.mpi_rank == 0))
-      save_reion_output_attributes(run_globals.ListOutputSnaps[i_out]);
-  }
 
   // Close the group.
   H5Gclose(group_id);

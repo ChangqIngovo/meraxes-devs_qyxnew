@@ -59,6 +59,7 @@ void dracarys()
   trees_info_t* snapshot_trees_info = run_globals.SnapshotTreesInfo;
   double* LTTime = run_globals.LTTime;
   int NOutputSnaps = run_globals.NOutputSnaps;
+  int flag_output;
 
   // Find what the last requested output snapshot is
   for (int ii = 0; ii < NOutputSnaps; ii++)
@@ -428,11 +429,18 @@ void dracarys()
 #endif
 #endif
 
+    flag_output = 0;
     // Write the results if this is a requested snapshot
-    if (!run_globals.params.FlagMCMC)
+    if (!run_globals.params.FlagMCMC){
       for (int i_out = 0; i_out < NOutputSnaps; i_out++)
-        if (snapshot == run_globals.ListOutputSnaps[i_out])
+        if (snapshot == run_globals.ListOutputSnaps[i_out]){
           write_snapshot(nout_gals, i_out, &last_nout_gals);
+          flag_output = 1;
+        }
+
+      if ((!flag_output) && (run_globals.params.Flag_PatchyReion) && check_if_reionization_ongoing(snapshot) && (run_globals.mpi_rank == 0))
+       save_reion_output_attributes(snapshot);
+    }
 
     // Update the LastIdentSnap values for non-ghosts
     gal = run_globals.FirstGal;
