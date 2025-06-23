@@ -1911,6 +1911,8 @@ void create_reion_input_dummy(int snapshot)
   dset_id = H5Dcreate(file_id, "weighted_sfrIII", H5T_NATIVE_FLOAT, fspace_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
   H5Dclose(dset_id);
 #endif
+  H5Sclose(fspace_id);
+  H5Fclose(file_id);
 }
 
 void load_reion_sfr_grids(int snapshot_counter_backwards, float weight, const int new_load)
@@ -2345,6 +2347,8 @@ void save_reion_output_attributes(int snapshot)
     H5Dclose(dset_id);
 #endif
   }
+  H5Sclose(fspace_id);
+  H5Fclose(file_id);
 
 }
 
