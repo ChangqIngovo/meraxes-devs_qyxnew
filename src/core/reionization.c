@@ -247,6 +247,7 @@ void call_find_HII_bubbles(int snapshot, int nout_gals, timer_info* timer)
   // Thin wrapper round find_HII_bubbles
 
   int total_n_out_gals = 0;
+  int flag_output = 0;
 
   reion_grids_t* grids = &(run_globals.reion_grids);
 
@@ -269,14 +270,15 @@ void call_find_HII_bubbles(int snapshot, int nout_gals, timer_info* timer)
     read_grid(DENSITY, snapshot, grids->deltax);
 
     // save the grids prior to doing FFTs to avoid precision loss and aliasing etc.
-	if (!run_globals.params.FlagMCMC){
+    if (!run_globals.params.FlagMCMC){
       for (int i_out = 0; i_out < run_globals.NOutputSnaps; i_out++)
-        if (snapshot == run_globals.ListOutputSnaps[i_out] && run_globals.params.Flag_OutputGrids)
+        if (snapshot == run_globals.ListOutputSnaps[i_out] && run_globals.params.Flag_OutputGrids){
           save_reion_input_grids(snapshot);
-	    else
-          if (run_globals.mpi_rank == 0)
-            create_reion_input_dummy(snapshot);
-	}
+          flag_output = 1;
+        }
+      if ((!flag_output) && (run_globals.mpi_rank == 0))
+          create_reion_input_dummy(snapshot);
+    }
   }
 
   mlog("...done", MLOG_CLOSE);
@@ -1892,6 +1894,7 @@ void save_reion_input_grids(int snapshot)
 
 void create_reion_input_dummy(int snapshot)
 {
+  mlog("Creating dummy tocf input grids for attributes...", MLOG_OPEN);
   char name[STRLEN];
   gen_grids_fname(snapshot, name, false);
 
@@ -1913,6 +1916,7 @@ void create_reion_input_dummy(int snapshot)
 #endif
   H5Sclose(fspace_id);
   H5Fclose(file_id);
+  mlog("...done", MLOG_CLOSE);
 }
 
 void load_reion_sfr_grids(int snapshot_counter_backwards, float weight, const int new_load)
@@ -2243,9 +2247,11 @@ void save_reion_output_grids(int snapshot)
 
 void save_reion_output_attributes(int snapshot)
 {
+  reion_grids_t* grids = &(run_globals.reion_grids);
+
+  mlog("Saving tocf output attributes...", MLOG_OPEN);
   char name[STRLEN];
   gen_grids_fname(snapshot, name, false);
-  reion_grids_t* grids = &(run_globals.reion_grids);
 
   hid_t plist_id = H5Pcreate(H5P_FILE_ACCESS);
   hid_t file_id = H5Fopen(name, H5F_ACC_RDWR, plist_id);
@@ -2349,6 +2355,7 @@ void save_reion_output_attributes(int snapshot)
   }
   H5Sclose(fspace_id);
   H5Fclose(file_id);
+  mlog("...done", MLOG_CLOSE); // Saving tocf grids
 
 }
 
