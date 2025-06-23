@@ -2248,7 +2248,7 @@ void save_reion_output_attributes(int snapshot)
   reion_grids_t* grids = &(run_globals.reion_grids);
 
   hid_t plist_id = H5Pcreate(H5P_FILE_ACCESS);
-  hid_t file_id = H5Fcreate(name, H5F_ACC_TRUNC, H5P_DEFAULT, plist_id);
+  hid_t file_id = H5Fopen(name, H5F_ACC_RDWR, plist_id);
   H5Pclose(plist_id);
 
     // Create a scalar dataspace with 0-sized dimension (empty)
