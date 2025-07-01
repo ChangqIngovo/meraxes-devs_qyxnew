@@ -630,6 +630,7 @@ void _find_HII_bubbles(const int snapshot)
   volume_weighted_global_weighted_sfr /= total_n_cells;
   volume_weighted_global_weighted_sfr *= units->UnitMass_in_g / units->UnitTime_in_s * SEC_PER_YEAR / SOLAR_MASS;
   volume_weighted_global_effective_bhar /= total_n_cells;
+  volume_weighted_global_effective_bhar *= units->UnitMass_in_g / units->UnitTime_in_s * SEC_PER_YEAR / SOLAR_MASS;
   volume_weighted_global_temp_kinetic_all_gas /= total_n_cells;
   volume_weighted_global_N_rec /= total_n_cells;
   volume_weighted_global_residual_xH /= total_n_cells;
