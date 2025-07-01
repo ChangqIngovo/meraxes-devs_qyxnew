@@ -1856,7 +1856,8 @@ void save_reion_input_grids(int snapshot)
       for (int jj = 0; jj < ReionGridDim; jj++)
         for (int kk = 0; kk < ReionGridDim; kk++)
           grid[grid_index(ii, jj, kk, ReionGridDim, INDEX_REAL)] =
-            (grids->effective_bhar)[grid_index(ii, jj, kk, ReionGridDim, INDEX_PADDED)];
+            (float)((grids->effective_bhar)[grid_index(ii, jj, kk, ReionGridDim, INDEX_PADDED)] * UnitMass_in_g /
+			        UnitTime_in_s * SEC_PER_YEAR / SOLAR_MASS);
     write_grid_float("effective_bhar", grid, file_id, fspace_id, memspace_id, dcpl_id);
   }
 
