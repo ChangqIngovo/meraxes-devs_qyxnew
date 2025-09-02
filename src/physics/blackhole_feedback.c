@@ -167,6 +167,7 @@ void previous_merger_driven_BH_growth(galaxy_t* gal)
   double BHemissivity, accretion_time;
   double Vvir;
   run_units_t* units = &(run_globals.units);
+  double factor = EMISSIVITY_CONVERTOR * gal->FescBH / run_globals.params.physics.ReionNionPhotPerBary;
 
   // If this galaxy is the central of it's FOF group then use the FOF Halo properties
   // TODO: This needs closer thought as to if this is the best thing to do...
@@ -191,13 +192,10 @@ void previous_merger_driven_BH_growth(galaxy_t* gal)
   calculate_BHemissivity(gal->BlackHoleMass, accreted_mass, &BHemissivity, &accretion_time);
   // historical reason for us to store nion rather than the emissivity in BHemissivity...
   gal->BHemissivity += BHemissivity;
+  gal->DutyCycleAGN = accretion_time / gal->dt;
   gal->BlackHoleMass += (1. - ETA) * accreted_mass;
-  gal->EffectiveBHM += BHemissivity * EMISSIVITY_CONVERTOR * gal->FescBH / run_globals.params.physics.ReionNionPhotPerBary;
-  gal->EffectiveBHAR += BHemissivity / gal->dt * EMISSIVITY_CONVERTOR * gal->FescBH / run_globals.params.physics.ReionNionPhotPerBary;
-  // YQ: Note, here it cannot be accretion_time because the quasar might not shine for the entire snapshot
-  // TODO: in principle, what we should do is have quasar dominating UVB (ReionAlphaUVBH) when t<accretion_time
-  // and galaxy dominating when t>accretion_time. However, that doesn't work (easily) for the cell... 
-  // let's just do average BHAR then and still do ReionAlphaUVBH and ReionAlphaUV seperately
+  gal->EffectiveBHM += BHemissivity * factor;
+  gal->EffectiveBHAR += BHemissivity / accretion_time * factor;
 
   // quasar mode feedback
   m_reheat = run_globals.params.physics.QuasarModeEff * 2. * ETA * run_globals.Csquare * accreted_mass / Vvir / Vvir;

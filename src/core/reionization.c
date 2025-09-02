@@ -506,6 +506,7 @@ void init_reion_grids()
     if (run_globals.params.physics.Flag_BHFeedback) {
       grids->effective_bhm[ii] = 0;
       grids->effective_bhar[ii] = 0;
+      grids->effective_bhar_ave[ii] = 0;
     }
     grids->weighted_sfr[ii] = 0;
 #if USE_MINI_HALOS
@@ -604,6 +605,7 @@ void malloc_reionization_grids()
   grids->effective_bhm_unfiltered = NULL;
   grids->effective_bhm_filtered = NULL;
   grids->effective_bhar = NULL;
+  grids->effective_bhar_ave = NULL;
   grids->effective_bhar_unfiltered = NULL;
   grids->effective_bhar_filtered = NULL;
   grids->deltax = NULL;
@@ -1453,6 +1455,7 @@ void construct_baryon_grids(int snapshot, int local_ngals)
   float* stellar_grid = run_globals.reion_grids.stars;
   float* effective_bhm_grid = run_globals.reion_grids.effective_bhm;
   float* effective_bhar_grid = run_globals.reion_grids.effective_bhar;
+  float* effective_bhar_ave_grid = run_globals.reion_grids.effective_bhar_ave;
   float* sfr_grid = run_globals.reion_grids.sfr;
   float* sfr_histories_grid = run_globals.reion_grids.sfr_histories;
   float* weighted_sfr_grid = run_globals.reion_grids.weighted_sfr;
@@ -1507,6 +1510,7 @@ void construct_baryon_grids(int snapshot, int local_ngals)
     prop_stellar,
     prop_effective_bhm,
     prop_effective_bhar,
+    prop_effective_bhar_ave,
     prop_weighted_sfr,
 #if USE_MINI_HALOS
     prop_stellarIII,
@@ -1527,7 +1531,7 @@ void construct_baryon_grids(int snapshot, int local_ngals)
       continue;
 
     // no need to bh grids if not using BHFeedback
-    if ((!run_globals.params.physics.Flag_BHFeedback) && ((prop == prop_effective_bhm) || (prop == prop_effective_bhar)))
+    if ((!run_globals.params.physics.Flag_BHFeedback) && ((prop == prop_effective_bhm) || (prop == prop_effective_bhar) || (prop == prop_effective_bhar_ave)))
       continue;
 
     int i_gal = 0;
@@ -1609,7 +1613,14 @@ void construct_baryon_grids(int snapshot, int local_ngals)
               // for ionizing_source_formation_rate_grid, need further convertion due to different UV spectral index of
               // quasar and stellar component
               if (gal->BlackHoleMass >= run_globals.params.physics.BlackHoleMassLimitReion)
-                buffer[ind] += gal->EffectiveBHAR;// TODO: not tested yet!
+                buffer[ind] += gal->EffectiveBHAR;
+              break;
+
+            case prop_effective_bhar_ave:
+              // for ionizing_source_formation_rate_grid, need further convertion due to different UV spectral index of
+              // quasar and stellar component
+              if (gal->BlackHoleMass >= run_globals.params.physics.BlackHoleMassLimitReion)
+                buffer[ind] += gal->EffectiveBHAR * gal->DutyCycleAGN;
               break;
 
             case prop_sfr:
@@ -1725,6 +1736,15 @@ void construct_baryon_grids(int snapshot, int local_ngals)
                 }
             break;
 
+          case prop_effective_bhar_ave:
+            for (int ix = 0; ix < slab_nix[i_r]; ix++)
+              for (int iy = 0; iy < ReionGridDim; iy++)
+                for (int iz = 0; iz < ReionGridDim; iz++) {
+                  float val = buffer[grid_index(ix, iy, iz, ReionGridDim, INDEX_REAL)];
+                  if (val < 0) val = 0;
+                  effective_bhar_ave_grid[grid_index(ix, iy, iz, ReionGridDim, INDEX_PADDED)] = val;
+                }
+            break;
           default:
             mlog_error("Eh!?!");
             ABORT(EXIT_FAILURE);

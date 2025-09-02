@@ -72,6 +72,7 @@ void prepare_galaxy_for_output(galaxy_t gal, galaxy_output_t* galout, int i_snap
   galout->BlackHoleMass = (float)(gal.BlackHoleMass);
   galout->FescBH = (float)(gal.FescBH);
   galout->BHemissivity = (float)(gal.BHemissivity);
+  galout->DutyCycleAGN = (float)(gal.DutyCycleAGN);
   galout->EffectiveBHM = (float)(gal.EffectiveBHM);
   galout->BlackHoleAccretedHotMass = (float)(gal.BlackHoleAccretedHotMass);
   galout->BlackHoleAccretedColdMass = (float)(gal.BlackHoleAccretedColdMass);
@@ -636,6 +637,13 @@ void calc_hdf5_props()
     h5props->dst_field_sizes[i] = sizeof(galout.BHemissivity);
     h5props->field_names[i] = "BHemissivity";
     h5props->field_units[i] = "1e60 photons";
+    h5props->field_h_conv[i] = "None";
+    h5props->field_types[i++] = H5T_NATIVE_FLOAT;
+
+    h5props->dst_offsets[i] = HOFFSET(galaxy_output_t, DutyCycleAGN);
+    h5props->dst_field_sizes[i] = sizeof(galout.DutyCycleAGN);
+    h5props->field_names[i] = "DutyCycleAGN";
+    h5props->field_units[i] = "None";
     h5props->field_h_conv[i] = "None";
     h5props->field_types[i++] = H5T_NATIVE_FLOAT;
 

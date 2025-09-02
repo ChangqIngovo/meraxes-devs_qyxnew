@@ -56,6 +56,7 @@ galaxy_t* new_galaxy(int snapshot, unsigned long halo_ID)
   gal->BHemissivity = 0.0;
   gal->EffectiveBHM = 0.0;
   gal->EffectiveBHAR = 0.0;
+  gal->DutyCycleAGN = 0.0;
   gal->BlackHoleAccretedHotMass = 0.0;
   gal->BlackHoleAccretedColdMass = 0.0;
   gal->BlackHoleAccretingColdMass = 0.0;
@@ -178,6 +179,7 @@ void reset_galaxy_properties(galaxy_t* gal, int snapshot)
   gal->BaryonFracModifier = 1.0;
   gal->FOFMvirModifier = 1.0;
   gal->EffectiveBHAR = 0.0;
+  gal->DutyCycleAGN = 0.0;
   gal->BlackHoleAccretedHotMass = 0.0;
   gal->BlackHoleAccretedColdMass = 0.0;
 #if USE_MINI_HALOS

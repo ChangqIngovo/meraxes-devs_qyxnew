@@ -617,6 +617,7 @@ typedef struct galaxy_t
   double BHemissivity;
   double EffectiveBHM;
   double EffectiveBHAR;
+  double DutyCycleAGN;
   double BlackHoleAccretedHotMass;
   double BlackHoleAccretedColdMass;
   double BlackHoleAccretingColdMass;
