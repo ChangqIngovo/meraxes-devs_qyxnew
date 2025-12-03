@@ -3,6 +3,7 @@
 #include "blackhole_feedback.h"
 #include "core/misc_tools.h"
 #include "meraxes.h"
+#include <assert.h>
 
 void calculate_BHemissivity(double BlackHoleMass, double accreted_mass, double *emissivity, double *accretion_time)
 {
@@ -193,6 +194,7 @@ void previous_merger_driven_BH_growth(galaxy_t* gal)
   // historical reason for us to store nion rather than the emissivity in BHemissivity...
   gal->BHemissivity += BHemissivity;
   gal->DutyCycleAGN = accretion_time / gal->dt;
+  assert(gal->DutyCycleAGN <= 1);
   gal->BlackHoleMass += (1. - ETA) * accreted_mass;
   gal->EffectiveBHM += BHemissivity * factor;
   gal->EffectiveBHAR += BHemissivity / accretion_time * factor;
