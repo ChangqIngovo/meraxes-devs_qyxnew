@@ -6,7 +6,7 @@
 
 void calculate_BHemissivity(double BlackHoleMass, double accreted_mass, double *emissivity, double *accretion_time)
 {
-  double Lbol; // bolometric luminotisy
+  double Lbol; // bolometric luminosity
   double kb;   // bolometric correction
   physics_params_t* physics = &(run_globals.params.physics);
 
@@ -56,7 +56,7 @@ static void update_reservoirs_from_quasar_mode_bh_feedback(galaxy_t* gal, double
     central->MetalsEjectedGas += m_reheat * metallicity;
   }
 
-  // Check the validity of the modified reservoir values (HotGas can be negtive for too strong quasar feedback)
+  // Check the validity of the modified reservoir values (HotGas can be negative for too strong quasar feedback)
   CLAMP_NEGATIVE(central->HotGas);
   CLAMP_NEGATIVE(central->MetalsHotGas);
   CLAMP_NEGATIVE(gal->ColdGas);
@@ -129,7 +129,7 @@ void merger_driven_BH_growth(galaxy_t* gal, double merger_ratio, int snapshot)
     double z_scaling = pow((1 + run_globals.ZZ[snapshot]), run_globals.params.physics.quasar_mode_scaling);
 
     double accreting_mass = run_globals.params.physics.BlackHoleGrowthRate * merger_ratio /
-                            (1.0 + pow(Vvir, -2)) * gal->ColdGas * z_scaling;
+                            (1.0 + pow(VELOCITY_SCALE / Vvir, 2)) * gal->ColdGas * z_scaling;
 
     // limit accretion to what is available
     if (accreting_mass > gal->ColdGas)
