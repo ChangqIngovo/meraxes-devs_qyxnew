@@ -1,7 +1,6 @@
 #include <assert.h>
 #include <math.h>
 
-#include "cn_exceptions.h"
 #include "debug.h"
 #include "meraxes.h"
 #include "misc_tools.h"
@@ -9,8 +8,27 @@
 
 void myexit(int signum)
 {
-  fprintf(stderr, "Task: %d\tis exiting.\n\n\n", run_globals.mpi_rank);
-  cn_quote();
+  fprintf(stderr, "\n");
+  fprintf(stderr, "================================================================================\n");
+  fprintf(stderr, "PROGRAM TERMINATION REPORT\n");
+  fprintf(stderr, "================================================================================\n");
+  fprintf(stderr, "MPI Task:           %d / %d\n", run_globals.mpi_rank, run_globals.mpi_size);
+  fprintf(stderr, "Current Snapshot:   %d\n", run_globals.current_snapshot);
+  fprintf(stderr, "Current Redshift:   %.4f\n", run_globals.ZZ[run_globals.current_snapshot]);
+  fprintf(stderr, "\n");
+  fprintf(stderr, "For debugging information, check:\n");
+  fprintf(stderr, "  - Compilation flags: Run 'cmake --version' and check CMakeCache.txt\n");
+  fprintf(stderr, "  - Runtime parameters: Check input/params/*.par\n");
+  fprintf(stderr, "  - Output logs: Check output/ directory\n");
+  fprintf(stderr, "  - Detailed error: Enable DEBUG flag in CMakeLists.txt\n");
+  fprintf(stderr, "\n");
+  fprintf(stderr, "For support, provide:\n");
+  fprintf(stderr, "  - Full error message and backtrace\n");
+  fprintf(stderr, "  - Your parameter file (input/params/*.par)\n");
+  fprintf(stderr, "  - System configuration (OS, compiler version)\n");
+  fprintf(stderr, "  - Complete stdout/stderr logs\n");
+  fprintf(stderr, "================================================================================\n");
+  fprintf(stderr, "\n");
   mpi_debug_here();
   cleanup();
   MPI_Finalize();
