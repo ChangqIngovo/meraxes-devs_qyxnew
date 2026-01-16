@@ -150,15 +150,6 @@ void update_galaxy_fesc_vals(galaxy_t* gal, double new_stars, int snapshot)
   gal->FescWeightedSfr += gal->Sfr * gal->Fesc;
 #endif
 
-  // Here we just set the black hole escape fraction for use in the next
-  // timestep when calculating previous_merger_driven_BH_growth().  It is in
-  // this function that the EffectiveBHM will be updated.  For the galaxy
-  // that we are working on now, the EffectiveBHM has already been calculated
-  // using the FescBH value from the previous snapshot.
-  // The upshot is that we don't need to do anything to the EffectiveBHM
-  // here.  It's confusing I know.  I intend to re-write this to make things
-  // more obvious at some point in the future.
-  // TODO(smutch): Check this all out and ensure that it is valid for reidentified ghosts
   gal->FescBH = fesc_bh;
 }
 
