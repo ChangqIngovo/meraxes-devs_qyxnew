@@ -37,6 +37,7 @@
 #define NU_LW (double)(2.71e15)
 #define PLANCK_EV (double)(4.1357e-15)
 #define T_RE 1e4
+#define EDDINGTON_TIME_SCALE 450.514890  // Eddington timescale in Megayears
 
 // ======================================================
 // Don't change these unless you know what you are doing!
@@ -814,6 +815,7 @@ typedef struct run_globals_t
   double RhoCrit;
   double G;
   double Csquare;
+  double EddingtonTimescale;
   // PopIII stuff
 
   double IMFnorm;

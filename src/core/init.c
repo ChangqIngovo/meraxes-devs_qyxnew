@@ -199,6 +199,7 @@ void set_units()
 
   // convert some physical input parameters to internal units
   run_globals.Hubble = HUBBLE * units->UnitTime_in_s;
+  run_globals.EddingtonTimescale = EDDINGTON_TIME_SCALE * run_globals.params.Hubble_h / units->UnitTime_in_Megayears;
 
   // compute a few quantitites
   run_globals.RhoCrit = 3 * run_globals.Hubble * run_globals.Hubble / (8 * M_PI * run_globals.G);

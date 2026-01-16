@@ -10,7 +10,8 @@ void calculate_BHemissivity(double BlackHoleMass, double accreted_mass, double *
   double kb;   // bolometric correction
   physics_params_t* physics = &(run_globals.params.physics);
 
-  *accretion_time = log1p(accreted_mass / BlackHoleMass) * EDDINGTON_TIME_SCALE * ETA / physics->EddingtonRatio; // Myr
+  // Compute accretion_time directly in internal units using pre-computed EddingtonTimescale
+  *accretion_time = log1p(accreted_mass / BlackHoleMass) * run_globals.EddingtonTimescale * ETA / physics->EddingtonRatio;
 
   // Bolometric luminosity in 1e10 Lsun at the MIDDLE of accretion time
   // TODO: this introduce inconsistency compared to the calculation of luminosity.
@@ -19,8 +20,7 @@ void calculate_BHemissivity(double BlackHoleMass, double accreted_mass, double *
          run_globals.params.Hubble_h * LUMINOSITY_CONVERTOR;
   kb = 6.25 * pow(Lbol, -0.37) + 9.0 * pow(Lbol, -0.012);
 
-  *emissivity = physics->quasar_fobs * Lbol / kb * LB2EMISSIVITY * *accretion_time; // 1e60 photon numbers
-  *accretion_time /= (run_globals.units.UnitTime_in_Megayears / run_globals.params.Hubble_h); // internal units
+  *emissivity = physics->quasar_fobs * Lbol / kb * LB2EMISSIVITY * *accretion_time * run_globals.units.UnitTime_in_s / run_globals.params.Hubble_h; // 1e60 photon numbers
 }
 
 static double get_vvir(galaxy_t* gal) {
@@ -81,8 +81,7 @@ double radio_mode_BH_heating(galaxy_t* gal, double cooling_mass, double x)
       run_globals.params.physics.RadioModeEff * run_globals.G * BONDI_HOYLE_COEFFICIENT * x * gal->BlackHoleMass * gal->dt;
 
     // eddington rate
-    double eddington_mass = exp(gal->dt * units->UnitTime_in_Megayears / run_globals.params.Hubble_h / EDDINGTON_TIME_SCALE /
-                                ETA * run_globals.params.physics.EddingtonRatio) *
+    double eddington_mass = exp(gal->dt / run_globals.EddingtonTimescale / ETA * run_globals.params.physics.EddingtonRatio) *
                             gal->BlackHoleMass;
 
     // limit accretion by the eddington rate
@@ -163,8 +162,7 @@ void previous_merger_driven_BH_growth(galaxy_t* gal, int snapshot)
   double dt = run_globals.LTTime[snapshot - 1] - run_globals.LTTime[snapshot];
 
   // Eddington rate
-  accreted_mass = expm1(dt * units->UnitTime_in_Megayears / run_globals.params.Hubble_h / EDDINGTON_TIME_SCALE / ETA *
-                        run_globals.params.physics.EddingtonRatio) *
+  accreted_mass = expm1(dt / run_globals.EddingtonTimescale / ETA * run_globals.params.physics.EddingtonRatio) *
                   gal->BlackHoleMass;
 
   // limit accretion to what is need
