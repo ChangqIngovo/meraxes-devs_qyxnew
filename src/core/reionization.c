@@ -124,22 +124,13 @@ void update_galaxy_fesc_vals(galaxy_t* gal, double new_stars, int snapshot)
       mlog_error("Unrecognised EscapeFracDependency parameter value.");
   }
 
-  if (fesc > 1.0)
-    fesc = 1.0;
-  else if (fesc < 0.0)
-    fesc = 0.0;
+  CLAMP_0_1(fesc);
 
 #if USE_MINI_HALOS
-  if (fescIII > 1.0)
-    fescIII = 1.0;
-  else if (fescIII < 0.0)
-    fescIII = 0.0;
+  CLAMP_0_1(fescIII);
 #endif
 
-  if (fesc_bh > 1.0)
-    fesc_bh = 1.0;
-  else if (fesc_bh < 0.0)
-    fesc_bh = 0.0;
+  CLAMP_0_1(fesc_bh);
 
 #if USE_MINI_HALOS
   if (gal->Galaxy_Population == 2) {
@@ -1657,7 +1648,7 @@ void construct_baryon_grids(int snapshot, int local_ngals)
               for (int iy = 0; iy < ReionGridDim; iy++)
                 for (int iz = 0; iz < ReionGridDim; iz++) {
                   double val = (double)buffer[grid_index(ix, iy, iz, ReionGridDim, INDEX_REAL)];
-                  if (val < 0 ) val = 0;
+                  CLAMP_NEGATIVE(val);
                   weighted_sfr_grid[grid_index(ix, iy, iz, ReionGridDim, INDEX_PADDED)] = (float)val;
                 }
             break;
@@ -1667,7 +1658,7 @@ void construct_baryon_grids(int snapshot, int local_ngals)
               for (int iy = 0; iy < ReionGridDim; iy++)
                 for (int iz = 0; iz < ReionGridDim; iz++) {
                   double val = (double)buffer[grid_index(ix, iy, iz, ReionGridDim, INDEX_REAL)];
-                  if (val < 0 ) val = 0;
+                  CLAMP_NEGATIVE(val);
                   weighted_sfrIII_grid[grid_index(ix, iy, iz, ReionGridDim, INDEX_PADDED)] = (float)val;
                 }
             break;
@@ -1677,7 +1668,7 @@ void construct_baryon_grids(int snapshot, int local_ngals)
               for (int iy = 0; iy < ReionGridDim; iy++)
                 for (int iz = 0; iz < ReionGridDim; iz++) {
                   double val = (double)buffer[grid_index(ix, iy, iz, ReionGridDim, INDEX_REAL)];
-                  if (val < 0 ) val = 0;
+                  CLAMP_NEGATIVE(val);
                   if (!run_globals.params.Flag_InstantaneousSFR) val /= sfr_timescale;
                   sfrIII_grid[grid_index(ix, iy, iz, ReionGridDim, INDEX_PADDED)] = (float)val;
                   sfrIII_histories_grid[grid_index(ix, iy, iz, ReionGridDim, INDEX_PADDED)] = (float)val;
@@ -1689,7 +1680,7 @@ void construct_baryon_grids(int snapshot, int local_ngals)
               for (int iy = 0; iy < ReionGridDim; iy++)
                 for (int iz = 0; iz < ReionGridDim; iz++) {
                   float val = buffer[grid_index(ix, iy, iz, ReionGridDim, INDEX_REAL)];
-                  if (val < 0) val = 0;
+                  CLAMP_NEGATIVE(val);
                   stellarIII_grid[grid_index(ix, iy, iz, ReionGridDim, INDEX_PADDED)] = val;
                 }
             break;
@@ -1699,7 +1690,7 @@ void construct_baryon_grids(int snapshot, int local_ngals)
               for (int iy = 0; iy < ReionGridDim; iy++)
                 for (int iz = 0; iz < ReionGridDim; iz++) {
                   double val = (double)buffer[grid_index(ix, iy, iz, ReionGridDim, INDEX_REAL)];
-                  if (val < 0 ) val = 0;
+                  CLAMP_NEGATIVE(val);
                   if (!run_globals.params.Flag_InstantaneousSFR) val /= sfr_timescale;
                   sfr_grid[grid_index(ix, iy, iz, ReionGridDim, INDEX_PADDED)] = (float)val;
                   sfr_histories_grid[grid_index(ix, iy, iz, ReionGridDim, INDEX_PADDED)] = (float)val;
@@ -1711,7 +1702,7 @@ void construct_baryon_grids(int snapshot, int local_ngals)
               for (int iy = 0; iy < ReionGridDim; iy++)
                 for (int iz = 0; iz < ReionGridDim; iz++) {
                   float val = buffer[grid_index(ix, iy, iz, ReionGridDim, INDEX_REAL)];
-                  if (val < 0) val = 0;
+                  CLAMP_NEGATIVE(val);
                   stellar_grid[grid_index(ix, iy, iz, ReionGridDim, INDEX_PADDED)] = val;
                 }
             break;
@@ -1721,7 +1712,7 @@ void construct_baryon_grids(int snapshot, int local_ngals)
               for (int iy = 0; iy < ReionGridDim; iy++)
                 for (int iz = 0; iz < ReionGridDim; iz++) {
                   float val = buffer[grid_index(ix, iy, iz, ReionGridDim, INDEX_REAL)];
-                  if (val < 0) val = 0;
+                  CLAMP_NEGATIVE(val);
                   effective_bhm_grid[grid_index(ix, iy, iz, ReionGridDim, INDEX_PADDED)] = val;
                 }
             break;
@@ -1731,7 +1722,7 @@ void construct_baryon_grids(int snapshot, int local_ngals)
               for (int iy = 0; iy < ReionGridDim; iy++)
                 for (int iz = 0; iz < ReionGridDim; iz++) {
                   float val = buffer[grid_index(ix, iy, iz, ReionGridDim, INDEX_REAL)];
-                  if (val < 0) val = 0;
+                  CLAMP_NEGATIVE(val);
                   effective_bhar_grid[grid_index(ix, iy, iz, ReionGridDim, INDEX_PADDED)] = val;
                 }
             break;
@@ -1741,7 +1732,7 @@ void construct_baryon_grids(int snapshot, int local_ngals)
               for (int iy = 0; iy < ReionGridDim; iy++)
                 for (int iz = 0; iz < ReionGridDim; iz++) {
                   float val = buffer[grid_index(ix, iy, iz, ReionGridDim, INDEX_REAL)];
-                  if (val < 0) val = 0;
+                  CLAMP_NEGATIVE(val);
                   effective_bhar_ave_grid[grid_index(ix, iy, iz, ReionGridDim, INDEX_PADDED)] = val;
                 }
             break;

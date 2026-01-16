@@ -1,5 +1,4 @@
 #include <math.h>
-
 #include "blackhole_feedback.h"
 #include "core/misc_tools.h"
 #include "meraxes.h"
@@ -11,7 +10,7 @@ void calculate_BHemissivity(double BlackHoleMass, double accreted_mass, double *
   double kb;   // bolometric correction
   physics_params_t* physics = &(run_globals.params.physics);
 
-  *accretion_time = log1p(accreted_mass / BlackHoleMass) * 450.514890 * ETA / physics->EddingtonRatio; // Myr
+  *accretion_time = log1p(accreted_mass / BlackHoleMass) * EDDINGTON_TIME_SCALE * ETA / physics->EddingtonRatio; // Myr
 
   // Bolometric luminosity in 1e10 Lsun at the MIDDLE of accretion time
   // TODO: this introduce inconsistency compared to the calculation of luminosity.
@@ -22,6 +21,12 @@ void calculate_BHemissivity(double BlackHoleMass, double accreted_mass, double *
 
   *emissivity = physics->quasar_fobs * Lbol / kb * LB2EMISSIVITY * *accretion_time; // 1e60 photon numbers
   *accretion_time /= (run_globals.units.UnitTime_in_Megayears / run_globals.params.Hubble_h); // internal units
+}
+
+static double get_vvir(galaxy_t* gal) {
+    // If this galaxy is the central of it's FOF group then use the FOF Halo properties
+    // TODO: This needs closer thought as to if this is the best thing to do...
+  return (gal->Type == 0) ? gal->Halo->FOFGroup->Vvir : gal->Vvir;
 }
 
 // quasar feedback suggested by Croton et al. 2016
@@ -52,20 +57,13 @@ static void update_reservoirs_from_quasar_mode_bh_feedback(galaxy_t* gal, double
   }
 
   // Check the validity of the modified reservoir values (HotGas can be negtive for too strong quasar feedback)
-  if (central->HotGas < 0)
-    central->HotGas = 0.0;
-  if (central->MetalsHotGas < 0)
-    central->MetalsHotGas = 0.0;
-  if (gal->ColdGas < 0)
-    gal->ColdGas = 0.0;
-  if (gal->MetalsColdGas < 0)
-    gal->MetalsColdGas = 0.0;
-  if (gal->StellarMass < 0)
-    gal->StellarMass = 0.0;
-  if (central->EjectedGas < 0)
-    central->EjectedGas = 0.0;
-  if (central->MetalsEjectedGas < 0)
-    central->MetalsEjectedGas = 0.0;
+  CLAMP_NEGATIVE(central->HotGas);
+  CLAMP_NEGATIVE(central->MetalsHotGas);
+  CLAMP_NEGATIVE(gal->ColdGas);
+  CLAMP_NEGATIVE(gal->MetalsColdGas);
+  CLAMP_NEGATIVE(gal->StellarMass);
+  CLAMP_NEGATIVE(central->EjectedGas);
+  CLAMP_NEGATIVE(central->MetalsEjectedGas);
 }
 
 double radio_mode_BH_heating(galaxy_t* gal, double cooling_mass, double x)
@@ -74,21 +72,16 @@ double radio_mode_BH_heating(galaxy_t* gal, double cooling_mass, double x)
 
   // if there is any hot gas
   if (gal->HotGas > 0.0) {
-    double Vvir;
+    double Vvir = get_vvir(gal);
     run_units_t* units = &(run_globals.units);
 
-    if (gal->Type == 0)
-      Vvir = gal->Halo->FOFGroup->Vvir;
-    else
-      Vvir = gal->Vvir;
 
     // bondi-hoyle accretion model
     double accreted_mass =
-      run_globals.params.physics.RadioModeEff * run_globals.G * 3.4754 * x * gal->BlackHoleMass * gal->dt;
-    // 15/8*pi*mu=3.4754, with mu=0.59; x=k*m_p*t/lambda
+      run_globals.params.physics.RadioModeEff * run_globals.G * BONDI_HOYLE_COEFFICIENT * x * gal->BlackHoleMass * gal->dt;
 
     // eddington rate
-    double eddington_mass = exp(gal->dt * units->UnitTime_in_Megayears / run_globals.params.Hubble_h / 450.514890 /
+    double eddington_mass = exp(gal->dt * units->UnitTime_in_Megayears / run_globals.params.Hubble_h / EDDINGTON_TIME_SCALE /
                                 ETA * run_globals.params.physics.EddingtonRatio) *
                             gal->BlackHoleMass;
 
@@ -129,20 +122,14 @@ void merger_driven_BH_growth(galaxy_t* gal, double merger_ratio, int snapshot)
 {
   if (gal->ColdGas > 0) {
     // If there is any cold gas to feed the black hole...
-    double Vvir;
-
-    // If this galaxy is the central of it's FOF group then use the FOF Halo properties
-    // TODO: This needs closer thought as to if this is the best thing to do...
-    if (gal->Type == 0)
-      Vvir = gal->Halo->FOFGroup->Vvir;
-    else
-      Vvir = gal->Vvir;
+    
+    double Vvir = get_vvir(gal);
 
     // Suggested by Bonoli et al. 2009 and Wyithe et al. 2003
     double z_scaling = pow((1 + run_globals.ZZ[snapshot]), run_globals.params.physics.quasar_mode_scaling);
 
     double accreting_mass = run_globals.params.physics.BlackHoleGrowthRate * merger_ratio /
-                            (1.0 + (280.0 * 280.0 / Vvir / Vvir)) * gal->ColdGas * z_scaling;
+                            (1.0 + pow(Vvir, -2)) * gal->ColdGas * z_scaling;
 
     // limit accretion to what is available
     if (accreting_mass > gal->ColdGas)
@@ -166,19 +153,12 @@ void previous_merger_driven_BH_growth(galaxy_t* gal)
   double m_reheat;
   double accreted_mass;
   double BHemissivity, accretion_time;
-  double Vvir;
+  double Vvir = get_vvir(gal);
   run_units_t* units = &(run_globals.units);
   double factor = EMISSIVITY_CONVERTOR * gal->FescBH / run_globals.params.physics.ReionNionPhotPerBary;
 
-  // If this galaxy is the central of it's FOF group then use the FOF Halo properties
-  // TODO: This needs closer thought as to if this is the best thing to do...
-  if (gal->Type == 0)
-    Vvir = gal->Halo->FOFGroup->Vvir;
-  else
-    Vvir = gal->Vvir;
-
   // Eddington rate
-  accreted_mass = expm1(gal->dt * units->UnitTime_in_Megayears / run_globals.params.Hubble_h / 450.514890 / ETA *
+  accreted_mass = expm1(gal->dt * units->UnitTime_in_Megayears / run_globals.params.Hubble_h / EDDINGTON_TIME_SCALE / ETA *
                         run_globals.params.physics.EddingtonRatio) *
                   gal->BlackHoleMass;
 

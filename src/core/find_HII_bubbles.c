@@ -491,11 +491,7 @@ void _find_HII_bubbles(const int snapshot)
 #if USE_MINI_HALOS
             xH[i_real] -= (float)(f_coll_starsIII * f_coll_prefactorIII);
 #endif
-            if (xH[i_real] < 0.) {
-              xH[i_real] = (float)0.;
-            } else if (xH[i_real] > 1.0) {
-              xH[i_real] = (float)1.;
-            }
+            CLAMP_0_1(xH[i_real]);
           }
 
           // Check if new ionisation

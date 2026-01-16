@@ -6,6 +6,11 @@
 #define ETA 0.06
 // standard efficiency, 6% accreted mass is radiated
 
+#define EDDINGTON_TIME_SCALE 450.514890
+#define BONDI_HOYLE_COEFFICIENT 3.4754
+// 15/8*pi*mu=3.4754, with mu=0.59; x=k*m_p*t/lambda
+#define VELOCITY_SCALE 280.0
+
 #define EMISSIVITY_CONVERTOR 8.40925088e-8
 //=1e60 * PROTONMASS / 1e10 / SOLAR_MASS
 // Unit_convertor is to convert emissivity from 1e60 photons to photons per atom

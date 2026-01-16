@@ -26,10 +26,7 @@ double calc_metallicity(double total_gas, double metals)
   else
     Z = 0.0;
 
-  if (Z < 0)
-    Z = 0.0;
-  if (Z > 1)
-    Z = 1.0;
+  CLAMP_0_1(Z);
 
   return Z;
 }

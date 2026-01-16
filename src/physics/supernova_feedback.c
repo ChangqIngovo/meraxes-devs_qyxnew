@@ -78,30 +78,19 @@ void update_reservoirs_from_sn_feedback(galaxy_t* gal,
   }
 
   // Check the validity of the modified reservoir values
-  if (central->HotGas < 0)
-    central->HotGas = 0.0;
-  if (central->MetalsHotGas < 0)
-    central->MetalsHotGas = 0.0;
-  if (gal->ColdGas < 0)
-    gal->ColdGas = 0.0;
-  if (gal->MetalsColdGas < 0)
-    gal->MetalsColdGas = 0.0;
-  if (gal->StellarMass < 0)
-    gal->StellarMass = 0.0;
+  CLAMP_NEGATIVE(central->HotGas);
+  CLAMP_NEGATIVE(central->MetalsHotGas);
+  CLAMP_NEGATIVE(gal->ColdGas);
+  CLAMP_NEGATIVE(gal->MetalsColdGas);
+  CLAMP_NEGATIVE(gal->StellarMass);
 #if USE_MINI_HALOS
-  if (gal->StellarMass_II < 0)
-    gal->StellarMass_II = 0.0;
-  if (gal->StellarMass_III < 0)
-    gal->StellarMass_III = 0.0;
-  if (gal->Remnant_Mass < 0)
-    gal->Remnant_Mass = 0.0;
+  CLAMP_NEGATIVE(gal->StellarMass_II);
+  CLAMP_NEGATIVE(gal->StellarMass_III);
+  CLAMP_NEGATIVE(gal->Remnant_Mass);
 #endif
-  if (gal->MetalsStellarMass < 0)
-    gal->MetalsStellarMass = 0.0;
-  if (central->EjectedGas < 0)
-    central->EjectedGas = 0.0;
-  if (central->MetalsEjectedGas < 0)
-    central->MetalsEjectedGas = 0.0;
+  CLAMP_NEGATIVE(gal->MetalsStellarMass);
+  CLAMP_NEGATIVE(central->EjectedGas);
+  CLAMP_NEGATIVE(central->MetalsEjectedGas);
 }
 
 static inline double calc_ejected_mass(double* m_reheat, double sn_energy, double Vvir, double fof_Vvir)
@@ -134,8 +123,7 @@ static inline double calc_ejected_mass(double* m_reheat, double sn_energy, doubl
 
       m_eject = (sn_energy - reheated_energy) / specific_hot_halo_energy;
 
-      if (m_eject < 0)
-        m_eject = 0.0;
+      CLAMP_NEGATIVE(m_eject);
     }
   }
 
@@ -456,8 +444,7 @@ void contemporaneous_supernova_feedback(galaxy_t* gal,
     *m_recycled *= frac;
     *m_remnant *= frac;
   }
-  if (*new_metals < 0) // Just to be sure
-    *new_metals = 0.0;
+  CLAMP_NEGATIVE(*new_metals); // Just to be sure
   assert(*m_recycled >= 0);
   assert(*m_reheat >= 0);
   assert(*m_remnant >= 0);
