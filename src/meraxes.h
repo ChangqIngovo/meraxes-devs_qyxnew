@@ -388,6 +388,7 @@ typedef struct reion_grids_t
   fftwf_plan effective_bhm_forward_plan;
   fftwf_plan effective_bhm_filtered_reverse_plan;
   float* effective_bhar;
+  float* effective_bhar_ave;
   fftwf_complex* effective_bhar_unfiltered;
   fftwf_complex* effective_bhar_filtered;
   fftwf_plan effective_bhar_forward_plan;
