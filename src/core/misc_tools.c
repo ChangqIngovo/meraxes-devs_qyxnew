@@ -13,8 +13,6 @@ void myexit(int signum)
   fprintf(stderr, "PROGRAM TERMINATION REPORT\n");
   fprintf(stderr, "================================================================================\n");
   fprintf(stderr, "MPI Task:           %d / %d\n", run_globals.mpi_rank, run_globals.mpi_size);
-  fprintf(stderr, "Current Snapshot:   %d\n", run_globals.current_snapshot);
-  fprintf(stderr, "Current Redshift:   %.4f\n", run_globals.ZZ[run_globals.current_snapshot]);
   fprintf(stderr, "\n");
   fprintf(stderr, "For debugging information, check:\n");
   fprintf(stderr, "  - Compilation flags: Run 'cmake --version' and check CMakeCache.txt\n");

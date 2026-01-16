@@ -104,7 +104,7 @@ int evolve_galaxies(fof_group_t* fof_group, int snapshot, int NGal, int NFof)
               delayed_supernova_feedback(gal, snapshot);
 
             if (gal->BlackHoleAccretingColdMass > 0)
-              previous_merger_driven_BH_growth(gal);
+              previous_merger_driven_BH_growth(gal, snapshot);
 
 #if USE_MINI_HALOS
             DiskMetallicity = calc_metallicity(
@@ -168,7 +168,9 @@ int evolve_galaxies(fof_group_t* fof_group, int snapshot, int NGal, int NFof)
 void passively_evolve_ghost(galaxy_t* gal, int snapshot)
 {
   // Passively evolve ghosts.
-  // Currently, this just means evolving their stellar pops...
+  // Continue processing queued black hole accretion and supernova feedback
+  // even while the galaxy is in ghost state, ensuring consistency with
+  // the treatment of other delayed feedback mechanisms.
 
   bool Flag_IRA = (bool)(run_globals.params.physics.Flag_IRA);
 #if USE_MINI_HALOS
@@ -177,4 +179,7 @@ void passively_evolve_ghost(galaxy_t* gal, int snapshot)
 
   if (!Flag_IRA)
     delayed_supernova_feedback(gal, snapshot);
+
+  if (gal->BlackHoleAccretingColdMass > 0)
+    previous_merger_driven_BH_growth(gal, snapshot);
 }

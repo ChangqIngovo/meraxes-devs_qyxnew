@@ -147,7 +147,7 @@ void merger_driven_BH_growth(galaxy_t* gal, double merger_ratio, int snapshot)
   }
 }
 
-void previous_merger_driven_BH_growth(galaxy_t* gal)
+void previous_merger_driven_BH_growth(galaxy_t* gal, int snapshot)
 {
   // If there is any cold gas to feed the black hole...
   double m_reheat;
@@ -157,8 +157,13 @@ void previous_merger_driven_BH_growth(galaxy_t* gal)
   run_units_t* units = &(run_globals.units);
   double factor = EMISSIVITY_CONVERTOR * gal->FescBH / run_globals.params.physics.ReionNionPhotPerBary;
 
+  // Use snapshot cadence timestep instead of gal->dt to ensure proper accretion
+  // for ghost galaxies that have been in ghost state for multiple snapshots.
+  // snapshot is the current snapshot, snapshot+1 is the next snapshot in the past.
+  double dt = run_globals.LTTime[snapshot - 1] - run_globals.LTTime[snapshot];
+
   // Eddington rate
-  accreted_mass = expm1(gal->dt * units->UnitTime_in_Megayears / run_globals.params.Hubble_h / EDDINGTON_TIME_SCALE / ETA *
+  accreted_mass = expm1(dt * units->UnitTime_in_Megayears / run_globals.params.Hubble_h / EDDINGTON_TIME_SCALE / ETA *
                         run_globals.params.physics.EddingtonRatio) *
                   gal->BlackHoleMass;
 
@@ -173,7 +178,7 @@ void previous_merger_driven_BH_growth(galaxy_t* gal)
   calculate_BHemissivity(gal->BlackHoleMass, accreted_mass, &BHemissivity, &accretion_time);
   // historical reason for us to store nion rather than the emissivity in BHemissivity...
   gal->BHemissivity += BHemissivity;
-  gal->DutyCycleAGN = accretion_time / gal->dt;
+  gal->DutyCycleAGN = accretion_time / dt;
   assert(gal->DutyCycleAGN <= 1);
   gal->BlackHoleMass += (1. - ETA) * accreted_mass;
   gal->EffectiveBHM += BHemissivity * factor;
