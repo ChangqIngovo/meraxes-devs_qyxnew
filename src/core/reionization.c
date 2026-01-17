@@ -742,13 +742,14 @@ void malloc_reionization_grids()
                                                                      plan_flags);
   
       grids->effective_bhar = fftwf_alloc_real((size_t)slab_n_complex * 2);
+      grids->effective_bhar_ave = fftwf_alloc_real((size_t)slab_n_complex * 2);
       grids->effective_bhar_unfiltered = fftwf_alloc_complex((size_t)slab_n_complex);
       grids->effective_bhar_filtered = fftwf_alloc_complex((size_t)slab_n_complex);
   
       grids->effective_bhar_forward_plan = fftwf_mpi_plan_dft_r2c_3d(ReionGridDim,
                                                             ReionGridDim,
                                                             ReionGridDim,
-                                                            grids->effective_bhar,
+                                                            grids->effective_bhar_ave,
                                                             grids->effective_bhar_unfiltered,
                                                             run_globals.mpi_comm,
                                                             plan_flags);
@@ -759,8 +760,6 @@ void malloc_reionization_grids()
                                                                      (float*)grids->effective_bhar_filtered,
                                                                      run_globals.mpi_comm,
                                                                      plan_flags);
-  
-      grids->effective_bhar_ave = fftwf_alloc_real((size_t)slab_n_complex * 2);
     }
     grids->deltax = fftwf_alloc_real((size_t)slab_n_complex * 2);
     grids->deltax_unfiltered = fftwf_alloc_complex((size_t)slab_n_complex);
@@ -1864,6 +1863,14 @@ void save_reion_input_grids(int snapshot)
             (float)((grids->effective_bhar)[grid_index(ii, jj, kk, ReionGridDim, INDEX_PADDED)] * UnitMass_in_g /
 			        UnitTime_in_s * SEC_PER_YEAR / SOLAR_MASS);
     write_grid_float("effective_bhar", grid, file_id, fspace_id, memspace_id, dcpl_id);
+
+    for (int ii = 0; ii < local_nix; ii++)
+      for (int jj = 0; jj < ReionGridDim; jj++)
+        for (int kk = 0; kk < ReionGridDim; kk++)
+          grid[grid_index(ii, jj, kk, ReionGridDim, INDEX_REAL)] =
+            (float)((grids->effective_bhar_ave)[grid_index(ii, jj, kk, ReionGridDim, INDEX_PADDED)] * UnitMass_in_g /
+			        UnitTime_in_s * SEC_PER_YEAR / SOLAR_MASS);
+    write_grid_float("effective_bhar_ave", grid, file_id, fspace_id, memspace_id, dcpl_id);
   }
 
   for (int ii = 0; ii < local_nix; ii++)
@@ -1916,6 +1923,8 @@ void create_reion_input_dummy(int snapshot)
   hid_t fspace_id = H5Screate_simple(1, dims, NULL);
 
   hid_t dset_id = H5Dcreate(file_id, "effective_bhar", H5T_NATIVE_FLOAT, fspace_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+  H5Dclose(dset_id);
+  dset_id = H5Dcreate(file_id, "effective_bhar_ave", H5T_NATIVE_FLOAT, fspace_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
   H5Dclose(dset_id);
   dset_id = H5Dcreate(file_id, "weighted_sfr", H5T_NATIVE_FLOAT, fspace_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
   H5Dclose(dset_id);
@@ -2131,6 +2140,7 @@ void save_reion_output_grids(int snapshot)
   H5LTset_attribute_double(file_id, "weighted_sfrIII", "volume_weighted_global_weighted_sfrIII", &(grids->volume_weighted_global_weighted_sfrIII), 1);
 #endif
   H5LTset_attribute_double(file_id, "effective_bhar", "volume_weighted_global_effective_bhar", &(grids->volume_weighted_global_effective_bhar), 1);
+  H5LTset_attribute_double(file_id, "effective_bhar_ave", "volume_weighted_global_effective_bhar_ave", &(grids->volume_weighted_global_effective_bhar_ave), 1);
 
   if (run_globals.params.Flag_IncludeSpinTemp) {
     H5LTset_attribute_double(file_id, "TS_box", "volume_ave_TS", &(grids->volume_ave_TS), 1);
@@ -2309,6 +2319,7 @@ void save_reion_output_attributes(int snapshot)
   H5LTset_attribute_double(file_id, "weighted_sfrIII", "volume_weighted_global_weighted_sfrIII", &(grids->volume_weighted_global_weighted_sfrIII), 1);
 #endif
   H5LTset_attribute_double(file_id, "effective_bhar", "volume_weighted_global_effective_bhar", &(grids->volume_weighted_global_effective_bhar), 1);
+  H5LTset_attribute_double(file_id, "effective_bhar_ave", "volume_weighted_global_effective_bhar_ave", &(grids->volume_weighted_global_effective_bhar_ave), 1);
 
   if (run_globals.params.Flag_IncludeSpinTemp) {
     dset_id = H5Dcreate(file_id, "TS_box", H5T_NATIVE_FLOAT, fspace_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
