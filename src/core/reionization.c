@@ -290,6 +290,7 @@ void call_find_HII_bubbles(int snapshot, int nout_gals, timer_info* timer)
   mlog("sfrIII = %g (Msun/yr)", MLOG_MESG, grids->volume_weighted_global_weighted_sfrIII);
 #endif
   mlog("bhar = %g (equivlently Msun/yr)", MLOG_MESG, grids->volume_weighted_global_effective_bhar);
+  mlog("bhar_ave = %g (equivlently Msun/yr)", MLOG_MESG, grids->volume_weighted_global_effective_bhar_ave);
   mlog("...done", MLOG_CLOSE | MLOG_TIMERSTOP);
 }
 
@@ -759,6 +760,7 @@ void malloc_reionization_grids()
                                                                      run_globals.mpi_comm,
                                                                      plan_flags);
   
+      grids->effective_bhar_ave = fftwf_alloc_real((size_t)slab_n_complex * 2);
     }
     grids->deltax = fftwf_alloc_real((size_t)slab_n_complex * 2);
     grids->deltax_unfiltered = fftwf_alloc_complex((size_t)slab_n_complex);
@@ -1166,6 +1168,7 @@ void free_reionization_grids()
     fftwf_free(grids->effective_bhar_filtered);
     fftwf_free(grids->effective_bhar_unfiltered);
     fftwf_free(grids->effective_bhar);
+    fftwf_free(grids->effective_bhar_ave);
   }
 
 #if USE_MINI_HALOS

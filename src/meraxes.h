@@ -523,6 +523,7 @@ typedef struct reion_grids_t
   double volume_weighted_global_clumping_factor;
   double volume_weighted_global_weighted_sfr;
   double volume_weighted_global_effective_bhar;
+  double volume_weighted_global_effective_bhar_ave;
 
   double mass_weighted_global_xH;
   double mass_weighted_global_Gamma12;
