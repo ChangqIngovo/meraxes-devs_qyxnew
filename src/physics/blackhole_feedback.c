@@ -177,6 +177,11 @@ void previous_merger_driven_BH_growth(galaxy_t* gal, int snapshot)
   // historical reason for us to store nion rather than the emissivity in BHemissivity...
   gal->BHemissivity += BHemissivity;
   gal->DutyCycleAGN = accretion_time / dt;
+  if (gal-> DutyCycleAGN > 1){
+      gal-> DutyCycleAGN = 1.0;
+      mlog("Capping DutyCycleAGN (%.5f)\n", MLOG_MESG, gal-> DutyCycleAGN);
+  }
+
   assert(gal->DutyCycleAGN <= 1);
   gal->BlackHoleMass += (1. - ETA) * accreted_mass;
   gal->EffectiveBHM += BHemissivity * factor;
