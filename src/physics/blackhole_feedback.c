@@ -26,7 +26,7 @@ void calculate_BHemissivity(double BlackHoleMass, double accreted_mass, double *
 static double get_vvir(galaxy_t* gal) {
     // If this galaxy is the central of it's FOF group then use the FOF Halo properties
     // TODO: This needs closer thought as to if this is the best thing to do...
-  return (gal->Type == 0) ? gal->Halo->FOFGroup->Vvir : gal->Vvir;
+  return ((gal->Type == 0) && (!gal->ghost_flag)) ? gal->Halo->FOFGroup->Vvir : gal->Vvir;
 }
 
 // quasar feedback suggested by Croton et al. 2016
