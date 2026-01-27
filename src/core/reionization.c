@@ -283,6 +283,10 @@ void call_find_HII_bubbles(int snapshot, int nout_gals, timer_info* timer)
     mlog("N_rec = %g VS %g (/N_b)", MLOG_MESG, grids->volume_weighted_global_N_rec, grids->mass_weighted_global_N_rec);
     mlog("residual_xH = %g VS %g (x10**-4)", MLOG_MESG, grids->volume_weighted_global_residual_xH, grids->mass_weighted_global_residual_xH);
     mlog("clumping_factor = %g VS %g", MLOG_MESG, grids->volume_weighted_global_clumping_factor, grids->mass_weighted_global_clumping_factor);
+                mlog("t_resp = %g VS %g (Myr)",
+                  MLOG_MESG,
+                  grids->volume_weighted_global_t_resp,
+                  grids->mass_weighted_global_t_resp);
   }
 
   mlog("sfr = %g (Msun/yr)", MLOG_MESG, grids->volume_weighted_global_weighted_sfr);
@@ -353,9 +357,12 @@ void init_reion_grids()
   grids->volume_weighted_global_xH = 1.0;
   grids->volume_weighted_global_Gamma12 = 0.0;
   grids->volume_weighted_global_r_bubble = 0.0;
+  grids->volume_weighted_global_t_resp = 0.0;
   grids->mass_weighted_global_xH = 1.0;
   grids->started = 0;
   grids->finished = 0;
+
+  grids->mass_weighted_global_t_resp = 0.0;
 
   grids->volume_ave_J_alpha = 0.0;
   grids->volume_ave_xalpha = 0.0;
@@ -399,6 +406,7 @@ void init_reion_grids()
       grids->Gamma12[ii] = 0.0;
       grids->residual_xH[ii] = 0;
       grids->clumping_factor[ii] = 0;
+      grids->t_resp[ii] = 0.0;
     }
     if (run_globals.params.Flag_Compute21cmBrightTemp) {
       grids->delta_T[ii] = 0.0;
@@ -1598,10 +1606,11 @@ void construct_baryon_grids(int snapshot, int local_ngals)
               if (gal->BlackHoleMass >= run_globals.params.physics.BlackHoleMassLimitReion) {
                 bhar_contribution = gal->EffectiveBHAR;
                 
-                // Apply memory weighting using local relaxation timescale t_resp (already in internal units)
+                // Apply memory weighting using local relaxation timescale t_resp (stored in Myr)
                 if ((gal->DutyCycleAGN < 1.0) && (gal->BHAccretionOnTime >= 0.0)) {
                   t_off = dt * (1.0 - gal->DutyCycleAGN) * (1.0 - gal->BHAccretionOnTime);
-                  t_resp = run_globals.reion_grids.t_resp[ind];
+                  t_resp = run_globals.reion_grids.t_resp[ind] * run_globals.params.Hubble_h /
+                           run_globals.units.UnitTime_in_Megayears;
                   bhar_contribution *= exp(-t_off / t_resp);
                 }
                 
@@ -2005,6 +2014,7 @@ void save_reion_output_grids(int snapshot)
     write_grid_float("residual_xH", grids->residual_xH, file_id, fspace_id, memspace_id, dcpl_id);
     write_grid_float("clumping_factor", grids->clumping_factor, file_id, fspace_id, memspace_id, dcpl_id);
     write_grid_float("Gamma12", grids->Gamma12, file_id, fspace_id, memspace_id, dcpl_id);
+    write_grid_float("t_resp", grids->t_resp, file_id, fspace_id, memspace_id, dcpl_id);
 
     for (int ii = 0; ii < local_nix; ii++)
       for (int jj = 0; jj < ReionGridDim; jj++)
@@ -2117,6 +2127,8 @@ void save_reion_output_grids(int snapshot)
     H5LTset_attribute_double(file_id, "residual_xH", "mass_weighted_global_residual_xH", &(grids->mass_weighted_global_residual_xH), 1);
     H5LTset_attribute_double(file_id, "clumping_factor", "volume_weighted_global_clumping_factor", &(grids->volume_weighted_global_clumping_factor), 1);
     H5LTset_attribute_double(file_id, "clumping_factor", "mass_weighted_global_clumping_factor", &(grids->mass_weighted_global_clumping_factor), 1);
+    H5LTset_attribute_double(file_id, "t_resp", "volume_weighted_global_t_resp", &(grids->volume_weighted_global_t_resp), 1);
+    H5LTset_attribute_double(file_id, "t_resp", "mass_weighted_global_t_resp", &(grids->mass_weighted_global_t_resp), 1);
   }
 
   H5LTset_attribute_double(file_id, "weighted_sfr", "volume_weighted_global_weighted_sfr", &(grids->volume_weighted_global_weighted_sfr), 1);
@@ -2294,6 +2306,10 @@ void save_reion_output_attributes(int snapshot)
     dset_id = H5Dcreate(file_id, "clumping_factor", H5T_NATIVE_FLOAT, fspace_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
     H5LTset_attribute_double(file_id, "clumping_factor", "volume_weighted_global_clumping_factor", &(grids->volume_weighted_global_clumping_factor), 1);
     H5LTset_attribute_double(file_id, "clumping_factor", "mass_weighted_global_clumping_factor", &(grids->mass_weighted_global_clumping_factor), 1);
+    H5Dclose(dset_id);
+    dset_id = H5Dcreate(file_id, "t_resp", H5T_NATIVE_FLOAT, fspace_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    H5LTset_attribute_double(file_id, "t_resp", "volume_weighted_global_t_resp", &(grids->volume_weighted_global_t_resp), 1);
+    H5LTset_attribute_double(file_id, "t_resp", "mass_weighted_global_t_resp", &(grids->mass_weighted_global_t_resp), 1);
     H5Dclose(dset_id);
   }
 

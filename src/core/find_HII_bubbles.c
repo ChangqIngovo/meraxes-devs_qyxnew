@@ -524,6 +524,7 @@ void _find_HII_bubbles(const int snapshot)
   double volume_weighted_global_weighted_sfrIII = 0.0;
 #endif
   double volume_weighted_global_effective_bhar = 0.0;
+  double volume_weighted_global_t_resp = 0.0;
   double volume_weighted_global_temp_kinetic_all_gas = 0.0;
   double volume_weighted_global_N_rec = 0.0;
   double volume_weighted_global_residual_xH = 0.0;
@@ -537,6 +538,7 @@ void _find_HII_bubbles(const int snapshot)
   double mass_weighted_global_N_rec = 0.0;
   double mass_weighted_global_residual_xH = 0.0;
   double mass_weighted_global_clumping_factor = 0.0;
+  double mass_weighted_global_t_resp = 0.0;
 
   double Hubble_h = run_globals.params.Hubble_h;
   double temp;
@@ -600,7 +602,10 @@ void _find_HII_bubbles(const int snapshot)
             t_resp[i_real] = 1.0 / t_resp[i_real];
           else
             t_resp[i_real] = 1e30; // effectively infinite
-          t_resp[i_real] /= run_globals.units.UnitTime_in_s; // convert to code units
+          t_resp[i_real] /= SEC_PER_MEGAYEAR; // store in Myr
+
+          volume_weighted_global_t_resp += (double)t_resp[i_real];
+          mass_weighted_global_t_resp += (double)t_resp[i_real] * density_over_mean;
           
           volume_weighted_global_residual_xH += (double)residual_xH[i_real];
           volume_weighted_global_clumping_factor += (double)clumping_factor[i_real];
@@ -618,6 +623,7 @@ void _find_HII_bubbles(const int snapshot)
   MPI_Allreduce(MPI_IN_PLACE, &volume_weighted_global_weighted_sfr, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
   MPI_Allreduce(MPI_IN_PLACE, &volume_weighted_global_effective_bhar, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
   MPI_Allreduce(MPI_IN_PLACE, &volume_weighted_global_temp_kinetic_all_gas, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
+  MPI_Allreduce(MPI_IN_PLACE, &volume_weighted_global_t_resp, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
   MPI_Allreduce(MPI_IN_PLACE, &volume_weighted_global_N_rec, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
   MPI_Allreduce(MPI_IN_PLACE, &volume_weighted_global_residual_xH, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
   MPI_Allreduce(MPI_IN_PLACE, &volume_weighted_global_clumping_factor, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
@@ -625,6 +631,7 @@ void _find_HII_bubbles(const int snapshot)
   MPI_Allreduce(MPI_IN_PLACE, &mass_weighted_global_Gamma12, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
   MPI_Allreduce(MPI_IN_PLACE, &mass_weighted_global_r_bubble, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
   MPI_Allreduce(MPI_IN_PLACE, &mass_weighted_global_temp_kinetic_all_gas, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
+  MPI_Allreduce(MPI_IN_PLACE, &mass_weighted_global_t_resp, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
   MPI_Allreduce(MPI_IN_PLACE, &mass_weighted_global_N_rec, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
   MPI_Allreduce(MPI_IN_PLACE, &mass_weighted_global_residual_xH, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
   MPI_Allreduce(MPI_IN_PLACE, &mass_weighted_global_clumping_factor, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
@@ -638,6 +645,7 @@ void _find_HII_bubbles(const int snapshot)
   volume_weighted_global_effective_bhar /= total_n_cells;
   volume_weighted_global_effective_bhar *= units->UnitMass_in_g / units->UnitTime_in_s * SEC_PER_YEAR / SOLAR_MASS;
   volume_weighted_global_temp_kinetic_all_gas /= total_n_cells;
+  volume_weighted_global_t_resp /= total_n_cells;
   volume_weighted_global_N_rec /= total_n_cells;
   volume_weighted_global_residual_xH /= total_n_cells;
   volume_weighted_global_clumping_factor /= total_n_cells;
@@ -646,6 +654,7 @@ void _find_HII_bubbles(const int snapshot)
   mass_weighted_global_Gamma12 /= mass_weight;
   mass_weighted_global_r_bubble /= mass_weight;
   mass_weighted_global_temp_kinetic_all_gas /= mass_weight;
+  mass_weighted_global_t_resp /= mass_weight;
   mass_weighted_global_N_rec /= mass_weight;
   mass_weighted_global_residual_xH /= mass_weight;
   mass_weighted_global_clumping_factor /= mass_weight;
@@ -656,6 +665,7 @@ void _find_HII_bubbles(const int snapshot)
   run_globals.reion_grids.volume_weighted_global_weighted_sfr = volume_weighted_global_weighted_sfr;
   run_globals.reion_grids.volume_weighted_global_effective_bhar = volume_weighted_global_effective_bhar;
   run_globals.reion_grids.volume_weighted_global_temp_kinetic_all_gas = volume_weighted_global_temp_kinetic_all_gas;
+  run_globals.reion_grids.volume_weighted_global_t_resp = volume_weighted_global_t_resp;
   run_globals.reion_grids.volume_weighted_global_N_rec = volume_weighted_global_N_rec;
   run_globals.reion_grids.volume_weighted_global_residual_xH = volume_weighted_global_residual_xH;
   run_globals.reion_grids.volume_weighted_global_clumping_factor = volume_weighted_global_clumping_factor;
@@ -664,6 +674,7 @@ void _find_HII_bubbles(const int snapshot)
   run_globals.reion_grids.mass_weighted_global_Gamma12 = mass_weighted_global_Gamma12;
   run_globals.reion_grids.mass_weighted_global_r_bubble = mass_weighted_global_r_bubble;
   run_globals.reion_grids.mass_weighted_global_temp_kinetic_all_gas = mass_weighted_global_temp_kinetic_all_gas;
+  run_globals.reion_grids.mass_weighted_global_t_resp = mass_weighted_global_t_resp;
   run_globals.reion_grids.mass_weighted_global_N_rec = mass_weighted_global_N_rec;
   run_globals.reion_grids.mass_weighted_global_residual_xH = mass_weighted_global_residual_xH;
   run_globals.reion_grids.mass_weighted_global_clumping_factor = mass_weighted_global_clumping_factor;
