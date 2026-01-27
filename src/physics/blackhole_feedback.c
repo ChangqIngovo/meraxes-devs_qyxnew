@@ -166,43 +166,44 @@ void previous_merger_driven_BH_growth(galaxy_t* gal, int snapshot)
   if (gal->BHAccretionOnTime < 0.0) {
     // First snapshot of accretion after merger - assign random on-time
     on_time_fraction = gsl_rng_uniform(run_globals.random_generator);
-    gal->BHAccretionOnTime = on_time_fraction;
   } else {
     // Accretion was already happening in previous snapshot - start immediately
     on_time_fraction = 0.0;
   }
+  gal->BHAccretionOnTime = on_time_fraction;
 
   // Adjust effective timestep based on when accretion starts
   double effective_dt = dt * (1.0 - on_time_fraction);
 
-  // Eddington rate (using effective timestep)
-  accreted_mass = expm1(effective_dt / run_globals.EddingtonTimescale / ETA * run_globals.params.physics.EddingtonRatio) *
-                  gal->BlackHoleMass;
+  if (effective_dt > 0.0){
+    // Eddington rate (using effective timestep)
+    accreted_mass = expm1(effective_dt / run_globals.EddingtonTimescale / ETA * run_globals.params.physics.EddingtonRatio) *
+                    gal->BlackHoleMass;
 
-  // limit accretion to what is need
-  if (accreted_mass > gal->BlackHoleAccretingColdMass)
-    accreted_mass = gal->BlackHoleAccretingColdMass;
+    // limit accretion to what is need
+    if (accreted_mass > gal->BlackHoleAccretingColdMass)
+      accreted_mass = gal->BlackHoleAccretingColdMass;
 
-  gal->BlackHoleAccretedColdMass += accreted_mass;
-  gal->BlackHoleAccretingColdMass -= accreted_mass;
+    gal->BlackHoleAccretedColdMass += accreted_mass;
+    gal->BlackHoleAccretingColdMass -= accreted_mass;
 
-  // Reset on-time if accretion is complete
-  if (gal->BlackHoleAccretingColdMass <= 0.0)
-    gal->BHAccretionOnTime = -1.0;
+    // Reset on-time if accretion is complete
+    if (gal->BlackHoleAccretingColdMass <= 0.0)
+      gal->BHAccretionOnTime = -1.0;
 
-  // N_gamma,q * N_bh; later 1e60*BHemissivity * PROTONMASS/1e10/SOLAR_MASS will be N_gamma,q * M_bh
-  calculate_BHemissivity(gal->BlackHoleMass, accreted_mass, &BHemissivity, &accretion_time);
-  // historical reason for us to store nion rather than the emissivity in BHemissivity...
-  gal->BHemissivity += BHemissivity;
-  gal->DutyCycleAGN = accretion_time / effective_dt;
-  CLAMP_0_1(gal->DutyCycleAGN);
-      
-  assert(gal->DutyCycleAGN <= 1);
-  gal->BlackHoleMass += (1. - ETA) * accreted_mass;
-  gal->EffectiveBHM += BHemissivity * factor;
-  gal->EffectiveBHAR += BHemissivity / accretion_time * factor;
+    // N_gamma,q * N_bh; later 1e60*BHemissivity * PROTONMASS/1e10/SOLAR_MASS will be N_gamma,q * M_bh
+    calculate_BHemissivity(gal->BlackHoleMass, accreted_mass, &BHemissivity, &accretion_time);
+    // historical reason for us to store nion rather than the emissivity in BHemissivity...
+    gal->BHemissivity += BHemissivity;
+    gal->DutyCycleAGN = accretion_time / effective_dt;
+    CLAMP_0_1(gal->DutyCycleAGN);
+        
+    gal->BlackHoleMass += (1. - ETA) * accreted_mass;
+    gal->EffectiveBHM += BHemissivity * factor;
+    gal->EffectiveBHAR += BHemissivity / accretion_time * factor;
 
-  // quasar mode feedback
-  m_reheat = run_globals.params.physics.QuasarModeEff * 2. * ETA * run_globals.Csquare * accreted_mass / Vvir / Vvir;
-  update_reservoirs_from_quasar_mode_bh_feedback(gal, m_reheat);
+    // quasar mode feedback
+    m_reheat = run_globals.params.physics.QuasarModeEff * 2. * ETA * run_globals.Csquare * accreted_mass / Vvir / Vvir;
+    update_reservoirs_from_quasar_mode_bh_feedback(gal, m_reheat);
+  }
 }
