@@ -168,14 +168,12 @@ void _find_HII_bubbles(const int snapshot)
   fftwf_complex* effective_bhar_unfiltered = NULL;
   fftwf_complex* effective_bhar_filtered = NULL;
   float *effective_bhar = NULL;
-  float *effective_bhar_ave = NULL;
   if (run_globals.params.physics.Flag_BHFeedback) {
     effective_bhm_unfiltered = run_globals.reion_grids.effective_bhm_unfiltered;
     effective_bhm_filtered = run_globals.reion_grids.effective_bhm_filtered;
     fftwf_execute(run_globals.reion_grids.effective_bhm_forward_plan);
 
     effective_bhar = run_globals.reion_grids.effective_bhar;
-    effective_bhar_ave = run_globals.reion_grids.effective_bhar_ave;
     effective_bhar_unfiltered = run_globals.reion_grids.effective_bhar_unfiltered;
     effective_bhar_filtered = run_globals.reion_grids.effective_bhar_filtered;
     fftwf_execute(run_globals.reion_grids.effective_bhar_forward_plan);
@@ -525,7 +523,6 @@ void _find_HII_bubbles(const int snapshot)
   double volume_weighted_global_weighted_sfrIII = 0.0;
 #endif
   double volume_weighted_global_effective_bhar = 0.0;
-  double volume_weighted_global_effective_bhar_ave = 0.0;
   double volume_weighted_global_temp_kinetic_all_gas = 0.0;
   double volume_weighted_global_N_rec = 0.0;
   double volume_weighted_global_residual_xH = 0.0;
@@ -557,7 +554,6 @@ void _find_HII_bubbles(const int snapshot)
 #endif
         if (run_globals.params.physics.Flag_BHFeedback){
           volume_weighted_global_effective_bhar += (double)((float*)effective_bhar)[i_padded];
-          volume_weighted_global_effective_bhar_ave += (double)((float*)effective_bhar_ave)[i_padded];
 		}
 
         density_over_mean = 1.0 + (double)((float*)deltax)[i_padded];
@@ -612,7 +608,6 @@ void _find_HII_bubbles(const int snapshot)
   MPI_Allreduce(MPI_IN_PLACE, &volume_weighted_global_r_bubble, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
   MPI_Allreduce(MPI_IN_PLACE, &volume_weighted_global_weighted_sfr, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
   MPI_Allreduce(MPI_IN_PLACE, &volume_weighted_global_effective_bhar, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
-  MPI_Allreduce(MPI_IN_PLACE, &volume_weighted_global_effective_bhar_ave, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
   MPI_Allreduce(MPI_IN_PLACE, &volume_weighted_global_temp_kinetic_all_gas, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
   MPI_Allreduce(MPI_IN_PLACE, &volume_weighted_global_N_rec, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
   MPI_Allreduce(MPI_IN_PLACE, &volume_weighted_global_residual_xH, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
@@ -633,8 +628,6 @@ void _find_HII_bubbles(const int snapshot)
   volume_weighted_global_weighted_sfr *= units->UnitMass_in_g / units->UnitTime_in_s * SEC_PER_YEAR / SOLAR_MASS;
   volume_weighted_global_effective_bhar /= total_n_cells;
   volume_weighted_global_effective_bhar *= units->UnitMass_in_g / units->UnitTime_in_s * SEC_PER_YEAR / SOLAR_MASS;
-  volume_weighted_global_effective_bhar_ave /= total_n_cells;
-  volume_weighted_global_effective_bhar_ave *= units->UnitMass_in_g / units->UnitTime_in_s * SEC_PER_YEAR / SOLAR_MASS;
   volume_weighted_global_temp_kinetic_all_gas /= total_n_cells;
   volume_weighted_global_N_rec /= total_n_cells;
   volume_weighted_global_residual_xH /= total_n_cells;
@@ -653,7 +646,6 @@ void _find_HII_bubbles(const int snapshot)
   run_globals.reion_grids.volume_weighted_global_r_bubble = volume_weighted_global_r_bubble;
   run_globals.reion_grids.volume_weighted_global_weighted_sfr = volume_weighted_global_weighted_sfr;
   run_globals.reion_grids.volume_weighted_global_effective_bhar = volume_weighted_global_effective_bhar;
-  run_globals.reion_grids.volume_weighted_global_effective_bhar_ave = volume_weighted_global_effective_bhar_ave;
   run_globals.reion_grids.volume_weighted_global_temp_kinetic_all_gas = volume_weighted_global_temp_kinetic_all_gas;
   run_globals.reion_grids.volume_weighted_global_N_rec = volume_weighted_global_N_rec;
   run_globals.reion_grids.volume_weighted_global_residual_xH = volume_weighted_global_residual_xH;

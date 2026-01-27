@@ -290,7 +290,6 @@ void call_find_HII_bubbles(int snapshot, int nout_gals, timer_info* timer)
   mlog("sfrIII = %g (Msun/yr)", MLOG_MESG, grids->volume_weighted_global_weighted_sfrIII);
 #endif
   mlog("bhar = %g (equivlently Msun/yr)", MLOG_MESG, grids->volume_weighted_global_effective_bhar);
-  mlog("bhar_ave = %g (equivlently Msun/yr)", MLOG_MESG, grids->volume_weighted_global_effective_bhar_ave);
   mlog("...done", MLOG_CLOSE | MLOG_TIMERSTOP);
 }
 
@@ -489,7 +488,6 @@ void init_reion_grids()
     if (run_globals.params.physics.Flag_BHFeedback) {
       grids->effective_bhm[ii] = 0;
       grids->effective_bhar[ii] = 0;
-      grids->effective_bhar_ave[ii] = 0;
     }
     grids->weighted_sfr[ii] = 0;
 #if USE_MINI_HALOS
@@ -588,7 +586,6 @@ void malloc_reionization_grids()
   grids->effective_bhm_unfiltered = NULL;
   grids->effective_bhm_filtered = NULL;
   grids->effective_bhar = NULL;
-  grids->effective_bhar_ave = NULL;
   grids->effective_bhar_unfiltered = NULL;
   grids->effective_bhar_filtered = NULL;
   grids->deltax = NULL;
@@ -742,14 +739,13 @@ void malloc_reionization_grids()
                                                                      plan_flags);
   
       grids->effective_bhar = fftwf_alloc_real((size_t)slab_n_complex * 2);
-      grids->effective_bhar_ave = fftwf_alloc_real((size_t)slab_n_complex * 2);
       grids->effective_bhar_unfiltered = fftwf_alloc_complex((size_t)slab_n_complex);
       grids->effective_bhar_filtered = fftwf_alloc_complex((size_t)slab_n_complex);
   
       grids->effective_bhar_forward_plan = fftwf_mpi_plan_dft_r2c_3d(ReionGridDim,
                                                             ReionGridDim,
                                                             ReionGridDim,
-                                                            grids->effective_bhar_ave,
+                                                            grids->effective_bhar,
                                                             grids->effective_bhar_unfiltered,
                                                             run_globals.mpi_comm,
                                                             plan_flags);
@@ -1167,7 +1163,6 @@ void free_reionization_grids()
     fftwf_free(grids->effective_bhar_filtered);
     fftwf_free(grids->effective_bhar_unfiltered);
     fftwf_free(grids->effective_bhar);
-    fftwf_free(grids->effective_bhar_ave);
   }
 
 #if USE_MINI_HALOS
@@ -1439,7 +1434,6 @@ void construct_baryon_grids(int snapshot, int local_ngals)
   float* stellar_grid = run_globals.reion_grids.stars;
   float* effective_bhm_grid = run_globals.reion_grids.effective_bhm;
   float* effective_bhar_grid = run_globals.reion_grids.effective_bhar;
-  float* effective_bhar_ave_grid = run_globals.reion_grids.effective_bhar_ave;
   float* sfr_grid = run_globals.reion_grids.sfr;
   float* sfr_histories_grid = run_globals.reion_grids.sfr_histories;
   float* weighted_sfr_grid = run_globals.reion_grids.weighted_sfr;
@@ -1494,7 +1488,6 @@ void construct_baryon_grids(int snapshot, int local_ngals)
     prop_stellar,
     prop_effective_bhm,
     prop_effective_bhar,
-    prop_effective_bhar_ave,
     prop_weighted_sfr,
 #if USE_MINI_HALOS
     prop_stellarIII,
@@ -1515,7 +1508,7 @@ void construct_baryon_grids(int snapshot, int local_ngals)
       continue;
 
     // no need to bh grids if not using BHFeedback
-    if ((!run_globals.params.physics.Flag_BHFeedback) && ((prop == prop_effective_bhm) || (prop == prop_effective_bhar) || (prop == prop_effective_bhar_ave)))
+    if ((!run_globals.params.physics.Flag_BHFeedback) && ((prop == prop_effective_bhm) || (prop == prop_effective_bhar)))
       continue;
 
     int i_gal = 0;
@@ -1598,13 +1591,6 @@ void construct_baryon_grids(int snapshot, int local_ngals)
               // quasar and stellar component
               if (gal->BlackHoleMass >= run_globals.params.physics.BlackHoleMassLimitReion)
                 buffer[ind] += gal->EffectiveBHAR;
-              break;
-
-            case prop_effective_bhar_ave:
-              // for ionizing_source_formation_rate_grid, need further convertion due to different UV spectral index of
-              // quasar and stellar component
-              if (gal->BlackHoleMass >= run_globals.params.physics.BlackHoleMassLimitReion)
-                buffer[ind] += gal->EffectiveBHAR * gal->DutyCycleAGN;
               break;
 
             case prop_sfr:
@@ -1717,16 +1703,6 @@ void construct_baryon_grids(int snapshot, int local_ngals)
                   float val = buffer[grid_index(ix, iy, iz, ReionGridDim, INDEX_REAL)];
                   CLAMP_NEGATIVE(val);
                   effective_bhar_grid[grid_index(ix, iy, iz, ReionGridDim, INDEX_PADDED)] = val;
-                }
-            break;
-
-          case prop_effective_bhar_ave:
-            for (int ix = 0; ix < slab_nix[i_r]; ix++)
-              for (int iy = 0; iy < ReionGridDim; iy++)
-                for (int iz = 0; iz < ReionGridDim; iz++) {
-                  float val = buffer[grid_index(ix, iy, iz, ReionGridDim, INDEX_REAL)];
-                  CLAMP_NEGATIVE(val);
-                  effective_bhar_ave_grid[grid_index(ix, iy, iz, ReionGridDim, INDEX_PADDED)] = val;
                 }
             break;
           default:
@@ -1863,14 +1839,6 @@ void save_reion_input_grids(int snapshot)
             (float)((grids->effective_bhar)[grid_index(ii, jj, kk, ReionGridDim, INDEX_PADDED)] * UnitMass_in_g /
 			        UnitTime_in_s * SEC_PER_YEAR / SOLAR_MASS);
     write_grid_float("effective_bhar", grid, file_id, fspace_id, memspace_id, dcpl_id);
-
-    for (int ii = 0; ii < local_nix; ii++)
-      for (int jj = 0; jj < ReionGridDim; jj++)
-        for (int kk = 0; kk < ReionGridDim; kk++)
-          grid[grid_index(ii, jj, kk, ReionGridDim, INDEX_REAL)] =
-            (float)((grids->effective_bhar_ave)[grid_index(ii, jj, kk, ReionGridDim, INDEX_PADDED)] * UnitMass_in_g /
-			        UnitTime_in_s * SEC_PER_YEAR / SOLAR_MASS);
-    write_grid_float("effective_bhar_ave", grid, file_id, fspace_id, memspace_id, dcpl_id);
   }
 
   for (int ii = 0; ii < local_nix; ii++)
@@ -2140,7 +2108,6 @@ void save_reion_output_grids(int snapshot)
   H5LTset_attribute_double(file_id, "weighted_sfrIII", "volume_weighted_global_weighted_sfrIII", &(grids->volume_weighted_global_weighted_sfrIII), 1);
 #endif
   H5LTset_attribute_double(file_id, "effective_bhar", "volume_weighted_global_effective_bhar", &(grids->volume_weighted_global_effective_bhar), 1);
-  H5LTset_attribute_double(file_id, "effective_bhar_ave", "volume_weighted_global_effective_bhar_ave", &(grids->volume_weighted_global_effective_bhar_ave), 1);
 
   if (run_globals.params.Flag_IncludeSpinTemp) {
     H5LTset_attribute_double(file_id, "TS_box", "volume_ave_TS", &(grids->volume_ave_TS), 1);
@@ -2319,7 +2286,6 @@ void save_reion_output_attributes(int snapshot)
   H5LTset_attribute_double(file_id, "weighted_sfrIII", "volume_weighted_global_weighted_sfrIII", &(grids->volume_weighted_global_weighted_sfrIII), 1);
 #endif
   H5LTset_attribute_double(file_id, "effective_bhar", "volume_weighted_global_effective_bhar", &(grids->volume_weighted_global_effective_bhar), 1);
-  H5LTset_attribute_double(file_id, "effective_bhar_ave", "volume_weighted_global_effective_bhar_ave", &(grids->volume_weighted_global_effective_bhar_ave), 1);
 
   if (run_globals.params.Flag_IncludeSpinTemp) {
     dset_id = H5Dcreate(file_id, "TS_box", H5T_NATIVE_FLOAT, fspace_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);

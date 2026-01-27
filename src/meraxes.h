@@ -389,7 +389,6 @@ typedef struct reion_grids_t
   fftwf_plan effective_bhm_forward_plan;
   fftwf_plan effective_bhm_filtered_reverse_plan;
   float* effective_bhar;
-  float* effective_bhar_ave;
   fftwf_complex* effective_bhar_unfiltered;
   fftwf_complex* effective_bhar_filtered;
   fftwf_plan effective_bhar_forward_plan;
@@ -523,7 +522,6 @@ typedef struct reion_grids_t
   double volume_weighted_global_clumping_factor;
   double volume_weighted_global_weighted_sfr;
   double volume_weighted_global_effective_bhar;
-  double volume_weighted_global_effective_bhar_ave;
 
   double mass_weighted_global_xH;
   double mass_weighted_global_Gamma12;
