@@ -521,7 +521,6 @@ typedef struct reion_grids_t
   double volume_weighted_global_N_rec;
   double volume_weighted_global_residual_xH;
   double volume_weighted_global_clumping_factor;
-  double volume_weighted_global_t_resp;
   double volume_weighted_global_weighted_sfr;
   double volume_weighted_global_effective_bhar;
 
@@ -532,7 +531,6 @@ typedef struct reion_grids_t
   double mass_weighted_global_N_rec;
   double mass_weighted_global_residual_xH;
   double mass_weighted_global_clumping_factor;
-  double mass_weighted_global_t_resp;
 
   double volume_ave_J_alpha;
   double volume_ave_xalpha;
@@ -626,7 +624,7 @@ typedef struct galaxy_t
   double BlackHoleAccretedColdMass;
   double BlackHoleAccretingColdMass;
   double BHAccretionOnTime;     //!< Random on-time fraction [0, 1] for when accretion starts within snapshot; -1 indicates no prior accretion
-
+  double t_resp;                //!< Local relaxation timescale
   int Galaxy_Population; // You need it also if you are not disentangling PopIII/PopII (when Mini_halos is off, this is
                          // = 2)
 #if USE_MINI_HALOS

@@ -152,6 +152,7 @@ void previous_merger_driven_BH_growth(galaxy_t* gal, int snapshot)
   double m_reheat;
   double accreted_mass;
   double BHemissivity, accretion_time;
+  double t_off, t_resp;
   double Vvir = get_vvir(gal);
   run_units_t* units = &(run_globals.units);
   double factor = EMISSIVITY_CONVERTOR * gal->FescBH / run_globals.params.physics.ReionNionPhotPerBary;
@@ -200,7 +201,15 @@ void previous_merger_driven_BH_growth(galaxy_t* gal, int snapshot)
         
     gal->BlackHoleMass += (1. - ETA) * accreted_mass;
     gal->EffectiveBHM += BHemissivity * factor;
-    gal->EffectiveBHAR += BHemissivity / accretion_time * factor;
+
+    BHemissivity *=  factor / accretion_time;
+    t_off =  (1.0 - gal->DutyCycleAGN) * effective_dt;
+      
+    if (t_off > 0.0){
+        t_resp = gal->t_resp * run_globals.params.Hubble_h / units->UnitTime_in_Megayears;
+        BHemissivity *= exp(-t_off / t_resp);
+    }
+    gal->EffectiveBHAR += BHemissivity;
 
     // quasar mode feedback
     m_reheat = run_globals.params.physics.QuasarModeEff * 2. * ETA * run_globals.Csquare * accreted_mass / Vvir / Vvir;

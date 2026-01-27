@@ -183,6 +183,7 @@ void reset_galaxy_properties(galaxy_t* gal, int snapshot)
   gal->DutyCycleAGN = 0.0;
   gal->BlackHoleAccretedHotMass = 0.0;
   gal->BlackHoleAccretedColdMass = 0.0;
+  gal->t_resp = 1e30;
 #if USE_MINI_HALOS
   gal->SfrIII = 0.0;
   gal->FescIIIWeightedSfr = 0.0;

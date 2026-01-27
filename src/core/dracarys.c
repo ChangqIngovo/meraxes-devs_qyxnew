@@ -318,6 +318,8 @@ void dracarys()
         if (run_globals.params.Flag_IncludeLymanWerner)
           assign_Mvir_crit_to_galaxies(ngals_in_slabs, 2);
 #endif
+        if (run_globals.params.Flag_IncludeRecombinations)
+          assign_Mvir_crit_to_galaxies(ngals_in_slabs, 3);
       }
     }
 

@@ -283,10 +283,6 @@ void call_find_HII_bubbles(int snapshot, int nout_gals, timer_info* timer)
     mlog("N_rec = %g VS %g (/N_b)", MLOG_MESG, grids->volume_weighted_global_N_rec, grids->mass_weighted_global_N_rec);
     mlog("residual_xH = %g VS %g (x10**-4)", MLOG_MESG, grids->volume_weighted_global_residual_xH, grids->mass_weighted_global_residual_xH);
     mlog("clumping_factor = %g VS %g", MLOG_MESG, grids->volume_weighted_global_clumping_factor, grids->mass_weighted_global_clumping_factor);
-                mlog("t_resp = %g VS %g (Myr)",
-                  MLOG_MESG,
-                  grids->volume_weighted_global_t_resp,
-                  grids->mass_weighted_global_t_resp);
   }
 
   mlog("sfr = %g (Msun/yr)", MLOG_MESG, grids->volume_weighted_global_weighted_sfr);
@@ -357,12 +353,9 @@ void init_reion_grids()
   grids->volume_weighted_global_xH = 1.0;
   grids->volume_weighted_global_Gamma12 = 0.0;
   grids->volume_weighted_global_r_bubble = 0.0;
-  grids->volume_weighted_global_t_resp = 0.0;
   grids->mass_weighted_global_xH = 1.0;
   grids->started = 0;
   grids->finished = 0;
-
-  grids->mass_weighted_global_t_resp = 0.0;
 
   grids->volume_ave_J_alpha = 0.0;
   grids->volume_ave_xalpha = 0.0;
@@ -406,7 +399,7 @@ void init_reion_grids()
       grids->Gamma12[ii] = 0.0;
       grids->residual_xH[ii] = 0;
       grids->clumping_factor[ii] = 0;
-      grids->t_resp[ii] = 0.0;
+      grids->t_resp[ii] = 1e30;
     }
     if (run_globals.params.Flag_Compute21cmBrightTemp) {
       grids->delta_T[ii] = 0.0;
@@ -1251,7 +1244,7 @@ int map_galaxies_to_slabs(int ngals)
 }
 
 void assign_Mvir_crit_to_galaxies(int ngals_in_slabs, int flag_feed)
-// flag = 1 Reio feedback, flag = 2 LW feedback
+// flag = 1 Reio feedback, flag = 2 LW feedback, flag = 3 t_resp assignment
 {
   // N.B. We are assuming here that the galaxy_to_slab mapping has been sorted
   // by slab index...
@@ -1263,6 +1256,7 @@ void assign_Mvir_crit_to_galaxies(int ngals_in_slabs, int flag_feed)
   int ReionGridDim = run_globals.params.ReionGridDim;
   double box_size = run_globals.params.BoxSize;
   float* Mvir_crit = run_globals.reion_grids.Mvir_crit;
+  float* t_resp_grid = run_globals.reion_grids.t_resp;
 #if USE_MINI_HALOS
   float* Mvir_crit_MC = run_globals.reion_grids.Mvir_crit_MC;
 #endif
@@ -1279,6 +1273,15 @@ void assign_Mvir_crit_to_galaxies(int ngals_in_slabs, int flag_feed)
 #else
     mlog_error("Cannot assign Mvir_crit_MC to galaxies when not USE_MINI_HALOS...");
 #endif
+  }
+
+  if (flag_feed == 3) {
+    if (t_resp_grid != NULL)
+      mlog("Assigning t_resp to galaxies...", MLOG_OPEN);
+    else {
+      mlog_error("Cannot assign t_resp to galaxies when t_resp grid is not available...");
+      ABORT(EXIT_FAILURE);
+    }
   }
 
   // Work out the index of the galaxy_to_slab_map where each slab begins.
@@ -1402,6 +1405,46 @@ void assign_Mvir_crit_to_galaxies(int ngals_in_slabs, int flag_feed)
     }
 #endif
 
+    if (flag_feed == 3) {
+      if (i_skip > 0) {
+        MPI_Sendrecv(&recv_flag,
+                     sizeof(bool),
+                     MPI_BYTE,
+                     recv_from_rank,
+                     6393762,
+                     &send_flag,
+                     sizeof(bool),
+                     MPI_BYTE,
+                     send_to_rank,
+                     6393762,
+                     run_globals.mpi_comm,
+                     MPI_STATUS_IGNORE);
+
+        if (send_to_rank > run_globals.mpi_rank) {
+          if (send_flag) {
+            int n_cells = (int)(slab_nix[run_globals.mpi_rank] * ReionGridDim * ReionGridDim);
+            MPI_Send(t_resp_grid, n_cells, MPI_FLOAT, send_to_rank, 793711, run_globals.mpi_comm);
+          }
+          if (recv_flag) {
+            int n_cells = (int)(slab_nix[recv_from_rank] * ReionGridDim * ReionGridDim);
+            MPI_Recv(buffer, n_cells, MPI_FLOAT, recv_from_rank, 793711, run_globals.mpi_comm, MPI_STATUS_IGNORE);
+          }
+        } else {
+          if (recv_flag) {
+            int n_cells = (int)(slab_nix[recv_from_rank] * ReionGridDim * ReionGridDim);
+            MPI_Recv(buffer, n_cells, MPI_FLOAT, recv_from_rank, 793711, run_globals.mpi_comm, MPI_STATUS_IGNORE);
+          }
+          if (send_flag) {
+            int n_cells = (int)(slab_nix[run_globals.mpi_rank] * ReionGridDim * ReionGridDim);
+            MPI_Send(t_resp_grid, n_cells, MPI_FLOAT, send_to_rank, 793711, run_globals.mpi_comm);
+          }
+        }
+      } else {
+        int n_cells = (int)(slab_nix[recv_from_rank] * ReionGridDim * ReionGridDim);
+        memcpy(buffer, t_resp_grid, sizeof(float) * n_cells);
+      }
+    }
+
     // if this core has received a slab of Mvir_crit then assign values to the
     // galaxies which belong to this slab
     if (recv_flag) {
@@ -1425,6 +1468,9 @@ void assign_Mvir_crit_to_galaxies(int ngals_in_slabs, int flag_feed)
         if (flag_feed == 2)
           gal->MvirCrit_MC = (double)buffer[grid_index(ix, iy, iz, ReionGridDim, INDEX_REAL)];
 #endif
+
+        if (flag_feed == 3)
+          gal->t_resp = (double)buffer[grid_index(ix, iy, iz, ReionGridDim, INDEX_REAL)];
 
         // increment counters
         i_gal++;
@@ -1450,7 +1496,6 @@ void construct_baryon_grids(int snapshot, int local_ngals)
   float* weighted_sfr_grid = run_globals.reion_grids.weighted_sfr;
   int ReionGridDim = run_globals.params.ReionGridDim;
   double sfr_timescale = run_globals.params.ReionSfrTimescale * hubble_time(snapshot);
-  double bhar_contribution, t_off, t_resp;
 #if USE_MINI_HALOS
   float* stellarIII_grid = run_globals.reion_grids.starsIII;
   float* sfrIII_grid = run_globals.reion_grids.sfrIII;
@@ -1494,10 +1539,6 @@ void construct_baryon_grids(int snapshot, int local_ngals)
   ptrdiff_t* slab_nix = run_globals.reion_grids.slab_nix;
   ptrdiff_t buffer_size = run_globals.reion_grids.buffer_size;
   float* buffer = run_globals.reion_grids.buffer;
-
-  // Compute snapshot timestep once (used for BHAR memory weighting)
-  // Note: snapshot > 0 since reionization doesn't start at snapshot 0
-  double dt = (snapshot > 0) ? (run_globals.LTTime[snapshot - 1] - run_globals.LTTime[snapshot]) : 0.0;
 
   enum property
   {
@@ -1604,17 +1645,7 @@ void construct_baryon_grids(int snapshot, int local_ngals)
 
             case prop_effective_bhar:
               if (gal->BlackHoleMass >= run_globals.params.physics.BlackHoleMassLimitReion) {
-                bhar_contribution = gal->EffectiveBHAR;
-                
-                // Apply memory weighting using local relaxation timescale t_resp (stored in Myr)
-                if ((gal->DutyCycleAGN < 1.0) && (gal->BHAccretionOnTime >= 0.0)) {
-                  t_off = dt * (1.0 - gal->DutyCycleAGN) * (1.0 - gal->BHAccretionOnTime);
-                  t_resp = run_globals.reion_grids.t_resp[ind] * run_globals.params.Hubble_h /
-                           run_globals.units.UnitTime_in_Megayears;
-                  bhar_contribution *= exp(-t_off / t_resp);
-                }
-                
-                buffer[ind] += bhar_contribution;
+                buffer[ind] += gal->EffectiveBHAR;
               }
               break;
 
@@ -2127,8 +2158,6 @@ void save_reion_output_grids(int snapshot)
     H5LTset_attribute_double(file_id, "residual_xH", "mass_weighted_global_residual_xH", &(grids->mass_weighted_global_residual_xH), 1);
     H5LTset_attribute_double(file_id, "clumping_factor", "volume_weighted_global_clumping_factor", &(grids->volume_weighted_global_clumping_factor), 1);
     H5LTset_attribute_double(file_id, "clumping_factor", "mass_weighted_global_clumping_factor", &(grids->mass_weighted_global_clumping_factor), 1);
-    H5LTset_attribute_double(file_id, "t_resp", "volume_weighted_global_t_resp", &(grids->volume_weighted_global_t_resp), 1);
-    H5LTset_attribute_double(file_id, "t_resp", "mass_weighted_global_t_resp", &(grids->mass_weighted_global_t_resp), 1);
   }
 
   H5LTset_attribute_double(file_id, "weighted_sfr", "volume_weighted_global_weighted_sfr", &(grids->volume_weighted_global_weighted_sfr), 1);
@@ -2306,10 +2335,6 @@ void save_reion_output_attributes(int snapshot)
     dset_id = H5Dcreate(file_id, "clumping_factor", H5T_NATIVE_FLOAT, fspace_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
     H5LTset_attribute_double(file_id, "clumping_factor", "volume_weighted_global_clumping_factor", &(grids->volume_weighted_global_clumping_factor), 1);
     H5LTset_attribute_double(file_id, "clumping_factor", "mass_weighted_global_clumping_factor", &(grids->mass_weighted_global_clumping_factor), 1);
-    H5Dclose(dset_id);
-    dset_id = H5Dcreate(file_id, "t_resp", H5T_NATIVE_FLOAT, fspace_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-    H5LTset_attribute_double(file_id, "t_resp", "volume_weighted_global_t_resp", &(grids->volume_weighted_global_t_resp), 1);
-    H5LTset_attribute_double(file_id, "t_resp", "mass_weighted_global_t_resp", &(grids->mass_weighted_global_t_resp), 1);
     H5Dclose(dset_id);
   }
 
