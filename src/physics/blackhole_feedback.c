@@ -159,7 +159,7 @@ void previous_merger_driven_BH_growth(galaxy_t* gal, int snapshot)
   // Use snapshot cadence timestep instead of gal->dt to ensure proper accretion
   // for ghost galaxies that have been in ghost state for multiple snapshots.
   // snapshot is the current snapshot, snapshot+1 is the next snapshot in the past.
-  double dt = run_globals.LTTime[snapshot - 1] - run_globals.LTTime[snapshot];
+  double dt = (snapshot > 0) ? (run_globals.LTTime[snapshot - 1] - run_globals.LTTime[snapshot]) : 0.0;
 
   // Determine the accretion on-time within this snapshot
   double on_time_fraction;
@@ -203,24 +203,7 @@ void previous_merger_driven_BH_growth(galaxy_t* gal, int snapshot)
   assert(gal->DutyCycleAGN <= 1);
   gal->BlackHoleMass += (1. - ETA) * accreted_mass;
   gal->EffectiveBHM += BHemissivity * factor;
-  
-  // Apply memory weighting to quasar ionization contribution
-  double bhar_contribution = BHemissivity / accretion_time * factor;
-  if (gal->DutyCycleAGN < 1.0) {
-    // Quasar was off for part of the snapshot - apply exponential memory decay
-    double t_off = effective_dt * (1.0 - gal->DutyCycleAGN);
-    
-    // Use representative relaxation timescale
-    // t_resp ~ 1/(Gamma_baseline + alpha_B * n_e)
-    // TODO: Make this a parameter and/or compute from local conditions
-    // For typical IGM: Gamma ~ 1e-12 s^-1, alpha_B ~ 2.6e-13 cm^3/s, n_e ~ 1e-4 cm^-3
-    // gives t_resp ~ 1e12 s ~ 32,000 years
-    double t_resp = 1.0e12 / run_globals.units.UnitTime_in_s; // in code units
-    
-    // Memory probability: exponential decay
-    bhar_contribution *= exp(-t_off / t_resp);
-  }
-  gal->EffectiveBHAR += bhar_contribution;
+  gal->EffectiveBHAR += BHemissivity / accretion_time * factor;
 
   // quasar mode feedback
   m_reheat = run_globals.params.physics.QuasarModeEff * 2. * ETA * run_globals.Csquare * accreted_mass / Vvir / Vvir;

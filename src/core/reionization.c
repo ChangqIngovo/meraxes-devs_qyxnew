@@ -1483,6 +1483,10 @@ void construct_baryon_grids(int snapshot, int local_ngals)
   ptrdiff_t buffer_size = run_globals.reion_grids.buffer_size;
   float* buffer = run_globals.reion_grids.buffer;
 
+  // Compute snapshot timestep once (used for BHAR memory weighting)
+  // Note: snapshot > 0 since reionization doesn't start at snapshot 0
+  double dt = (snapshot > 0) ? (run_globals.LTTime[snapshot - 1] - run_globals.LTTime[snapshot]) : 0.0;
+
   enum property
   {
     prop_stellar,
@@ -1589,8 +1593,24 @@ void construct_baryon_grids(int snapshot, int local_ngals)
             case prop_effective_bhar:
               // for ionizing_source_formation_rate_grid, need further convertion due to different UV spectral index of
               // quasar and stellar component
-              if (gal->BlackHoleMass >= run_globals.params.physics.BlackHoleMassLimitReion)
-                buffer[ind] += gal->EffectiveBHAR;
+              if (gal->BlackHoleMass >= run_globals.params.physics.BlackHoleMassLimitReion) {
+                double bhar_contribution = gal->EffectiveBHAR;
+                
+                // Get local Gamma from grid at galaxy position (used for memory weighting)
+                float Gamma_local = run_globals.reion_grids.Gamma12[ind];
+                
+                // Relaxation timescale: t_resp ~ 1/(Gamma + alpha_B * n_e)
+                // For now use Gamma alone; recombination can be added later
+                double t_resp = (Gamma_local > 0.0) ? (1.0 / Gamma_local) : (1.0e12 / run_globals.units.UnitTime_in_s);
+                
+                // Apply memory weighting if quasar was off for part of snapshot
+                if ((gal->DutyCycleAGN < 1.0) && (gal->BHAccretionOnTime >= 0.0)) {
+                  double t_off = dt * (1.0 - gal->DutyCycleAGN) * (1.0 - gal->BHAccretionOnTime);
+                  bhar_contribution *= exp(-t_off / t_resp);
+                }
+                
+                buffer[ind] += bhar_contribution;
+              }
               break;
 
             case prop_sfr:
