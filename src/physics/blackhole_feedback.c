@@ -194,16 +194,33 @@ void previous_merger_driven_BH_growth(galaxy_t* gal, int snapshot)
   calculate_BHemissivity(gal->BlackHoleMass, accreted_mass, &BHemissivity, &accretion_time);
   // historical reason for us to store nion rather than the emissivity in BHemissivity...
   gal->BHemissivity += BHemissivity;
-  gal->DutyCycleAGN = accretion_time / dt * (1.0 - on_time_fraction);
+  gal->DutyCycleAGN = accretion_time / effective_dt;
   if (gal-> DutyCycleAGN > 1){
-      gal-> DutyCycleAGN = 1.0;
       mlog("Capping DutyCycleAGN (%.5f)\n", MLOG_MESG, gal-> DutyCycleAGN);
+      gal-> DutyCycleAGN = 1.0;
   }
 
   assert(gal->DutyCycleAGN <= 1);
   gal->BlackHoleMass += (1. - ETA) * accreted_mass;
   gal->EffectiveBHM += BHemissivity * factor;
-  gal->EffectiveBHAR += BHemissivity / accretion_time * factor;
+  
+  // Apply memory weighting to quasar ionization contribution
+  double bhar_contribution = BHemissivity / accretion_time * factor;
+  if (gal->DutyCycleAGN < 1.0) {
+    // Quasar was off for part of the snapshot - apply exponential memory decay
+    double t_off = effective_dt * (1.0 - gal->DutyCycleAGN);
+    
+    // Use representative relaxation timescale
+    // t_resp ~ 1/(Gamma_baseline + alpha_B * n_e)
+    // TODO: Make this a parameter and/or compute from local conditions
+    // For typical IGM: Gamma ~ 1e-12 s^-1, alpha_B ~ 2.6e-13 cm^3/s, n_e ~ 1e-4 cm^-3
+    // gives t_resp ~ 1e12 s ~ 32,000 years
+    double t_resp = 1.0e12 / run_globals.units.UnitTime_in_s; // in code units
+    
+    // Memory probability: exponential decay
+    bhar_contribution *= exp(-t_off / t_resp);
+  }
+  gal->EffectiveBHAR += bhar_contribution;
 
   // quasar mode feedback
   m_reheat = run_globals.params.physics.QuasarModeEff * 2. * ETA * run_globals.Csquare * accreted_mass / Vvir / Vvir;
