@@ -484,6 +484,7 @@ typedef struct reion_grids_t
   float* Gamma12;
   float* residual_xH;
   float* clumping_factor;
+  float* t_resp;  // Relaxation timescale grid: 1/(Gamma + alpha_B * n_e)
 
   // Grids necessary for the 21cm brightness temperature
   float* delta_T;
@@ -520,6 +521,7 @@ typedef struct reion_grids_t
   double volume_weighted_global_N_rec;
   double volume_weighted_global_residual_xH;
   double volume_weighted_global_clumping_factor;
+  double volume_weighted_global_t_resp;
   double volume_weighted_global_weighted_sfr;
   double volume_weighted_global_effective_bhar;
 
@@ -530,6 +532,7 @@ typedef struct reion_grids_t
   double mass_weighted_global_N_rec;
   double mass_weighted_global_residual_xH;
   double mass_weighted_global_clumping_factor;
+  double mass_weighted_global_t_resp;
 
   double volume_ave_J_alpha;
   double volume_ave_xalpha;

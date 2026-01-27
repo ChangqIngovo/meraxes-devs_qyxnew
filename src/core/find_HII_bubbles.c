@@ -214,6 +214,7 @@ void _find_HII_bubbles(const int snapshot)
   float* N_rec = run_globals.reion_grids.N_rec;
   float* residual_xH = run_globals.reion_grids.residual_xH;
   float* clumping_factor = run_globals.reion_grids.clumping_factor;
+  float* t_resp = run_globals.reion_grids.t_resp;
   fftwf_complex* N_rec_unfiltered = NULL;
   fftwf_complex* N_rec_filtered = NULL;
   if (run_globals.params.Flag_IncludeRecombinations) {
@@ -593,6 +594,14 @@ void _find_HII_bubbles(const int snapshot)
           clumping_factor[i_real] = (float)cf;
 
           volume_weighted_global_N_rec += (double)N_rec[i_padded];
+          // Compute relaxation timescale: t_resp = 1 / (Gamma + recombination_rate)
+          t_resp[i_real] = Gamma12[i_real] * Hubble_h * Hubble_h * 1e-12 + recombination_rate;
+          if (t_resp[i_real] > 0)
+            t_resp[i_real] = 1.0 / t_resp[i_real];
+          else
+            t_resp[i_real] = 1e30; // effectively infinite
+          t_resp[i_real] /= run_globals.units.UnitTime_in_s; // convert to code units
+          
           volume_weighted_global_residual_xH += (double)residual_xH[i_real];
           volume_weighted_global_clumping_factor += (double)clumping_factor[i_real];
           volume_weighted_global_Gamma12 += (double)Gamma12[i_real];

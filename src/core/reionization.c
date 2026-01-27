@@ -639,6 +639,7 @@ void malloc_reionization_grids()
   grids->Gamma12 = NULL;
   grids->residual_xH = NULL;
   grids->clumping_factor = NULL;
+  grids->t_resp = NULL;
   grids->N_rec = NULL;
   grids->N_rec_filtered = NULL;
   grids->N_rec_unfiltered = NULL;
@@ -941,6 +942,7 @@ void malloc_reionization_grids()
       grids->Gamma12 = fftwf_alloc_real((size_t)slab_n_real);
       grids->residual_xH = fftwf_alloc_real((size_t)slab_n_real);
       grids->clumping_factor = fftwf_alloc_real((size_t)slab_n_real);
+      grids->t_resp = fftwf_alloc_real((size_t)slab_n_real);
     }
 
     if (run_globals.params.Flag_Compute21cmBrightTemp) {
@@ -1076,6 +1078,7 @@ void free_reionization_grids()
     fftwf_free(grids->z_re);
     fftwf_free(grids->residual_xH);
     fftwf_free(grids->clumping_factor);
+    fftwf_free(grids->t_resp);
 
     fftwf_destroy_plan(grids->N_rec_filtered_reverse_plan);
     fftwf_destroy_plan(grids->N_rec_forward_plan);
@@ -1439,6 +1442,7 @@ void construct_baryon_grids(int snapshot, int local_ngals)
   float* weighted_sfr_grid = run_globals.reion_grids.weighted_sfr;
   int ReionGridDim = run_globals.params.ReionGridDim;
   double sfr_timescale = run_globals.params.ReionSfrTimescale * hubble_time(snapshot);
+  double bhar_contribution, t_off, t_resp;
 #if USE_MINI_HALOS
   float* stellarIII_grid = run_globals.reion_grids.starsIII;
   float* sfrIII_grid = run_globals.reion_grids.sfrIII;
@@ -1591,21 +1595,13 @@ void construct_baryon_grids(int snapshot, int local_ngals)
               break;
 
             case prop_effective_bhar:
-              // for ionizing_source_formation_rate_grid, need further convertion due to different UV spectral index of
-              // quasar and stellar component
               if (gal->BlackHoleMass >= run_globals.params.physics.BlackHoleMassLimitReion) {
-                double bhar_contribution = gal->EffectiveBHAR;
+                bhar_contribution = gal->EffectiveBHAR;
                 
-                // Get local Gamma from grid at galaxy position (used for memory weighting)
-                float Gamma_local = run_globals.reion_grids.Gamma12[ind];
-                
-                // Relaxation timescale: t_resp ~ 1/(Gamma + alpha_B * n_e)
-                // For now use Gamma alone; recombination can be added later
-                double t_resp = (Gamma_local > 0.0) ? (1.0 / Gamma_local) : (1.0e12 / run_globals.units.UnitTime_in_s);
-                
-                // Apply memory weighting if quasar was off for part of snapshot
+                // Apply memory weighting using local relaxation timescale t_resp (already in internal units)
                 if ((gal->DutyCycleAGN < 1.0) && (gal->BHAccretionOnTime >= 0.0)) {
-                  double t_off = dt * (1.0 - gal->DutyCycleAGN) * (1.0 - gal->BHAccretionOnTime);
+                  t_off = dt * (1.0 - gal->DutyCycleAGN) * (1.0 - gal->BHAccretionOnTime);
+                  t_resp = run_globals.reion_grids.t_resp[ind];
                   bhar_contribution *= exp(-t_off / t_resp);
                 }
                 
