@@ -624,6 +624,7 @@ typedef struct galaxy_t
   double BlackHoleAccretedHotMass;
   double BlackHoleAccretedColdMass;
   double BlackHoleAccretingColdMass;
+  double BHAccretionOnTime;     //!< Random on-time fraction [0, 1] for when accretion starts within snapshot; -1 indicates no prior accretion
 
   int Galaxy_Population; // You need it also if you are not disentangling PopIII/PopII (when Mini_halos is off, this is
                          // = 2)

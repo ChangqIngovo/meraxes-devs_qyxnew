@@ -60,6 +60,7 @@ galaxy_t* new_galaxy(int snapshot, unsigned long halo_ID)
   gal->BlackHoleAccretedHotMass = 0.0;
   gal->BlackHoleAccretedColdMass = 0.0;
   gal->BlackHoleAccretingColdMass = 0.0;
+  gal->BHAccretionOnTime = -1.0;
   gal->Sfr = 0.0;
   gal->FescWeightedSfr = 0.0;
   gal->Cos_Inc = gsl_rng_uniform(run_globals.random_generator);

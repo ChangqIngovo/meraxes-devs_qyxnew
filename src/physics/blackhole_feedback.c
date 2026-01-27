@@ -161,8 +161,22 @@ void previous_merger_driven_BH_growth(galaxy_t* gal, int snapshot)
   // snapshot is the current snapshot, snapshot+1 is the next snapshot in the past.
   double dt = run_globals.LTTime[snapshot - 1] - run_globals.LTTime[snapshot];
 
-  // Eddington rate
-  accreted_mass = expm1(dt / run_globals.EddingtonTimescale / ETA * run_globals.params.physics.EddingtonRatio) *
+  // Determine the accretion on-time within this snapshot
+  double on_time_fraction;
+  if (gal->BHAccretionOnTime < 0.0) {
+    // First snapshot of accretion after merger - assign random on-time
+    on_time_fraction = gsl_rng_uniform(run_globals.random_generator);
+    gal->BHAccretionOnTime = on_time_fraction;
+  } else {
+    // Accretion was already happening in previous snapshot - start immediately
+    on_time_fraction = 0.0;
+  }
+
+  // Adjust effective timestep based on when accretion starts
+  double effective_dt = dt * (1.0 - on_time_fraction);
+
+  // Eddington rate (using effective timestep)
+  accreted_mass = expm1(effective_dt / run_globals.EddingtonTimescale / ETA * run_globals.params.physics.EddingtonRatio) *
                   gal->BlackHoleMass;
 
   // limit accretion to what is need
@@ -172,11 +186,15 @@ void previous_merger_driven_BH_growth(galaxy_t* gal, int snapshot)
   gal->BlackHoleAccretedColdMass += accreted_mass;
   gal->BlackHoleAccretingColdMass -= accreted_mass;
 
+  // Reset on-time if accretion is complete
+  if (gal->BlackHoleAccretingColdMass <= 0.0)
+    gal->BHAccretionOnTime = -1.0;
+
   // N_gamma,q * N_bh; later 1e60*BHemissivity * PROTONMASS/1e10/SOLAR_MASS will be N_gamma,q * M_bh
   calculate_BHemissivity(gal->BlackHoleMass, accreted_mass, &BHemissivity, &accretion_time);
   // historical reason for us to store nion rather than the emissivity in BHemissivity...
   gal->BHemissivity += BHemissivity;
-  gal->DutyCycleAGN = accretion_time / dt;
+  gal->DutyCycleAGN = accretion_time / dt * (1.0 - on_time_fraction);
   if (gal-> DutyCycleAGN > 1){
       gal-> DutyCycleAGN = 1.0;
       mlog("Capping DutyCycleAGN (%.5f)\n", MLOG_MESG, gal-> DutyCycleAGN);
