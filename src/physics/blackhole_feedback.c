@@ -163,22 +163,25 @@ void previous_merger_driven_BH_growth(galaxy_t* gal, int snapshot)
   double dt = (snapshot > 0) ? (run_globals.LTTime[snapshot - 1] - run_globals.LTTime[snapshot]) : 0.0;
 
   // Determine the accretion on-time within this snapshot
-  double on_time_fraction;
-  if (gal->BHAccretionOnTime < 0.0) {
-    // First snapshot of accretion after merger - assign random on-time
-    on_time_fraction = gsl_rng_uniform(run_globals.random_generator);
+  if (run_globals.params.physics.Flag_BHARExponentialCut) {
+    if (gal->BHAccretionOnTime < 0.0) {
+      // First snapshot of accretion after merger - assign random on-time
+      gal->BHAccretionOnTime = gsl_rng_uniform(run_globals.random_generator);
+    } else {
+      // Accretion was already happening in previous snapshot - start immediately
+      gal->BHAccretionOnTime = 0.0;
+    }
+    // Adjust effective timestep based on when accretion starts
+    dt *= (1.0 - gal->BHAccretionOnTime);
   } else {
-    // Accretion was already happening in previous snapshot - start immediately
-    on_time_fraction = 0.0;
+    // No random on-time when using duty-cycle weighting
+    gal->BHAccretionOnTime = 0.0;
   }
-  gal->BHAccretionOnTime = on_time_fraction;
 
-  // Adjust effective timestep based on when accretion starts
-  double effective_dt = dt * (1.0 - on_time_fraction);
 
-  if (effective_dt > 0.0){
+  if (dt > 0.0){
     // Eddington rate (using effective timestep)
-    accreted_mass = expm1(effective_dt / run_globals.EddingtonTimescale / ETA * run_globals.params.physics.EddingtonRatio) *
+    accreted_mass = expm1(dt / run_globals.EddingtonTimescale / ETA * run_globals.params.physics.EddingtonRatio) *
                     gal->BlackHoleMass;
 
     // limit accretion to what is need
@@ -196,19 +199,24 @@ void previous_merger_driven_BH_growth(galaxy_t* gal, int snapshot)
     calculate_BHemissivity(gal->BlackHoleMass, accreted_mass, &BHemissivity, &accretion_time);
     // historical reason for us to store nion rather than the emissivity in BHemissivity...
     gal->BHemissivity += BHemissivity;
-    gal->DutyCycleAGN = accretion_time / effective_dt;
+    gal->DutyCycleAGN = accretion_time / dt;
     CLAMP_0_1(gal->DutyCycleAGN);
         
     gal->BlackHoleMass += (1. - ETA) * accreted_mass;
     gal->EffectiveBHM += BHemissivity * factor;
 
-    BHemissivity *=  factor / accretion_time;
-    t_off =  (1.0 - gal->DutyCycleAGN) * effective_dt;
-      
-    if (t_off > 0.0){
+    BHemissivity *= factor / accretion_time;
+
+    if (run_globals.params.physics.Flag_BHARExponentialCut) {
+      t_off = (1.0 - gal->DutyCycleAGN) * dt;
+      if (t_off > 0.0) {
         t_resp = gal->t_resp * run_globals.params.Hubble_h / units->UnitTime_in_Megayears;
-        BHemissivity *= exp(-t_off / t_resp);
-    }
+        if (t_resp > 0.0)
+          BHemissivity *= exp(-t_off / t_resp);
+      }
+    } else
+      BHemissivity *= gal->DutyCycleAGN;
+
     gal->EffectiveBHAR += BHemissivity;
 
     // quasar mode feedback

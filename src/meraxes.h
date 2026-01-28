@@ -196,6 +196,7 @@ typedef struct physics_params_t
   // Flags
   int Flag_ReionizationModifier;
   int Flag_BHFeedback;
+  int Flag_BHARExponentialCut;
   int Flag_IRA;
   int Flag_FixDiskRadiusOnInfall;
   int Flag_FixVmaxOnInfall;
