@@ -86,6 +86,7 @@ typedef struct galaxy_output_t
   float BaryonFracModifier;
   float FOFMvirModifier;
   float MvirCrit;
+  float tau_cgm;
   float dt;
   float MergerBurstMass;
 

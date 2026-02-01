@@ -472,6 +472,11 @@ void read_parameter_file(char* fname, int mode)
       required_tag[n_param] = 1;
       params_type[n_param++] = PARAM_TYPE_INT;
 
+      strncpy(params_tag[n_param], "Flag_FescCGMSuppression", tag_length);
+      params_addr[n_param] = &(run_params->physics).Flag_FescCGMSuppression;
+      required_tag[n_param] = 0;
+      params_type[n_param++] = PARAM_TYPE_INT;
+
       strncpy(params_tag[n_param], "InstantSfIII", tag_length);
       params_addr[n_param] = &(run_params->physics).InstantSfIII;
 #if USE_MINI_HALOS
@@ -1013,6 +1018,21 @@ void read_parameter_file(char* fname, int mode)
       strncpy(params_tag[n_param], "EscapeFracBHScaling", tag_length);
       params_addr[n_param] = &(run_params->physics).EscapeFracBHScaling;
       required_tag[n_param] = 1;
+      params_type[n_param++] = PARAM_TYPE_DOUBLE;
+
+      strncpy(params_tag[n_param], "FescCGMSuppressionNorm", tag_length);
+      params_addr[n_param] = &(run_params->physics).FescCGMSuppressionNorm;
+      required_tag[n_param] = 0;
+      params_type[n_param++] = PARAM_TYPE_DOUBLE;
+
+      strncpy(params_tag[n_param], "FescCGMSuppressionScaling", tag_length);
+      params_addr[n_param] = &(run_params->physics).FescCGMSuppressionScaling;
+      required_tag[n_param] = 0;
+      params_type[n_param++] = PARAM_TYPE_DOUBLE;
+
+      strncpy(params_tag[n_param], "FescCGMGamma12Scaling", tag_length);
+      params_addr[n_param] = &(run_params->physics).FescCGMGamma12Scaling;
+      required_tag[n_param] = 0;
       params_type[n_param++] = PARAM_TYPE_DOUBLE;
 
       strncpy(params_tag[n_param], "ReionSMParam_m0", tag_length);

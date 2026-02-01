@@ -87,6 +87,7 @@ void prepare_galaxy_for_output(galaxy_t gal, galaxy_output_t* galout, int i_snap
   galout->BaryonFracModifier = (float)(gal.BaryonFracModifier);
   galout->FOFMvirModifier = (float)(gal.FOFMvirModifier);
   galout->MvirCrit = (float)(gal.MvirCrit);
+  galout->tau_cgm = (float)(gal.tau_cgm);
   galout->dt = (float)(gal.dt * units->UnitTime_in_Megayears);
   galout->MergerBurstMass = (float)(gal.MergerBurstMass);
   galout->MergTime = (float)(gal.MergTime * units->UnitTime_in_Megayears);

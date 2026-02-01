@@ -207,6 +207,11 @@ void merge_with_target(galaxy_t* gal, int* dead_gals, int snapshot)
     parent->DutyCycleAGN = gal->DutyCycleAGN;
     parent->t_resp = gal->t_resp;
   }
+
+  // take the CGM tau from the one with more CGM
+  if (parent->HotGas < gal->HotGas)
+    parent->tau_cgm = gal->tau_cgm;
+
   parent->BlackHoleAccretedHotMass += gal->BlackHoleAccretedHotMass;
   parent->BlackHoleAccretedColdMass += gal->BlackHoleAccretedColdMass;
   parent->BlackHoleAccretingColdMass += gal->BlackHoleAccretingColdMass;

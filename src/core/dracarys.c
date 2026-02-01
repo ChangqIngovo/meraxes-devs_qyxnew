@@ -320,6 +320,9 @@ void dracarys()
 #endif
         if (run_globals.params.Flag_IncludeRecombinations)
           assign_Mvir_crit_to_galaxies(ngals_in_slabs, 3);
+        // Compute tau_cgm for CGM suppression of fesc
+        if (run_globals.params.physics.Flag_FescCGMSuppression)
+          assign_Mvir_crit_to_galaxies(ngals_in_slabs, 4);
       }
     }
 

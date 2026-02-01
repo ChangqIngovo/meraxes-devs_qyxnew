@@ -124,6 +124,18 @@ void update_galaxy_fesc_vals(galaxy_t* gal, double new_stars, int snapshot)
       mlog_error("Unrecognised EscapeFracDependency parameter value.");
   }
 
+  // CGM suppression of fesc based on pre-computed tau_cgm (optical depth formulation)
+  if (params->Flag_FescCGMSuppression && (gal->tau_cgm > 0.0)) {
+    // Suppression through optical depth: fesc_suppressed = fesc * exp(-tau_CGM)
+    // tau_cgm is computed during reionization grid processing and stored per galaxy
+    
+    double suppression = exp(-gal->tau_cgm);
+    fesc *= suppression;
+#if USE_MINI_HALOS
+    fescIII *= suppression;
+#endif
+  }
+
   CLAMP_0_1(fesc);
 
 #if USE_MINI_HALOS
@@ -1244,7 +1256,7 @@ int map_galaxies_to_slabs(int ngals)
 }
 
 void assign_Mvir_crit_to_galaxies(int ngals_in_slabs, int flag_feed)
-// flag = 1 Reio feedback, flag = 2 LW feedback, flag = 3 t_resp assignment
+// flag = 1 Reio feedback, flag = 2 LW feedback, flag = 3 t_resp assignment, flag = 4 tau_cgm computation
 {
   // N.B. We are assuming here that the galaxy_to_slab mapping has been sorted
   // by slab index...
@@ -1257,10 +1269,12 @@ void assign_Mvir_crit_to_galaxies(int ngals_in_slabs, int flag_feed)
   double box_size = run_globals.params.BoxSize;
   float* Mvir_crit = run_globals.reion_grids.Mvir_crit;
   float* t_resp_grid = run_globals.reion_grids.t_resp;
+  float* Gamma12_grid = run_globals.reion_grids.Gamma12;
 #if USE_MINI_HALOS
   float* Mvir_crit_MC = run_globals.reion_grids.Mvir_crit_MC;
 #endif
   int total_assigned = 0;
+  double gamma12_local;
 
   if (flag_feed == 1) {
     // float* Mvir_crit = run_globals.reion_grids.Mvir_crit;
@@ -1281,6 +1295,15 @@ void assign_Mvir_crit_to_galaxies(int ngals_in_slabs, int flag_feed)
     else {
       mlog_error("Cannot assign t_resp to galaxies when t_resp grid is not available...");
       ABORT(EXIT_FAILURE);
+    }
+  }
+
+  if (flag_feed == 4) {
+    if (run_globals.params.physics.Flag_FescCGMSuppression)
+      mlog("Computing tau_cgm for galaxies...", MLOG_OPEN);
+    else {
+      mlog("Skipping tau_cgm computation (flag disabled)...", MLOG_MESG);
+      return;
     }
   }
 
@@ -1445,6 +1468,46 @@ void assign_Mvir_crit_to_galaxies(int ngals_in_slabs, int flag_feed)
       }
     }
 
+    if (flag_feed == 4) {
+      if (i_skip > 0) {
+        MPI_Sendrecv(&recv_flag,
+                     sizeof(bool),
+                     MPI_BYTE,
+                     recv_from_rank,
+                     6393762,
+                     &send_flag,
+                     sizeof(bool),
+                     MPI_BYTE,
+                     send_to_rank,
+                     6393762,
+                     run_globals.mpi_comm,
+                     MPI_STATUS_IGNORE);
+
+        if (send_to_rank > run_globals.mpi_rank) {
+          if (send_flag) {
+            int n_cells = (int)(slab_nix[run_globals.mpi_rank] * ReionGridDim * ReionGridDim);
+            MPI_Send(Gamma12_grid, n_cells, MPI_FLOAT, send_to_rank, 793712, run_globals.mpi_comm);
+          }
+          if (recv_flag) {
+            int n_cells = (int)(slab_nix[recv_from_rank] * ReionGridDim * ReionGridDim);
+            MPI_Recv(buffer, n_cells, MPI_FLOAT, recv_from_rank, 793712, run_globals.mpi_comm, MPI_STATUS_IGNORE);
+          }
+        } else {
+          if (recv_flag) {
+            int n_cells = (int)(slab_nix[recv_from_rank] * ReionGridDim * ReionGridDim);
+            MPI_Recv(buffer, n_cells, MPI_FLOAT, recv_from_rank, 793712, run_globals.mpi_comm, MPI_STATUS_IGNORE);
+          }
+          if (send_flag) {
+            int n_cells = (int)(slab_nix[run_globals.mpi_rank] * ReionGridDim * ReionGridDim);
+            MPI_Send(Gamma12_grid, n_cells, MPI_FLOAT, send_to_rank, 793712, run_globals.mpi_comm);
+          }
+        }
+      } else {
+        int n_cells = (int)(slab_nix[recv_from_rank] * ReionGridDim * ReionGridDim);
+        memcpy(buffer, Gamma12_grid, sizeof(float) * n_cells);
+      }
+    }
+
     // if this core has received a slab of Mvir_crit then assign values to the
     // galaxies which belong to this slab
     if (recv_flag) {
@@ -1471,6 +1534,24 @@ void assign_Mvir_crit_to_galaxies(int ngals_in_slabs, int flag_feed)
 
         if (flag_feed == 3)
           gal->t_resp = (double)buffer[grid_index(ix, iy, iz, ReionGridDim, INDEX_REAL)];
+
+        // Compute tau_cgm from HotGas and local Gamma12 value
+        if (flag_feed == 4) {
+          physics_params_t* params = &(run_globals.params.physics);
+          if (gal->HotGas > 0.0) {
+
+            gamma12_local = (double)buffer[grid_index(ix, iy, iz, ReionGridDim, INDEX_REAL)];
+            // normalize to 1e-12 s^-1
+            gamma12_local *= run_globals.params.Hubble_h * run_globals.params.Hubble_h;
+            CLAMP_NEGATIVE(gamma12_local);
+            
+            // Calculate optical depth from hot gas column density (HotGas/Rvir^2), normalized at 1e8 Msk / (10 kpc)^2
+            gal->tau_cgm = params->FescCGMSuppressionNorm * 
+                           pow(gal->HotGas * 1.0e2 / run_globals.params.Hubble_h, params->FescCGMSuppressionScaling) * 
+                           pow(0.01 * run_globals.params.Hubble_h / gal->Rvir, 2.0 * params->FescCGMSuppressionScaling) *
+                           pow(gamma12_local , params->FescCGMGamma12Scaling);
+          } 
+        }
 
         // increment counters
         i_gal++;
