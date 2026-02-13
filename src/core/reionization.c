@@ -1393,32 +1393,32 @@ void assign_Mvir_crit_to_galaxies(int ngals_in_slabs, int flag_feed)
                      sizeof(bool),
                      MPI_BYTE,
                      recv_from_rank,
-                     6393762,
+                     6393763,
                      &send_flag,
                      sizeof(bool),
                      MPI_BYTE,
                      send_to_rank,
-                     6393762,
+                     6393763,
                      run_globals.mpi_comm,
                      MPI_STATUS_IGNORE);
 
         if (send_to_rank > run_globals.mpi_rank) {
           if (send_flag) {
             int n_cells = (int)(slab_nix[run_globals.mpi_rank] * ReionGridDim * ReionGridDim);
-            MPI_Send(Mvir_crit_MC, n_cells, MPI_FLOAT, send_to_rank, 793710, run_globals.mpi_comm);
+            MPI_Send(Mvir_crit_MC, n_cells, MPI_FLOAT, send_to_rank, 793713, run_globals.mpi_comm);
           }
           if (recv_flag) {
             int n_cells = (int)(slab_nix[recv_from_rank] * ReionGridDim * ReionGridDim);
-            MPI_Recv(buffer, n_cells, MPI_FLOAT, recv_from_rank, 793710, run_globals.mpi_comm, MPI_STATUS_IGNORE);
+            MPI_Recv(buffer, n_cells, MPI_FLOAT, recv_from_rank, 793713, run_globals.mpi_comm, MPI_STATUS_IGNORE);
           }
         } else {
           if (recv_flag) {
             int n_cells = (int)(slab_nix[recv_from_rank] * ReionGridDim * ReionGridDim);
-            MPI_Recv(buffer, n_cells, MPI_FLOAT, recv_from_rank, 793710, run_globals.mpi_comm, MPI_STATUS_IGNORE);
+            MPI_Recv(buffer, n_cells, MPI_FLOAT, recv_from_rank, 793713, run_globals.mpi_comm, MPI_STATUS_IGNORE);
           }
           if (send_flag) {
             int n_cells = (int)(slab_nix[run_globals.mpi_rank] * ReionGridDim * ReionGridDim);
-            MPI_Send(Mvir_crit_MC, n_cells, MPI_FLOAT, send_to_rank, 793710, run_globals.mpi_comm);
+            MPI_Send(Mvir_crit_MC, n_cells, MPI_FLOAT, send_to_rank, 793713, run_globals.mpi_comm);
           }
         }
       } else {
@@ -1434,12 +1434,12 @@ void assign_Mvir_crit_to_galaxies(int ngals_in_slabs, int flag_feed)
                      sizeof(bool),
                      MPI_BYTE,
                      recv_from_rank,
-                     6393762,
+                     6393764,
                      &send_flag,
                      sizeof(bool),
                      MPI_BYTE,
                      send_to_rank,
-                     6393762,
+                     6393764,
                      run_globals.mpi_comm,
                      MPI_STATUS_IGNORE);
 
@@ -1474,12 +1474,12 @@ void assign_Mvir_crit_to_galaxies(int ngals_in_slabs, int flag_feed)
                      sizeof(bool),
                      MPI_BYTE,
                      recv_from_rank,
-                     6393762,
+                     6393765,
                      &send_flag,
                      sizeof(bool),
                      MPI_BYTE,
                      send_to_rank,
-                     6393762,
+                     6393765,
                      run_globals.mpi_comm,
                      MPI_STATUS_IGNORE);
 
