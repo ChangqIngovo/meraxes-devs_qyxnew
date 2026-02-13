@@ -1538,7 +1538,7 @@ void assign_Mvir_crit_to_galaxies(int ngals_in_slabs, int flag_feed)
         // Compute tau_cgm from HotGas and local Gamma12 value
         if (flag_feed == 4) {
           physics_params_t* params = &(run_globals.params.physics);
-          if (gal->HotGas > 0.0) {
+          if (gal->HotGas > 0.0 && gal->Rvir > 0.0) {
 
             gamma12_local = (double)buffer[grid_index(ix, iy, iz, ReionGridDim, INDEX_REAL)];
             // normalize to 1e-12 s^-1
