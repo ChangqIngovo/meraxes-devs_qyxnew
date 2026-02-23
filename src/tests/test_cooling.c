@@ -2,12 +2,12 @@
 #include <criterion/criterion.h>
 #include <criterion/parameterized.h>
 #include <math.h>
-#include <meraxes.h>
+#include "meraxes.h"
 #include <mpi.h>
 #include <string.h>
 
 // Include the cooling source to access static functions
-#include "../core/cooling.c"
+#include "core/cooling.c"
 
 // Test fixture setup
 void setup(void)

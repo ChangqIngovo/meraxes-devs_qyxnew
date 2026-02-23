@@ -15,7 +15,7 @@ if(CRITERION_FOUND)
 
     add_executable(test_cooling test_cooling.c)
     set_property(TARGET test_cooling PROPERTY C_STANDARD 99)
-    target_include_directories(test_cooling PRIVATE ${CRITERION_INCLUDE_DIR} ${CMAKE_SOURCE_DIR})
+    target_include_directories(test_cooling PRIVATE ${CRITERION_INCLUDE_DIR} ${CMAKE_SOURCE_DIR}/src ${CMAKE_BINARY_DIR})
     target_link_libraries(test_cooling PRIVATE ${CRITERION_LIBRARY} meraxes_lib)
     add_test(NAME test_cooling COMMAND test_cooling)
 else()
