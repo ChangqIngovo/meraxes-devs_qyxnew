@@ -1545,11 +1545,11 @@ void assign_Mvir_crit_to_galaxies(int ngals_in_slabs, int flag_feed)
             gamma12_local *= run_globals.params.Hubble_h * run_globals.params.Hubble_h;
             CLAMP_NEGATIVE(gamma12_local);
             
-            // Calculate optical depth from hot gas column density (HotGas/Rvir^2), normalized at 1e8 Msk / (10 kpc)^2
+            // Calculate optical depth from hot gas column density (HotGas/Rvir^2), normalized at 1e8 Msk / (10 kpc)^2 and 0.1 for Gamma12
             gal->tau_cgm = params->FescCGMSuppressionNorm * 
                            pow(gal->HotGas * 1.0e2 / run_globals.params.Hubble_h, params->FescCGMSuppressionScaling) * 
                            pow(0.01 * run_globals.params.Hubble_h / gal->Rvir, 2.0 * params->FescCGMSuppressionScaling) *
-                           pow(gamma12_local , params->FescCGMGamma12Scaling);
+                           pow(gamma12_local * 10, params->FescCGMGamma12Scaling);
           } 
         }
 
