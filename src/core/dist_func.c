@@ -12,24 +12,6 @@
 #include "dist_func.h"
 #include "meraxes.h"
 
-//! Extract Mvir (halo virial mass) from galaxy
-double df_get_mvir(const galaxy_t* gal)
-{
-  // Convert to log10(M) in solar masses / h
-  double mvir_solar_h = gal->Mvir * 1e10 / run_globals.params.Hubble_h;
-  return log10(mvir_solar_h);
-}
-
-//! Extract stellar mass from galaxy
-double df_get_stellar_mass(const galaxy_t* gal)
-{
-  // Convert to log10(M_stellar) in solar masses
-  double stellar_mass = gal->StellarMass * 1e10 / run_globals.params.Hubble_h;
-  if (stellar_mass <= 0.0)
-    return -1e10;  // Flag for invalid
-  return log10(stellar_mass);
-}
-
 void df_init(distribution_function_t* df, double x_min, double x_max, int bins_per_dex, const char* description)
 {
   assert(df != NULL);
@@ -90,7 +72,7 @@ void df_calculate(distribution_function_t* df, galaxy_t* galaxies,
 {
   assert(df != NULL);
   assert(galaxies != NULL);
-  // get_property can be NULL - will use default Mvir extractor
+  assert(get_property != NULL);
 
   // Calculate comoving volume in (Mpc/h)^3
   df->volume = (box_size / hubble_h);
@@ -106,14 +88,8 @@ void df_calculate(distribution_function_t* df, galaxy_t* galaxies,
       continue;
     }
 
-    // Get property value from galaxy (default to Mvir if no function provided)
-    double value;
-    if (get_property != NULL) {
-      value = get_property(gal);
-    } else {
-      // Default to Mvir for HMF
-      value = df_get_mvir(gal);
-    }
+    // Get property value from galaxy
+    double value = get_property(gal);
 
     // Check if valid and within range
     if (value < df->x_min || value > df->x_max) {

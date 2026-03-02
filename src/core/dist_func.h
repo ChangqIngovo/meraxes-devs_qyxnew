@@ -46,7 +46,7 @@ extern "C"
   //! Calculate a generic distribution function from a linked list of galaxies
   //! \param[in,out] df Pointer to distribution function to be filled
   //! \param[in] galaxies Pointer to first galaxy in linked list
-  //! \param[in] get_property Function pointer to extract property from galaxy
+  //! \param[in] get_property Function pointer to extract property from galaxy (required)
   //! \param[in] hubble_h Hubble constant (H0 / 100)
   //! \param[in] box_size Box size in Mpc/h
   void df_calculate(distribution_function_t* df, galaxy_t* galaxies, 
@@ -71,10 +71,6 @@ extern "C"
   //! \param[in] units Unit string for the data (e.g., "per Mpc^3 per dex" for HMF/SMF)
   void df_write_hdf5(hid_t file_id, const char* group_name, const distribution_function_t* df, 
                      const char* dataset_prefix, const char* units);
-
-  // Property extractors for common properties from galaxy_t
-  extern double df_get_mvir(const galaxy_t* gal);         //!< Halo virial mass
-  extern double df_get_stellar_mass(const galaxy_t* gal); //!< Stellar mass
 
 #ifdef __cplusplus
 }
