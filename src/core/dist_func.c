@@ -22,8 +22,8 @@ void df_init(distribution_function_t* df, double x_min, double x_max, int bins_p
   df->x_max = x_max;
 
   // Logarithmic binning: bins per dex (or per magnitude for UVLF/DustyLF)
-  df->bin_width = 1.0 / bins_per_dex;
-  df->n_bins = (int)((x_max - x_min) / df->bin_width);
+  df->n_bins = (int)((x_max - x_min) * bins_per_dex);
+  df->bin_width = (x_max - x_min) / df->n_bins;
 
   // Allocate memory for bins and counts
   df->bins = (distribution_bin_t*)malloc(df->n_bins * sizeof(distribution_bin_t));
