@@ -1343,13 +1343,29 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
       
 #ifdef CALC_MAGS
       if (run_globals.params.Flag_OutputUVLF) {
-        df_accumulate_galaxy_output(&uvlf, &(output_buffer[buffer_count]), 
-                                    (galaxy_output_property_fn)df_get_uv_magnitude_output);
+        // Extract UV magnitude from output structure
+        if (isfinite(output_buffer[buffer_count].Mags[0])) {
+          double uv_mag = output_buffer[buffer_count].Mags[0];
+          if (uv_mag >= uvlf.x_min && uv_mag <= uvlf.x_max) {
+            int bin_idx = (int)((uv_mag - uvlf.x_min) / uvlf.bin_width);
+            if (bin_idx >= 0 && bin_idx < uvlf.n_bins) {
+              uvlf.bin_counts[bin_idx]++;
+            }
+          }
+        }
       }
       
       if (run_globals.params.Flag_OutputDustyLF) {
-        df_accumulate_galaxy_output(&dustylf, &(output_buffer[buffer_count]), 
-                                    (galaxy_output_property_fn)df_get_dusty_uv_magnitude_output);
+        // Extract dusty UV magnitude from output structure
+        if (isfinite(output_buffer[buffer_count].DustyMags[0])) {
+          double dusty_mag = output_buffer[buffer_count].DustyMags[0];
+          if (dusty_mag >= dustylf.x_min && dusty_mag <= dustylf.x_max) {
+            int bin_idx = (int)((dusty_mag - dustylf.x_min) / dustylf.bin_width);
+            if (bin_idx >= 0 && bin_idx < dustylf.n_bins) {
+              dustylf.bin_counts[bin_idx]++;
+            }
+          }
+        }
       }
 #endif
       

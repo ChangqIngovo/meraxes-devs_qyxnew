@@ -3,9 +3,6 @@
 
 #include "meraxes.h"
 
-// Forward declaration of galaxy_output_t (defined in save.h)
-typedef struct galaxy_output_t galaxy_output_t;
-
 //! Generic bin structure for distribution functions (HMF, SMF, LF, etc.)
 typedef struct distribution_bin_t
 {
@@ -30,9 +27,8 @@ typedef struct distribution_function_t
 // Backward compatibility typedef
 typedef distribution_function_t hmf_t;
 
-// Function pointer types for extracting properties
+// Function pointer type for extracting properties from galaxy_t
 typedef double (*galaxy_property_fn)(const galaxy_t* gal);
-typedef double (*galaxy_output_property_fn)(const galaxy_output_t* galout);
 
 #ifdef __cplusplus
 extern "C"
@@ -55,14 +51,6 @@ extern "C"
   //! \param[in] box_size Box size in Mpc/h
   void df_calculate(distribution_function_t* df, galaxy_t* galaxies, 
                     galaxy_property_fn get_property, double hubble_h, double box_size);
-
-  //! Accumulate a single galaxy_output_t into a distribution function
-  //! Used when processing galaxies sequentially (e.g., in output writing loop)
-  //! \param[in,out] df Pointer to distribution function
-  //! \param[in] galout Pointer to galaxy output structure
-  //! \param[in] get_property Function pointer to extract property from galaxy_output_t
-  void df_accumulate_galaxy_output(distribution_function_t* df, const galaxy_output_t* galout,
-                                    galaxy_output_property_fn get_property);
 
   //! Accumulate counts from local process to global distribution (for MPI)
   //! Must be called on all processes before finalization
@@ -87,12 +75,6 @@ extern "C"
   // Property extractors for common properties from galaxy_t
   extern double df_get_mvir(const galaxy_t* gal);         //!< Halo virial mass
   extern double df_get_stellar_mass(const galaxy_t* gal); //!< Stellar mass
-  
-  // Property extractors for galaxy_output_t (for magnitudes computed during output)
-#ifdef CALC_MAGS
-  extern double df_get_uv_magnitude_output(const galaxy_output_t* galout);        //!< UV magnitude (first band)
-  extern double df_get_dusty_uv_magnitude_output(const galaxy_output_t* galout);  //!< Dusty UV magnitude (first band)
-#endif
 
 #ifdef __cplusplus
 }

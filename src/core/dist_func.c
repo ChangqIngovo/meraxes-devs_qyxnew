@@ -11,7 +11,6 @@
 
 #include "dist_func.h"
 #include "meraxes.h"
-#include "save.h"
 
 //! Extract Mvir (halo virial mass) from galaxy
 double df_get_mvir(const galaxy_t* gal)
@@ -30,26 +29,6 @@ double df_get_stellar_mass(const galaxy_t* gal)
     return -1e10;  // Flag for invalid
   return log10(stellar_mass);
 }
-
-#ifdef CALC_MAGS
-//! Extract UV magnitude (first band) from galaxy output structure
-double df_get_uv_magnitude_output(const galaxy_output_t* galout)
-{
-  // Return first band magnitude from output structure
-  if (!isfinite(galout->Mags[0]))
-    return 1e10;  // Invalid flag for NaN magnitudes
-  return galout->Mags[0];
-}
-
-//! Extract dusty UV magnitude (first band) from galaxy output structure
-double df_get_dusty_uv_magnitude_output(const galaxy_output_t* galout)
-{
-  // Return first band dusty magnitude from output structure
-  if (!isfinite(galout->DustyMags[0]))
-    return 1e10;  // Invalid flag for NaN magnitudes
-  return galout->DustyMags[0];
-}
-#endif
 
 void df_init(distribution_function_t* df, double x_min, double x_max, int bins_per_dex, const char* description)
 {
@@ -148,35 +127,6 @@ void df_calculate(distribution_function_t* df, galaxy_t* galaxies,
     if (bin_idx >= 0 && bin_idx < df->n_bins) {
       df->bin_counts[bin_idx]++;
     }
-  }
-}
-
-void df_accumulate_galaxy_output(distribution_function_t* df, const galaxy_output_t* galout,
-                                  galaxy_output_property_fn get_property)
-{
-  assert(df != NULL);
-  assert(galout != NULL);
-  assert(get_property != NULL);
-
-  // Skip ghost galaxies
-  if (galout->GhostFlag) {
-    return;
-  }
-
-  // Get property value from output structure
-  double value = get_property(galout);
-
-  // Check if valid and within range
-  if (value < df->x_min || value > df->x_max) {
-    return;
-  }
-
-  // Find bin
-  int bin_idx = (int)((value - df->x_min) / df->bin_width);
-
-  // Safety check (in case of floating point rounding)
-  if (bin_idx >= 0 && bin_idx < df->n_bins) {
-    df->bin_counts[bin_idx]++;
   }
 }
 
