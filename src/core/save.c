@@ -1311,24 +1311,22 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
   gal_count = 0;
   gal = run_globals.FirstGal;
   output_buffer = calloc((int)chunk_size, sizeof(galaxy_output_t));
-  
+  // Accumulate into distribution functions from output buffer
+  double val;
+  int bin_idx;
+
   int buffer_count = 0;
   while (gal != NULL) {
     // Don't output galaxies which merged at this timestep
     if (pass_write_check(gal, false)) {
       prepare_galaxy_for_output(*gal, &(output_buffer[buffer_count]), i_out);
-      
-      // Accumulate into distribution functions from output buffer
-      double val;
-      
+            
       if (run_globals.params.Flag_OutputHMF) {
         // Extract HMF value (log10 halo mass in solar masses/h)
         val = log10(output_buffer[buffer_count].Mvir * 1e10 / run_globals.params.Hubble_h);
         if (val >= hmf.x_min && val <= hmf.x_max) {
-          int bin_idx = (int)((val - hmf.x_min) / hmf.bin_width);
-          if (bin_idx >= 0 && bin_idx < hmf.n_bins) {
-            hmf.bin_counts[bin_idx]++;
-          }
+          bin_idx = (int)((val - hmf.x_min) / hmf.bin_width);
+          hmf.bin_counts[bin_idx]++;
         }
       }
       
@@ -1338,10 +1336,8 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
         if (val > 0.0) {
           val = log10(val);
           if (val >= smf.x_min && val <= smf.x_max) {
-            int bin_idx = (int)((val - smf.x_min) / smf.bin_width);
-            if (bin_idx >= 0 && bin_idx < smf.n_bins) {
-              smf.bin_counts[bin_idx]++;
-            }
+            bin_idx = (int)((val - smf.x_min) / smf.bin_width);
+            smf.bin_counts[bin_idx]++;
           }
         }
       }
@@ -1352,10 +1348,8 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
         if (isfinite(output_buffer[buffer_count].Mags[0])) {
           val = output_buffer[buffer_count].Mags[0];
           if (val >= uvlf.x_min && val <= uvlf.x_max) {
-            int bin_idx = (int)((val - uvlf.x_min) / uvlf.bin_width);
-            if (bin_idx >= 0 && bin_idx < uvlf.n_bins) {
-              uvlf.bin_counts[bin_idx]++;
-            }
+            bin_idx = (int)((val - uvlf.x_min) / uvlf.bin_width);
+            uvlf.bin_counts[bin_idx]++;
           }
         }
       }
@@ -1365,10 +1359,8 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
         if (isfinite(output_buffer[buffer_count].DustyMags[0])) {
           val = output_buffer[buffer_count].DustyMags[0];
           if (val >= dustylf.x_min && val <= dustylf.x_max) {
-            int bin_idx = (int)((val - dustylf.x_min) / dustylf.bin_width);
-            if (bin_idx >= 0 && bin_idx < dustylf.n_bins) {
-              dustylf.bin_counts[bin_idx]++;
-            }
+            bin_idx = (int)((val - dustylf.x_min) / dustylf.bin_width);
+            dustylf.bin_counts[bin_idx]++;
           }
         }
       }
