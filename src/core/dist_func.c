@@ -16,20 +16,14 @@ void df_init(distribution_function_t* df, double x_min, double x_max, int bins_p
 {
   assert(df != NULL);
   assert(x_max > x_min);
-  assert(bins_per_dex != 0);
+  assert(bins_per_dex > 0);
 
   df->x_min = x_min;
   df->x_max = x_max;
 
-  if (bins_per_dex > 0) {
-    // Logarithmic binning: bins per dex
-    df->bin_width = 1.0 / bins_per_dex;
-    df->n_bins = (int)((x_max - x_min) / df->bin_width);
-  } else {
-    // Linear binning: -bins_per_dex is total number of bins
-    df->n_bins = -bins_per_dex;
-    df->bin_width = (x_max - x_min) / df->n_bins;
-  }
+  // Logarithmic binning: bins per dex (or per magnitude for UVLF/DustyLF)
+  df->bin_width = 1.0 / bins_per_dex;
+  df->n_bins = (int)((x_max - x_min) / df->bin_width);
 
   // Allocate memory for bins and counts
   df->bins = (distribution_bin_t*)malloc(df->n_bins * sizeof(distribution_bin_t));

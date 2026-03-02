@@ -32,11 +32,11 @@ extern "C"
 {
 #endif
 
-  //! Initialize a generic distribution function with binning
+  //! Initialize a generic distribution function with logarithmic binning
   //! \param[in,out] df Pointer to distribution function structure
-  //! \param[in] x_min Lower bin edge
-  //! \param[in] x_max Upper bin edge
-  //! \param[in] bins_per_dex Number of bins per dex (typically 10, or <=0 for linear)
+  //! \param[in] x_min Lower bin edge (e.g., log10(M_min) for HMF)
+  //! \param[in] x_max Upper bin edge (e.g., log10(M_max) for HMF)
+  //! \param[in] bins_per_dex Number of bins per dex (or per magnitude for UVLF/DustyLF)
   //! \param[in] description Human-readable description of function (e.g., "Halo Mass Function")
   void df_init(distribution_function_t* df, double x_min, double x_max, int bins_per_dex, const char* description);
 
