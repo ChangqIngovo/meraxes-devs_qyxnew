@@ -1192,15 +1192,24 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
   }
 
 #ifdef CALC_MAGS
-  if (run_globals.params.Flag_OutputUVLF) {
+  // Check if this snapshot is a target snapshot for magnitude calculations
+  int is_target_snap = 0;
+  for (int iS = 0; iS < MAGS_N_SNAPS; ++iS) {
+    if (run_globals.ListOutputSnaps[i_out] == run_globals.mag_params.targetSnap[iS]) {
+      is_target_snap = 1;
+      break;
+    }
+  }
+  
+  if (is_target_snap && run_globals.params.Flag_OutputUVLF) {
     df_init(&uvlf, run_globals.params.UVLF_MinMag, run_globals.params.UVLF_MaxMag, 
-            -run_globals.params.UVLF_BinsPerMag, "UV Luminosity Function");
+            run_globals.params.UVLF_BinsPerMag, "UV Luminosity Function");
     uvlf.volume = df_volume;
   }
   
-  if (run_globals.params.Flag_OutputDustyLF) {
+  if (is_target_snap && run_globals.params.Flag_OutputDustyLF) {
     df_init(&dustylf, run_globals.params.UVLF_MinMag, run_globals.params.UVLF_MaxMag, 
-            -run_globals.params.UVLF_BinsPerMag, "Dusty UV Luminosity Function");
+            run_globals.params.UVLF_BinsPerMag, "Dusty UV Luminosity Function");
     dustylf.volume = df_volume;
   }
 #endif
@@ -1343,7 +1352,7 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
       }
       
 #ifdef CALC_MAGS
-      if (run_globals.params.Flag_OutputUVLF) {
+      if (is_target_snap && run_globals.params.Flag_OutputUVLF) {
         // Extract UVLF value (UV magnitude)
         if (isfinite(output_buffer[buffer_count].Mags[0])) {
           val = output_buffer[buffer_count].Mags[0];
@@ -1354,7 +1363,7 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
         }
       }
       
-      if (run_globals.params.Flag_OutputDustyLF) {
+      if (is_target_snap && run_globals.params.Flag_OutputDustyLF) {
         // Extract DustyLF value (dusty UV magnitude)
         if (isfinite(output_buffer[buffer_count].DustyMags[0])) {
           val = output_buffer[buffer_count].DustyMags[0];
@@ -1427,7 +1436,7 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
   }
 
 #ifdef CALC_MAGS
-  if (run_globals.params.Flag_OutputUVLF) {
+  if (is_target_snap && run_globals.params.Flag_OutputUVLF) {
     df_mpi_reduce(&uvlf, run_globals.mpi_rank, run_globals.mpi_size);
     if (run_globals.mpi_rank == 0) {
       df_write_hdf5(file_id, target_group, &uvlf, "UVLF", "per Mpc^3 per mag");
@@ -1435,7 +1444,7 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
     df_free(&uvlf);
   }
 
-  if (run_globals.params.Flag_OutputDustyLF) {
+  if (is_target_snap && run_globals.params.Flag_OutputDustyLF) {
     df_mpi_reduce(&dustylf, run_globals.mpi_rank, run_globals.mpi_size);
     if (run_globals.mpi_rank == 0) {
       df_write_hdf5(file_id, target_group, &dustylf, "DustyLF", "per Mpc^3 per mag");
