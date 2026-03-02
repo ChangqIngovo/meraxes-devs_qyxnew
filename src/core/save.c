@@ -2,6 +2,7 @@
 #include <hdf5_hl.h>
 #include <unistd.h>
 
+#include "dist_func.h"
 #include "magnitudes.h"
 #include "meraxes.h"
 #include "parse_paramfile.h"
@@ -1273,6 +1274,7 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
   gal_count = 0;
   gal = run_globals.FirstGal;
   output_buffer = calloc((int)chunk_size, sizeof(galaxy_output_t));
+  
   int buffer_count = 0;
   while (gal != NULL) {
     // Don't output galaxies which merged at this timestep
@@ -1320,6 +1322,100 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
   if ((run_globals.params.Flag_PatchyReion) && check_if_reionization_ongoing(run_globals.ListOutputSnaps[i_out]) &&
        (run_globals.params.Flag_OutputGrids))
       save_reion_output_grids(run_globals.ListOutputSnaps[i_out]);
+
+  // Calculate and save HMF
+  if (run_globals.params.Flag_OutputHMF) {
+    distribution_function_t hmf;
+    
+    // Initialize HMF with configuration parameters
+    df_init(&hmf, run_globals.params.HMF_MinMass, run_globals.params.HMF_MaxMass, 
+            run_globals.params.HMF_BinsPerDex, "Halo Mass Function");
+    
+    // Calculate HMF from galaxy linked list
+    df_calculate(&hmf, run_globals.FirstGal, NULL, 
+                 run_globals.params.Hubble_h, run_globals.params.BoxSize);
+    
+    // MPI Reduction: aggregate counts from all processes
+    df_mpi_reduce(&hmf, run_globals.mpi_rank, run_globals.mpi_size);
+    
+    // Only master process writes output
+    if (run_globals.mpi_rank == 0) {
+      df_write_hdf5(file_id, target_group, &hmf, "HMF", "per Mpc^3 per dex");
+    }
+    
+    df_free(&hmf);
+  }
+
+  // Calculate and save SMF
+  if (run_globals.params.Flag_OutputSMF) {
+    distribution_function_t smf;
+    
+    // Initialize SMF with configuration parameters
+    df_init(&smf, run_globals.params.SMF_MinMass, run_globals.params.SMF_MaxMass, 
+            run_globals.params.SMF_BinsPerDex, "Stellar Mass Function");
+    
+    // Calculate SMF from galaxy linked list using stellar mass extractor
+    df_calculate(&smf, run_globals.FirstGal, df_get_stellar_mass, 
+                 run_globals.params.Hubble_h, run_globals.params.BoxSize);
+    
+    // MPI Reduction: aggregate counts from all processes
+    df_mpi_reduce(&smf, run_globals.mpi_rank, run_globals.mpi_size);
+    
+    // Only master process writes output
+    if (run_globals.mpi_rank == 0) {
+      df_write_hdf5(file_id, target_group, &smf, "SMF", "per Mpc^3 per dex");
+    }
+    
+    df_free(&smf);
+  }
+
+#ifdef CALC_MAGS
+  // Calculate and save UV Luminosity Function (Mags[0])
+  if (run_globals.params.Flag_OutputUVLF) {
+    distribution_function_t uvlf;
+    
+    // Initialize UVLF with linear binning (negative bins_per_dex means linear)
+    df_init(&uvlf, run_globals.params.UVLF_MinMag, run_globals.params.UVLF_MaxMag, 
+            -run_globals.params.UVLF_BinsPerMag, "UV Luminosity Function");
+    
+    // Calculate UVLF from galaxy linked list using UV magnitude extractor
+    df_calculate(&uvlf, run_globals.FirstGal, df_get_uv_magnitude, 
+                 run_globals.params.Hubble_h, run_globals.params.BoxSize);
+    
+    // MPI Reduction: aggregate counts from all processes
+    df_mpi_reduce(&uvlf, run_globals.mpi_rank, run_globals.mpi_size);
+    
+    // Only master process writes
+    if (run_globals.mpi_rank == 0) {
+      df_write_hdf5(file_id, target_group, &uvlf, "UVLF", "per Mpc^3 per mag");
+    }
+    
+    df_free(&uvlf);
+  }
+
+  // Calculate and save Dusty UV Luminosity Function (DustyMags[0])
+  if (run_globals.params.Flag_OutputDustyLF) {
+    distribution_function_t dustylf;
+    
+    // Initialize DustyLF with linear binning
+    df_init(&dustylf, run_globals.params.UVLF_MinMag, run_globals.params.UVLF_MaxMag, 
+            -run_globals.params.UVLF_BinsPerMag, "Dusty UV Luminosity Function");
+    
+    // Calculate DustyLF from galaxy linked list using dusty magnitude extractor
+    df_calculate(&dustylf, run_globals.FirstGal, df_get_dusty_uv_magnitude, 
+                 run_globals.params.Hubble_h, run_globals.params.BoxSize);
+    
+    // MPI Reduction: aggregate counts from all processes
+    df_mpi_reduce(&dustylf, run_globals.mpi_rank, run_globals.mpi_size);
+    
+    // Only master process writes
+    if (run_globals.mpi_rank == 0) {
+      df_write_hdf5(file_id, target_group, &dustylf, "DustyLF", "per Mpc^3 per mag");
+    }
+    
+    df_free(&dustylf);
+  }
+#endif  // CALC_MAGS
 
   // Close the group.
   H5Gclose(group_id);

@@ -311,6 +311,19 @@ typedef struct run_params_t
   int PS_Length;
   int Flag_OutputGrids;
   int Flag_OutputGridsPostReion;
+  int Flag_OutputHMF;     //!< Flag to enable/disable HMF output
+  double HMF_MinMass;     //!< Minimum log10(M) for HMF bins (solar masses/h)
+  double HMF_MaxMass;     //!< Maximum log10(M) for HMF bins
+  int HMF_BinsPerDex;     //!< Number of HMF bins per dex
+  int Flag_OutputSMF;     //!< Flag to enable/disable Stellar Mass Function output
+  double SMF_MinMass;     //!< Minimum log10(M*) for SMF bins (solar masses)
+  double SMF_MaxMass;     //!< Maximum log10(M*) for SMF bins
+  int SMF_BinsPerDex;     //!< Number of SMF bins per dex
+  int Flag_OutputUVLF;    //!< Flag to enable/disable UV Luminosity Function output
+  double UVLF_MinMag;     //!< Minimum magnitude for UVLF bins
+  double UVLF_MaxMag;     //!< Maximum magnitude for UVLF bins
+  int UVLF_BinsPerMag;    //!< Number of UVLF bins per magnitude (linear bins)
+  int Flag_OutputDustyLF; //!< Flag to enable/disable Dusty UV Luminosity Function output
   int FlagIgnoreProgIndex;
 } run_params_t;
 

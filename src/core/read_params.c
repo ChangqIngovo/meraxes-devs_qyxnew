@@ -1211,6 +1211,92 @@ void read_parameter_file(char* fname, int mode)
 #endif
       params_type[n_param++] = PARAM_TYPE_INT;
 
+      // Distribution function parameters for HMF/SMF/UVLF/DustyLF
+      strncpy(params_tag[n_param], "Flag_OutputHMF", tag_length);
+      params_addr[n_param] = &(run_params->Flag_OutputHMF);
+      required_tag[n_param] = 1;
+      params_type[n_param++] = PARAM_TYPE_INT;
+
+      strncpy(params_tag[n_param], "HMF_MinMass", tag_length);
+      params_addr[n_param] = &(run_params->HMF_MinMass);
+      required_tag[n_param] = 1;
+      params_type[n_param++] = PARAM_TYPE_DOUBLE;
+
+      strncpy(params_tag[n_param], "HMF_MaxMass", tag_length);
+      params_addr[n_param] = &(run_params->HMF_MaxMass);
+      required_tag[n_param] = 1;
+      params_type[n_param++] = PARAM_TYPE_DOUBLE;
+
+      strncpy(params_tag[n_param], "HMF_BinsPerDex", tag_length);
+      params_addr[n_param] = &(run_params->HMF_BinsPerDex);
+      required_tag[n_param] = 1;
+      params_type[n_param++] = PARAM_TYPE_INT;
+
+      strncpy(params_tag[n_param], "Flag_OutputSMF", tag_length);
+      params_addr[n_param] = &(run_params->Flag_OutputSMF);
+      required_tag[n_param] = 1;
+      params_type[n_param++] = PARAM_TYPE_INT;
+
+      strncpy(params_tag[n_param], "SMF_MinMass", tag_length);
+      params_addr[n_param] = &(run_params->SMF_MinMass);
+      required_tag[n_param] = 1;
+      params_type[n_param++] = PARAM_TYPE_DOUBLE;
+
+      strncpy(params_tag[n_param], "SMF_MaxMass", tag_length);
+      params_addr[n_param] = &(run_params->SMF_MaxMass);
+      required_tag[n_param] = 1;
+      params_type[n_param++] = PARAM_TYPE_DOUBLE;
+
+      strncpy(params_tag[n_param], "SMF_BinsPerDex", tag_length);
+      params_addr[n_param] = &(run_params->SMF_BinsPerDex);
+      required_tag[n_param] = 1;
+      params_type[n_param++] = PARAM_TYPE_INT;
+
+      strncpy(params_tag[n_param], "Flag_OutputUVLF", tag_length);
+      params_addr[n_param] = &(run_params->Flag_OutputUVLF);
+#ifdef CALC_MAGS
+      required_tag[n_param] = 1;
+#else
+      required_tag[n_param] = 0;
+#endif
+      params_type[n_param++] = PARAM_TYPE_INT;
+
+      strncpy(params_tag[n_param], "UVLF_MinMag", tag_length);
+      params_addr[n_param] = &(run_params->UVLF_MinMag);
+#ifdef CALC_MAGS
+      required_tag[n_param] = 1;
+#else
+      required_tag[n_param] = 0;
+#endif
+      params_type[n_param++] = PARAM_TYPE_DOUBLE;
+
+      strncpy(params_tag[n_param], "UVLF_MaxMag", tag_length);
+      params_addr[n_param] = &(run_params->UVLF_MaxMag);
+#ifdef CALC_MAGS
+      required_tag[n_param] = 1;
+#else
+      required_tag[n_param] = 0;
+#endif
+      params_type[n_param++] = PARAM_TYPE_DOUBLE;
+
+      strncpy(params_tag[n_param], "UVLF_BinsPerMag", tag_length);
+      params_addr[n_param] = &(run_params->UVLF_BinsPerMag);
+#ifdef CALC_MAGS
+      required_tag[n_param] = 1;
+#else
+      required_tag[n_param] = 0;
+#endif
+      params_type[n_param++] = PARAM_TYPE_INT;
+
+      strncpy(params_tag[n_param], "Flag_OutputDustyLF", tag_length);
+      params_addr[n_param] = &(run_params->Flag_OutputDustyLF);
+#ifdef CALC_MAGS
+      required_tag[n_param] = 1;
+#else
+      required_tag[n_param] = 0;
+#endif
+      params_type[n_param++] = PARAM_TYPE_INT;
+
       hdf5props->params_count = n_param;
     }
 

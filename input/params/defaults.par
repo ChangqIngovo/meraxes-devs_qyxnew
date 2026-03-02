@@ -264,3 +264,28 @@ RestBands                  : 1550,1650
 BetaBands                  : 
 InstantSfIII               : 0   # 0 -> Continuous Pop.III SF, 1 -> Instantaneous Pop.III SF (crucial when computing the luminosity of PopIII galaxies)
 DeltaT                     : 1.0 # Time at which the burst of PopIII SF happens since in the beginning of the snapshot (in Myr). Required only if InstantSfIII = 1
+
+#----------------------------------------------
+#----- Distribution Function Parameters -----
+#----------------------------------------------
+
+# Halo Mass Function (HMF)
+Flag_OutputHMF             : 0      # Enable HMF calculation and output (0=disabled, 1=enabled)
+HMF_MinMass                : 8.0    # Minimum log10(M_vir) in solar masses/h for HMF bins
+HMF_MaxMass                : 15.0   # Maximum log10(M_vir) in solar masses/h for HMF bins
+HMF_BinsPerDex             : 2     # Number of bins per decade in log10(M_vir)
+
+# Stellar Mass Function (SMF)
+Flag_OutputSMF             : 0      # Enable SMF calculation and output (0=disabled, 1=enabled)
+SMF_MinMass                : 6.0    # Minimum log10(M_*) in solar masses for SMF bins
+SMF_MaxMass                : 13.0   # Maximum log10(M_*) in solar masses for SMF bins
+SMF_BinsPerDex             : 2     # Number of bins per decade in log10(M_*)
+
+# UV Luminosity Function (UVLF) - requires CALC_MAGS compilation flag
+Flag_OutputUVLF            : 0      # Enable UVLF calculation and output (0=disabled, 1=enabled)
+UVLF_MinMag                : -24.0   # Minimum magnitude for UVLF bins (most faint, positive numbers)
+UVLF_MaxMag                : -8.0  # Maximum magnitude for UVLF bins (most luminous, negative numbers)
+UVLF_BinsPerMag            : 2      # Number of bins per magnitude (linear binning)
+
+# Dusty UV Luminosity Function (DustyLF) - requires CALC_MAGS compilation flag
+Flag_OutputDustyLF         : 0      # Enable DustyLF calculation and output (0=disabled, 1=enabled)
