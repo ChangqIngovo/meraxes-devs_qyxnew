@@ -992,6 +992,40 @@ void create_master_file()
 #endif
     }
 
+    // Create links to distribution functions from rank 0's core file
+    // Distribution functions are only computed by rank 0 after MPI reduction
+    sprintf(source_file, "%s/%s_0.hdf5", run_globals.params.OutputDir, run_globals.params.FileNameGalaxies);
+    sprintf(relative_source_file, "%s_0.hdf5", run_globals.params.FileNameGalaxies);
+    sprintf(source_group, "Snap%03d", run_globals.ListOutputSnaps[i_out]);
+    
+    source_file_id = H5Fopen(source_file, H5F_ACC_RDONLY, H5P_DEFAULT);
+    source_group_id = H5Gopen(source_file_id, source_group, H5P_DEFAULT);
+    
+    if (run_globals.params.Flag_OutputHMF && H5LTfind_dataset(source_group_id, "HMF")) {
+      sprintf(source_ds, "Snap%03d/HMF", run_globals.ListOutputSnaps[i_out]);
+      H5Lcreate_external(relative_source_file, source_ds, snap_group_id, "HMF", H5P_DEFAULT, H5P_DEFAULT);
+    }
+    
+    if (run_globals.params.Flag_OutputSMF && H5LTfind_dataset(source_group_id, "SMF")) {
+      sprintf(source_ds, "Snap%03d/SMF", run_globals.ListOutputSnaps[i_out]);
+      H5Lcreate_external(relative_source_file, source_ds, snap_group_id, "SMF", H5P_DEFAULT, H5P_DEFAULT);
+    }
+    
+#ifdef CALC_MAGS
+    if (run_globals.params.Flag_OutputUVLF && H5LTfind_dataset(source_group_id, "UVLF")) {
+      sprintf(source_ds, "Snap%03d/UVLF", run_globals.ListOutputSnaps[i_out]);
+      H5Lcreate_external(relative_source_file, source_ds, snap_group_id, "UVLF", H5P_DEFAULT, H5P_DEFAULT);
+    }
+    
+    if (run_globals.params.Flag_OutputDustyLF && H5LTfind_dataset(source_group_id, "DustyLF")) {
+      sprintf(source_ds, "Snap%03d/DustyLF", run_globals.ListOutputSnaps[i_out]);
+      H5Lcreate_external(relative_source_file, source_ds, snap_group_id, "DustyLF", H5P_DEFAULT, H5P_DEFAULT);
+    }
+#endif
+    
+    H5Gclose(source_group_id);
+    H5Fclose(source_file_id);
+
     // Save a few useful attributes
     sprintf(target_group, "Snap%03d", run_globals.ListOutputSnaps[i_out]);
 
