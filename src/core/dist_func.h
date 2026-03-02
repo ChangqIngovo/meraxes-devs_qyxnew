@@ -51,12 +51,15 @@ extern "C"
   //! \param[in,out] df Pointer to distribution function to be freed
   void df_free(distribution_function_t* df);
 
-  //! Write distribution function to HDF5 file
+  //! Write distribution function to HDF5 file as a 2D array
   //! \param[in] file_id HDF5 file identifier
   //! \param[in] group_name Name of group to write to (e.g., "SnapXXX")
   //! \param[in] df Pointer to distribution function structure
-  //! \param[in] dataset_prefix Prefix for dataset names (e.g., "HMF" for "HMF_centers")
+  //! \param[in] dataset_prefix Dataset name (e.g., "HMF")
   //! \param[in] units Unit string for the data (e.g., "per Mpc^3 per dex" for HMF/SMF)
+  //! 
+  //! Creates a 2D dataset with shape (n_bins, 3) where columns are:
+  //!   [0] = bin centers, [1] = number density, [2] = Poisson uncertainty
   void df_write_hdf5(hid_t file_id, const char* group_name, const distribution_function_t* df, 
                      const char* dataset_prefix, const char* units);
 

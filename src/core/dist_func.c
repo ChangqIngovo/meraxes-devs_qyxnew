@@ -41,8 +41,7 @@ void df_init(distribution_function_t* df, double x_min, double x_max, int bins_p
 
   // Initialize bin centers
   for (int i = 0; i < df->n_bins; i++) {
-    double radius = df->bin_width / 2.0;
-    df->bins[i].center = x_min + (i + radius) * df->bin_width;
+    df->bins[i].center = x_min + (i + 0.5) * df->bin_width;
     df->bins[i].number_density = 0.0;
     df->bins[i].uncertainty = 0.0;
   }
@@ -63,17 +62,18 @@ void df_free(distribution_function_t* df)
 
 void df_mpi_reduce(distribution_function_t* df, int mpi_rank, int mpi_size)
 {
-#ifdef USE_MPI
   assert(df != NULL);
 
   if (mpi_size > 1) {
-    // Sum counts across all processes to rank 0 only (more efficient than Allreduce)
-    MPI_Reduce(df->bin_counts, df->bin_counts, df->n_bins, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+    // Sum counts across all processes to rank 0 only
+    if (mpi_rank == 0) {
+      // Rank 0 uses MPI_IN_PLACE to reduce in-place into df->bin_counts
+      MPI_Reduce(MPI_IN_PLACE, df->bin_counts, df->n_bins, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+    } else {
+      // Other ranks send their data (recvbuf is ignored for non-root ranks)
+      MPI_Reduce(df->bin_counts, NULL, df->n_bins, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+    }
   }
-#else
-  (void)mpi_rank;
-  (void)mpi_size;
-#endif
 }
 
 void df_write_hdf5(hid_t file_id, const char* group_name, const distribution_function_t* df,
@@ -89,58 +89,46 @@ void df_write_hdf5(hid_t file_id, const char* group_name, const distribution_fun
     return;
   }
 
-  hsize_t dims[1] = {(hsize_t)df->n_bins};
-
-  // Prepare data arrays and compute densities/uncertainties
-  double* centers = (double*)malloc(df->n_bins * sizeof(double));
-  double* densities = (double*)malloc(df->n_bins * sizeof(double));
-  double* uncertainties = (double*)malloc(df->n_bins * sizeof(double));
-
-  assert(centers != NULL);
-  assert(densities != NULL);
-  assert(uncertainties != NULL);
+  // Create 2D array: (n_bins, 3) for [center, density, uncertainty]
+  hsize_t dims[2] = {(hsize_t)df->n_bins, 3};
+  double* data = (double*)malloc(df->n_bins * 3 * sizeof(double));
+  assert(data != NULL);
 
   for (int i = 0; i < df->n_bins; i++) {
-    centers[i] = df->bins[i].center;
-    
     // Compute number density and uncertainty from bin counts
     double count = (double)(df->bin_counts[i]);
     double bin_width = df->bin_width;
 
-    // Number density: N / (volume * bin_width)
-    densities[i] = count / (df->volume * bin_width);
+    // Column 0: bin center
+    data[i * 3 + 0] = df->bins[i].center;
+    
+    // Column 1: number density N / (volume * bin_width)
+    data[i * 3 + 1] = count / (df->volume * bin_width);
 
-    // Poisson uncertainty: sqrt(N) / (volume * bin_width)
+    // Column 2: Poisson uncertainty sqrt(N) / (volume * bin_width)
     if (count > 0) {
-      uncertainties[i] = sqrt(count) / (df->volume * bin_width);
+      data[i * 3 + 2] = sqrt(count) / (df->volume * bin_width);
     } else {
-      uncertainties[i] = 0.0;
+      data[i * 3 + 2] = 0.0;
     }
   }
 
-  // Create dataset names with prefix
-  char centers_name[256], densities_name[256], uncertainties_name[256];
-  snprintf(centers_name, 256, "%s_centers", dataset_prefix);
-  snprintf(densities_name, 256, "%s_densities", dataset_prefix);
-  snprintf(uncertainties_name, 256, "%s_uncertainties", dataset_prefix);
+  // Write single 2D dataset
+  H5LTmake_dataset_double(group_id, dataset_prefix, 2, dims, data);
 
-  // Write datasets
-  H5LTmake_dataset_double(group_id, centers_name, 1, dims, centers);
-  H5LTmake_dataset_double(group_id, densities_name, 1, dims, densities);
-  H5LTmake_dataset_double(group_id, uncertainties_name, 1, dims, uncertainties);
-
-  // Write metadata
-  H5LTset_attribute_int(group_id, ".", "n_bins", (int*)&df->n_bins, 1);
-  H5LTset_attribute_double(group_id, ".", "x_min", (double*)&df->x_min, 1);
-  H5LTset_attribute_double(group_id, ".", "x_max", (double*)&df->x_max, 1);
-  H5LTset_attribute_double(group_id, ".", "bin_width", (double*)&df->bin_width, 1);
-  H5LTset_attribute_double(group_id, ".", "volume", (double*)&df->volume, 1);
-  H5LTset_attribute_string(group_id, ".", "description", df->description);
-  H5LTset_attribute_string(group_id, ".", "units", (char*)units);
+  // Write metadata as attributes to the dataset
+  H5LTset_attribute_int(group_id, dataset_prefix, "n_bins", (int*)&df->n_bins, 1);
+  H5LTset_attribute_double(group_id, dataset_prefix, "x_min", (double*)&df->x_min, 1);
+  H5LTset_attribute_double(group_id, dataset_prefix, "x_max", (double*)&df->x_max, 1);
+  H5LTset_attribute_double(group_id, dataset_prefix, "bin_width", (double*)&df->bin_width, 1);
+  H5LTset_attribute_double(group_id, dataset_prefix, "volume", (double*)&df->volume, 1);
+  H5LTset_attribute_string(group_id, dataset_prefix, "description", df->description);
+  H5LTset_attribute_string(group_id, dataset_prefix, "units", (char*)units);
+  
+  // Add column labels as attribute
+  const char* column_names = "center,density,uncertainty";
+  H5LTset_attribute_string(group_id, dataset_prefix, "columns", (char*)column_names);
 
   H5Gclose(group_id);
-
-  free(centers);
-  free(densities);
-  free(uncertainties);
+  free(data);
 }
