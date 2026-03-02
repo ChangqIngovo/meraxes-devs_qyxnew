@@ -1125,6 +1125,16 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
   int prev_snapshot = -1;
   int write_count = 0;
 
+  // Distribution function structures
+  distribution_function_t hmf, smf;
+#ifdef CALC_MAGS
+  distribution_function_t uvlf, dustylf;
+#endif
+
+  // Volume will be set during initialization
+  double df_volume = (run_globals.params.BoxSize / run_globals.params.Hubble_h);
+  df_volume = df_volume * df_volume * df_volume;
+
   mlog("Writing output file (n_write = %d)...", MLOG_OPEN | MLOG_TIMERSTART, n_write);
 
   // We aren't going to write any galaxies that have zero stellar mass, so
@@ -1167,6 +1177,33 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
                  fill_data,
                  1,
                  NULL);
+
+  // Initialize distribution functions
+  if (run_globals.params.Flag_OutputHMF) {
+    df_init(&hmf, run_globals.params.HMF_MinMass, run_globals.params.HMF_MaxMass, 
+            run_globals.params.HMF_BinsPerDex, "Halo Mass Function");
+    hmf.volume = df_volume;
+  }
+  
+  if (run_globals.params.Flag_OutputSMF) {
+    df_init(&smf, run_globals.params.SMF_MinMass, run_globals.params.SMF_MaxMass, 
+            run_globals.params.SMF_BinsPerDex, "Stellar Mass Function");
+    smf.volume = df_volume;
+  }
+
+#ifdef CALC_MAGS
+  if (run_globals.params.Flag_OutputUVLF) {
+    df_init(&uvlf, run_globals.params.UVLF_MinMag, run_globals.params.UVLF_MaxMag, 
+            -run_globals.params.UVLF_BinsPerMag, "UV Luminosity Function");
+    uvlf.volume = df_volume;
+  }
+  
+  if (run_globals.params.Flag_OutputDustyLF) {
+    df_init(&dustylf, run_globals.params.UVLF_MinMag, run_globals.params.UVLF_MaxMag, 
+            -run_globals.params.UVLF_BinsPerMag, "Dusty UV Luminosity Function");
+    dustylf.volume = df_volume;
+  }
+#endif
 
   // If the immediately preceding snapshot was also written, then save the
   // descendent indices
@@ -1280,6 +1317,42 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
     // Don't output galaxies which merged at this timestep
     if (pass_write_check(gal, false)) {
       prepare_galaxy_for_output(*gal, &(output_buffer[buffer_count]), i_out);
+      
+      // Accumulate into distribution functions
+      if (run_globals.params.Flag_OutputHMF) {
+        // For HMF, we can extract from galaxy_t directly
+        double mvir_val = df_get_mvir(gal);
+        if (mvir_val >= hmf.x_min && mvir_val <= hmf.x_max) {
+          int bin_idx = (int)((mvir_val - hmf.x_min) / hmf.bin_width);
+          if (bin_idx >= 0 && bin_idx < hmf.n_bins) {
+            hmf.bin_counts[bin_idx]++;
+          }
+        }
+      }
+      
+      if (run_globals.params.Flag_OutputSMF) {
+        // For SMF, we can extract from galaxy_t directly
+        double sm_val = df_get_stellar_mass(gal);
+        if (sm_val >= smf.x_min && sm_val <= smf.x_max) {
+          int bin_idx = (int)((sm_val - smf.x_min) / smf.bin_width);
+          if (bin_idx >= 0 && bin_idx < smf.n_bins) {
+            smf.bin_counts[bin_idx]++;
+          }
+        }
+      }
+      
+#ifdef CALC_MAGS
+      if (run_globals.params.Flag_OutputUVLF) {
+        df_accumulate_galaxy_output(&uvlf, &(output_buffer[buffer_count]), 
+                                    (galaxy_output_property_fn)df_get_uv_magnitude_output);
+      }
+      
+      if (run_globals.params.Flag_OutputDustyLF) {
+        df_accumulate_galaxy_output(&dustylf, &(output_buffer[buffer_count]), 
+                                    (galaxy_output_property_fn)df_get_dusty_uv_magnitude_output);
+      }
+#endif
+      
       buffer_count++;
     }
     if (buffer_count == (int)chunk_size) {
@@ -1323,99 +1396,40 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
        (run_globals.params.Flag_OutputGrids))
       save_reion_output_grids(run_globals.ListOutputSnaps[i_out]);
 
-  // Calculate and save HMF
+  // MPI reduction and output for all distribution functions
   if (run_globals.params.Flag_OutputHMF) {
-    distribution_function_t hmf;
-    
-    // Initialize HMF with configuration parameters
-    df_init(&hmf, run_globals.params.HMF_MinMass, run_globals.params.HMF_MaxMass, 
-            run_globals.params.HMF_BinsPerDex, "Halo Mass Function");
-    
-    // Calculate HMF from galaxy linked list
-    df_calculate(&hmf, run_globals.FirstGal, NULL, 
-                 run_globals.params.Hubble_h, run_globals.params.BoxSize);
-    
-    // MPI Reduction: aggregate counts from all processes
     df_mpi_reduce(&hmf, run_globals.mpi_rank, run_globals.mpi_size);
-    
-    // Only master process writes output
     if (run_globals.mpi_rank == 0) {
       df_write_hdf5(file_id, target_group, &hmf, "HMF", "per Mpc^3 per dex");
     }
-    
     df_free(&hmf);
   }
 
-  // Calculate and save SMF
   if (run_globals.params.Flag_OutputSMF) {
-    distribution_function_t smf;
-    
-    // Initialize SMF with configuration parameters
-    df_init(&smf, run_globals.params.SMF_MinMass, run_globals.params.SMF_MaxMass, 
-            run_globals.params.SMF_BinsPerDex, "Stellar Mass Function");
-    
-    // Calculate SMF from galaxy linked list using stellar mass extractor
-    df_calculate(&smf, run_globals.FirstGal, df_get_stellar_mass, 
-                 run_globals.params.Hubble_h, run_globals.params.BoxSize);
-    
-    // MPI Reduction: aggregate counts from all processes
     df_mpi_reduce(&smf, run_globals.mpi_rank, run_globals.mpi_size);
-    
-    // Only master process writes output
     if (run_globals.mpi_rank == 0) {
       df_write_hdf5(file_id, target_group, &smf, "SMF", "per Mpc^3 per dex");
     }
-    
     df_free(&smf);
   }
 
 #ifdef CALC_MAGS
-  // Calculate and save UV Luminosity Function (Mags[0])
   if (run_globals.params.Flag_OutputUVLF) {
-    distribution_function_t uvlf;
-    
-    // Initialize UVLF with linear binning (negative bins_per_dex means linear)
-    df_init(&uvlf, run_globals.params.UVLF_MinMag, run_globals.params.UVLF_MaxMag, 
-            -run_globals.params.UVLF_BinsPerMag, "UV Luminosity Function");
-    
-    // Calculate UVLF from galaxy linked list using UV magnitude extractor
-    df_calculate(&uvlf, run_globals.FirstGal, df_get_uv_magnitude, 
-                 run_globals.params.Hubble_h, run_globals.params.BoxSize);
-    
-    // MPI Reduction: aggregate counts from all processes
     df_mpi_reduce(&uvlf, run_globals.mpi_rank, run_globals.mpi_size);
-    
-    // Only master process writes
     if (run_globals.mpi_rank == 0) {
       df_write_hdf5(file_id, target_group, &uvlf, "UVLF", "per Mpc^3 per mag");
     }
-    
     df_free(&uvlf);
   }
 
-  // Calculate and save Dusty UV Luminosity Function (DustyMags[0])
   if (run_globals.params.Flag_OutputDustyLF) {
-    distribution_function_t dustylf;
-    
-    // Initialize DustyLF with linear binning
-    df_init(&dustylf, run_globals.params.UVLF_MinMag, run_globals.params.UVLF_MaxMag, 
-            -run_globals.params.UVLF_BinsPerMag, "Dusty UV Luminosity Function");
-    
-    // Calculate DustyLF from galaxy linked list using dusty magnitude extractor
-    df_calculate(&dustylf, run_globals.FirstGal, df_get_dusty_uv_magnitude, 
-                 run_globals.params.Hubble_h, run_globals.params.BoxSize);
-    
-    // MPI Reduction: aggregate counts from all processes
     df_mpi_reduce(&dustylf, run_globals.mpi_rank, run_globals.mpi_size);
-    
-    // Only master process writes
     if (run_globals.mpi_rank == 0) {
       df_write_hdf5(file_id, target_group, &dustylf, "DustyLF", "per Mpc^3 per mag");
     }
-    
     df_free(&dustylf);
   }
-#endif  // CALC_MAGS
+#endif
 
   // Close the group.
   H5Gclose(group_id);
