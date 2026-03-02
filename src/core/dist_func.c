@@ -67,45 +67,6 @@ void df_free(distribution_function_t* df)
   }
 }
 
-void df_calculate(distribution_function_t* df, galaxy_t* galaxies,
-                  galaxy_property_fn get_property, double hubble_h, double box_size)
-{
-  assert(df != NULL);
-  assert(galaxies != NULL);
-  assert(get_property != NULL);
-
-  // Calculate comoving volume in (Mpc/h)^3
-  df->volume = (box_size / hubble_h);
-  df->volume = df->volume * df->volume * df->volume;
-
-  // Reset bin counts
-  memset(df->bin_counts, 0, df->n_bins * sizeof(int));
-
-  // Step 1: Bin the data by iterating through linked list
-  for (galaxy_t* gal = galaxies; gal != NULL; gal = gal->Next) {
-    // Skip ghost galaxies
-    if (gal->ghost_flag) {
-      continue;
-    }
-
-    // Get property value from galaxy
-    double value = get_property(gal);
-
-    // Check if valid and within range
-    if (value < df->x_min || value > df->x_max) {
-      continue;
-    }
-
-    // Find bin
-    int bin_idx = (int)((value - df->x_min) / df->bin_width);
-
-    // Safety check (in case of floating point rounding)
-    if (bin_idx >= 0 && bin_idx < df->n_bins) {
-      df->bin_counts[bin_idx]++;
-    }
-  }
-}
-
 void df_mpi_reduce(distribution_function_t* df, int mpi_rank, int mpi_size)
 {
 #ifdef USE_MPI

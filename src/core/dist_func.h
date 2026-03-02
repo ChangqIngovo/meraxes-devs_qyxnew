@@ -27,9 +27,6 @@ typedef struct distribution_function_t
 // Backward compatibility typedef
 typedef distribution_function_t hmf_t;
 
-// Function pointer type for extracting properties from galaxy_t
-typedef double (*galaxy_property_fn)(const galaxy_t* gal);
-
 #ifdef __cplusplus
 extern "C"
 {
@@ -42,15 +39,6 @@ extern "C"
   //! \param[in] bins_per_dex Number of bins per dex (typically 10, or <=0 for linear)
   //! \param[in] description Human-readable description of function (e.g., "Halo Mass Function")
   void df_init(distribution_function_t* df, double x_min, double x_max, int bins_per_dex, const char* description);
-
-  //! Calculate a generic distribution function from a linked list of galaxies
-  //! \param[in,out] df Pointer to distribution function to be filled
-  //! \param[in] galaxies Pointer to first galaxy in linked list
-  //! \param[in] get_property Function pointer to extract property from galaxy (required)
-  //! \param[in] hubble_h Hubble constant (H0 / 100)
-  //! \param[in] box_size Box size in Mpc/h
-  void df_calculate(distribution_function_t* df, galaxy_t* galaxies, 
-                    galaxy_property_fn get_property, double hubble_h, double box_size);
 
   //! Accumulate counts from local process to global distribution (for MPI)
   //! Must be called on all processes before finalization
