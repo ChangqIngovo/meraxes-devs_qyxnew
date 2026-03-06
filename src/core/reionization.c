@@ -125,7 +125,8 @@ void update_galaxy_fesc_vals(galaxy_t* gal, double new_stars, int snapshot)
   }
 
   // CGM suppression of fesc based on pre-computed tau_cgm (optical depth formulation)
-  if (params->Flag_FescCGMSuppression && (gal->tau_cgm > 0.0)) {
+  // Flag_FescCGMSuppression modes: 1 = instantaneous Gamma12, 2 = cumulative Gamma12, 3 = clumping factor
+  if ((params->Flag_FescCGMSuppression > 0) && (gal->tau_cgm > 0.0)) {
     // Suppression through optical depth: fesc_suppressed = fesc * exp(-tau_CGM)
     // tau_cgm is computed during reionization grid processing and stored per galaxy
     
@@ -1270,6 +1271,8 @@ void assign_Mvir_crit_to_galaxies(int ngals_in_slabs, int flag_feed)
   float* Mvir_crit = run_globals.reion_grids.Mvir_crit;
   float* t_resp_grid = run_globals.reion_grids.t_resp;
   float* Gamma12_grid = run_globals.reion_grids.Gamma12;
+  float* clumping_factor_grid = run_globals.reion_grids.clumping_factor;
+  int cgm_mode = run_globals.params.physics.Flag_FescCGMSuppression;
 #if USE_MINI_HALOS
   float* Mvir_crit_MC = run_globals.reion_grids.Mvir_crit_MC;
 #endif
@@ -1299,8 +1302,8 @@ void assign_Mvir_crit_to_galaxies(int ngals_in_slabs, int flag_feed)
   }
 
   if (flag_feed == 4) {
-    if (run_globals.params.physics.Flag_FescCGMSuppression)
-      mlog("Computing tau_cgm for galaxies...", MLOG_OPEN);
+    if (cgm_mode > 0)
+      mlog("Computing tau_cgm for galaxies (mode %d)...", MLOG_OPEN, cgm_mode);
     else {
       mlog("Skipping tau_cgm computation (flag disabled)...", MLOG_MESG);
       return;
@@ -1469,6 +1472,9 @@ void assign_Mvir_crit_to_galaxies(int ngals_in_slabs, int flag_feed)
     }
 
     if (flag_feed == 4) {
+      // Choose grid based on CGM suppression mode: 1,2 = Gamma12, 3 = clumping_factor
+      float* source_grid = (cgm_mode == 3) ? clumping_factor_grid : Gamma12_grid;
+      
       if (i_skip > 0) {
         MPI_Sendrecv(&recv_flag,
                      sizeof(bool),
@@ -1486,7 +1492,7 @@ void assign_Mvir_crit_to_galaxies(int ngals_in_slabs, int flag_feed)
         if (send_to_rank > run_globals.mpi_rank) {
           if (send_flag) {
             int n_cells = (int)(slab_nix[run_globals.mpi_rank] * ReionGridDim * ReionGridDim);
-            MPI_Send(Gamma12_grid, n_cells, MPI_FLOAT, send_to_rank, 793712, run_globals.mpi_comm);
+            MPI_Send(source_grid, n_cells, MPI_FLOAT, send_to_rank, 793712, run_globals.mpi_comm);
           }
           if (recv_flag) {
             int n_cells = (int)(slab_nix[recv_from_rank] * ReionGridDim * ReionGridDim);
@@ -1499,12 +1505,12 @@ void assign_Mvir_crit_to_galaxies(int ngals_in_slabs, int flag_feed)
           }
           if (send_flag) {
             int n_cells = (int)(slab_nix[run_globals.mpi_rank] * ReionGridDim * ReionGridDim);
-            MPI_Send(Gamma12_grid, n_cells, MPI_FLOAT, send_to_rank, 793712, run_globals.mpi_comm);
+            MPI_Send(source_grid, n_cells, MPI_FLOAT, send_to_rank, 793712, run_globals.mpi_comm);
           }
         }
       } else {
         int n_cells = (int)(slab_nix[recv_from_rank] * ReionGridDim * ReionGridDim);
-        memcpy(buffer, Gamma12_grid, sizeof(float) * n_cells);
+        memcpy(buffer, source_grid, sizeof(float) * n_cells);
       }
     }
 
@@ -1535,21 +1541,51 @@ void assign_Mvir_crit_to_galaxies(int ngals_in_slabs, int flag_feed)
         if (flag_feed == 3)
           gal->t_resp = (double)buffer[grid_index(ix, iy, iz, ReionGridDim, INDEX_REAL)];
 
-        // Compute tau_cgm from HotGas and local Gamma12 value
+        // Compute tau_cgm based on CGM suppression mode
+        // Mode 1: instantaneous Gamma12, Mode 2: cumulative Gamma12, Mode 3: clumping factor
         if (flag_feed == 4) {
           physics_params_t* params = &(run_globals.params.physics);
           if (gal->HotGas > 0.0 && gal->Rvir > 0.0) {
-
-            gamma12_local = (double)buffer[grid_index(ix, iy, iz, ReionGridDim, INDEX_REAL)];
-            // normalize to 1e-12 s^-1
-            gamma12_local *= run_globals.params.Hubble_h * run_globals.params.Hubble_h;
-            CLAMP_NEGATIVE(gamma12_local);
             
-            // Calculate optical depth from hot gas column density (HotGas/Rvir^2), normalized at 1e8 Msk / (10 kpc)^2 and 0.1 for Gamma12
+            double grid_value = (double)buffer[grid_index(ix, iy, iz, ReionGridDim, INDEX_REAL)];
+            double suppression_factor = 1.0;  // Will be raised to FescCGMGamma12Scaling power
+            
+            switch (cgm_mode) {
+              case 1:
+                // Mode 1: Instantaneous Gamma12
+                // Normalize to 1e-12 s^-1 and scale (reference: Gamma12 = 0.1)
+                gamma12_local = grid_value * run_globals.params.Hubble_h * run_globals.params.Hubble_h;
+                CLAMP_NEGATIVE(gamma12_local);
+                suppression_factor = gamma12_local * 10.0;  // Normalized at Gamma12 = 0.1
+                break;
+                
+              case 2: {
+                // Mode 2: Gamma12 * dt for current snapshot (smoothed instantaneous)
+                gamma12_local = grid_value * run_globals.params.Hubble_h * run_globals.params.Hubble_h;
+                CLAMP_NEGATIVE(gamma12_local);
+                double dt_myr = gal->dt * run_globals.units.UnitTime_in_s / SEC_PER_MEGAYEAR;
+                double cumulative_ionization = gamma12_local * dt_myr;
+                // Normalize at value of 1.0 (e.g., Gamma12=0.1 for 10 Myr)
+                suppression_factor = cumulative_ionization;
+                break;
+              }
+                
+              case 3:
+                // Mode 3: Local clumping factor
+                CLAMP_NEGATIVE(grid_value);
+                suppression_factor = grid_value;
+                break;
+                
+              default:
+                suppression_factor = 1.0;
+            }
+            
+            // Calculate optical depth from hot gas column density (HotGas/Rvir^2)
+            // Normalized at 1e8 Msun / (10 kpc)^2 for gas, and suppression_factor = 1
             gal->tau_cgm = params->FescCGMSuppressionNorm * 
                            pow(gal->HotGas * 1.0e2 / run_globals.params.Hubble_h, params->FescCGMSuppressionScaling) * 
                            pow(0.01 * run_globals.params.Hubble_h / gal->Rvir, 2.0 * params->FescCGMSuppressionScaling) *
-                           pow(gamma12_local * 10, params->FescCGMGamma12Scaling);
+                           pow(suppression_factor, params->FescCGMGamma12Scaling);
           } 
         }
 

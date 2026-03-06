@@ -694,6 +694,7 @@ typedef struct galaxy_t
   double MvirCrit;
   double MvirCrit_MC;
   double tau_cgm;
+  double cumulative_ionization;  //!< Integrated Gamma12 * dt for CGM suppression mode 2
   double MergerBurstMass;
 
   int Type;
