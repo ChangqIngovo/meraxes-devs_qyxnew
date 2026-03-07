@@ -474,6 +474,15 @@ void _find_HII_bubbles(const int snapshot)
                   Gamma12[i_real] += ((float*)effective_bhar_filtered)[i_padded] * (float)(Gamma_R_prefactor_BH);
                 // Record radius
                 r_bubble[i_real] = (float)R;
+                // Update J_21 continuously if ReionUVBFlag = 2
+                if (flag_ReionUVBFlag == 2) {
+                  J_21_at_ionization[i_real] = ((float*)stars_filtered)[i_padded] * J_21_aux_constant;
+#if USE_MINI_HALOS
+                  J_21_at_ionization[i_real] += ((float*)starsIII_filtered)[i_padded] * J_21_auxIII_constant;
+#endif
+                  if (run_globals.params.physics.Flag_BHFeedback)
+                    J_21_at_ionization[i_real] += ((float*)effective_bhm_filtered)[i_padded] * J_21_aux_constant_BH;
+                }
             }
 
             // Mark as ionised
@@ -499,7 +508,8 @@ void _find_HII_bubbles(const int snapshot)
           if ((xH[i_real] < REL_TOL) && (z_in[i_real] < 0)) // New ionisation!
           {
             z_in[i_real] = (float)redshift;
-            if (flag_ReionUVBFlag){
+            // Set J_21 at new ionization if ReionUVBFlag = 1 (const J_21)
+            if (flag_ReionUVBFlag == 1){
               J_21_at_ionization[i_real] = ((float*)stars_filtered)[i_padded] * J_21_aux_constant;
 #if USE_MINI_HALOS
               J_21_at_ionization[i_real] += ((float*)starsIII_filtered)[i_padded] * J_21_auxIII_constant;

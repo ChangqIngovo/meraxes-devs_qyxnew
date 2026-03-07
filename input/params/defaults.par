@@ -213,7 +213,7 @@ Flag_PatchyReion       : 1  # Use 21cmFAST (ensure Flag_ReionizationModifier=1 i
 Flag_OutputGrids       : 1
 Flag_OutputGridsPostReion  : 1
 
-ReionUVBFlag           : 1  # Use 21cmFAST (ensure Flag_ReionizationModifier=1 if wish to couple to galaxy formation).
+ReionUVBFlag           : 1  # 1: const J_21 at ionization, 2: update J_21 with Gamma12
 ReionGridDim           : 128 
 ReionDeltaRFactor      : 1.1
 ReionFilterType        : 0
