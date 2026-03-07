@@ -1213,20 +1213,22 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
   if ((int)chunk_size < n_write)
     chunk_size = (hsize_t)n_write;
 
-  // Make the table
-  H5TBmake_table("Galaxies",
-                 group_id,
-                 "Galaxies",
-                 (hsize_t)h5props.n_props,
-                 (hsize_t)n_write,
-                 h5props.dst_size,
-                 h5props.field_names,
-                 h5props.dst_offsets,
-                 h5props.field_types,
-                 chunk_size,
-                 fill_data,
-                 1,
-                 NULL);
+  // Make the table (skip for FlagInteractive==2 which only outputs distribution functions)
+  if (run_globals.params.FlagInteractive != 2) {
+    H5TBmake_table("Galaxies",
+                   group_id,
+                   "Galaxies",
+                   (hsize_t)h5props.n_props,
+                   (hsize_t)n_write,
+                   h5props.dst_size,
+                   h5props.field_names,
+                   h5props.dst_offsets,
+                   h5props.field_types,
+                   chunk_size,
+                   fill_data,
+                   1,
+                   NULL);
+  }
 
   // Initialize distribution functions
   if (run_globals.params.Flag_OutputHMF) {
@@ -1272,9 +1274,9 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
   }
 
   // If the immediately preceding snapshot was also written, then save the
-  // descendent indices
+  // descendent indices (skip for FlagInteractive==2)
   prev_snapshot = run_globals.ListOutputSnaps[i_out] - 1;
-  if (i_out > 0) {
+  if (i_out > 0 && run_globals.params.FlagInteractive != 2) {
     for (int ii = 0; ii < run_globals.NOutputSnaps; ii++)
       if (run_globals.ListOutputSnaps[ii] == prev_snapshot) {
         calc_descendants_i_out = ii;
@@ -1365,10 +1367,13 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
     }
   }
 
-  if (n_write != gal_count) {
-    fprintf(stderr, "We don't have the expected number of galaxies in save...");
-    fprintf(stderr, "gal_count=%d, n_write=%d", gal_count, n_write);
-    ABORT(EXIT_FAILURE);
+  // Skip galaxy count validation for FlagInteractive==2
+  if (run_globals.params.FlagInteractive != 2) {
+    if (n_write != gal_count) {
+      fprintf(stderr, "We don't have the expected number of galaxies in save...");
+      fprintf(stderr, "gal_count=%d, n_write=%d", gal_count, n_write);
+      ABORT(EXIT_FAILURE);
+    }
   }
 
   // Write the galaxies.
@@ -1449,6 +1454,26 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
       buffer_count++;;
     }
     if (buffer_count == (int)chunk_size) {
+      // Write galaxies to HDF5 (skip for FlagInteractive==2)
+      if (run_globals.params.FlagInteractive != 2) {
+        H5TBwrite_records(group_id,
+                          "Galaxies",
+                          (hsize_t)gal_count,
+                          (hsize_t)buffer_count,
+                          h5props.dst_size,
+                          h5props.dst_offsets,
+                          h5props.dst_field_sizes,
+                          output_buffer);
+      }
+      gal_count += buffer_count;
+      buffer_count = 0;
+    }
+    gal = gal->Next;
+  }
+
+  // Write any remaining galaxies in the buffer (skip for FlagInteractive==2)
+  if (buffer_count > 0) {
+    if (run_globals.params.FlagInteractive != 2) {
       H5TBwrite_records(group_id,
                         "Galaxies",
                         (hsize_t)gal_count,
@@ -1457,29 +1482,17 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
                         h5props.dst_offsets,
                         h5props.dst_field_sizes,
                         output_buffer);
-      gal_count += buffer_count;
-      buffer_count = 0;
     }
-    gal = gal->Next;
-  }
-
-  // Write any remaining galaxies in the buffer
-  if (buffer_count > 0) {
-    H5TBwrite_records(group_id,
-                      "Galaxies",
-                      (hsize_t)gal_count,
-                      (hsize_t)buffer_count,
-                      h5props.dst_size,
-                      h5props.dst_offsets,
-                      h5props.dst_field_sizes,
-                      output_buffer);
     gal_count += buffer_count;
   }
 
-  if (n_write != gal_count) {
-    mlog("We don't have the expected number of galaxies in save...", MLOG_MESG);
-    mlog("gal_count=%d, n_write=%d", MLOG_MESG, gal_count, n_write);
-    ABORT(EXIT_FAILURE);
+  // Skip galaxy count validation for FlagInteractive==2
+  if (run_globals.params.FlagInteractive != 2) {
+    if (n_write != gal_count) {
+      mlog("We don't have the expected number of galaxies in save...", MLOG_MESG);
+      mlog("gal_count=%d, n_write=%d", MLOG_MESG, gal_count, n_write);
+      ABORT(EXIT_FAILURE);
+    }
   }
 
   // Free the output buffer
