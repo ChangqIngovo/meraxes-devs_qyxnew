@@ -947,16 +947,19 @@ void create_master_file()
 
       sprintf(source_file, "%s/%s_%d.hdf5", run_globals.params.OutputDir, run_globals.params.FileNameGalaxies, i_core);
       sprintf(relative_source_file, "%s_%d.hdf5", run_globals.params.FileNameGalaxies, i_core);
-      sprintf(source_ds, "Snap%03d/Galaxies", run_globals.ListOutputSnaps[i_out]);
-      H5Lcreate_external(relative_source_file, source_ds, group_id, "Galaxies", H5P_DEFAULT, H5P_DEFAULT);
 
       source_file_id = H5Fopen(source_file, H5F_ACC_RDONLY, H5P_DEFAULT);
-      H5TBget_table_info(source_file_id, source_ds, NULL, &core_n_gals);
-      snap_n_gals += (int)core_n_gals;
 
-      // if they exists, then also create a link to walk indices
+      // if they exist, create links to galaxies and walk indices
       sprintf(source_group, "Snap%03d", run_globals.ListOutputSnaps[i_out]);
       source_group_id = H5Gopen(source_file_id, source_group, H5P_DEFAULT);
+      if (H5LTfind_dataset(source_group_id, "Galaxies")) {
+        sprintf(source_ds, "Snap%03d/Galaxies", run_globals.ListOutputSnaps[i_out]);
+        H5Lcreate_external(relative_source_file, source_ds, group_id, "Galaxies", H5P_DEFAULT, H5P_DEFAULT);
+        H5TBget_table_info(source_file_id, source_ds, NULL, &core_n_gals);
+        snap_n_gals += (int)core_n_gals;
+      }
+
       if (H5LTfind_dataset(source_group_id, "FirstProgenitorIndices")) {
         sprintf(source_ds, "Snap%03d/FirstProgenitorIndices", run_globals.ListOutputSnaps[i_out]);
         H5Lcreate_external(
