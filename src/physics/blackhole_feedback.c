@@ -4,7 +4,7 @@
 #include "meraxes.h"
 #include <assert.h>
 
-void calculate_BHemissivity(double BlackHoleMass, double accreted_mass, double *emissivity, double *accretion_time, double *quasar_mag)
+void calculate_BHemissivity(double BlackHoleMass, double accreted_mass, double *emissivity, double *accretion_time, double *quasar_luv)
 {
   double Lbol; // bolometric luminosity
   double kb;   // bolometric correction
@@ -20,15 +20,12 @@ void calculate_BHemissivity(double BlackHoleMass, double accreted_mass, double *
          run_globals.params.Hubble_h * LUMINOSITY_CONVERTOR;
   kb = 6.25 * pow(Lbol, -0.37) + 9.0 * pow(Lbol, -0.012);
 
-  *emissivity = physics->quasar_fobs * Lbol / kb * LB2EMISSIVITY * *accretion_time * run_globals.units.UnitTime_in_s / run_globals.params.Hubble_h; // 1e60 photon numbers
+  // Return UV luminosity LUV = Lbol/kb in 1e10 Lsun
+  // (Can be converted to M1450 magnitude via: M1450 = -19.826 - 2.5*log10(LUV))
+  *quasar_luv = Lbol / kb;
 
-  // Calculate UV magnitude M1450 (AB system)
-  // LB = Lbol/kb in 1e10 Lsun
-  // MB = 4.74 - 2.5*log10(1e10*LB) = -20.26 - 2.5*log10(LB)
-  // MAB,B = MB - 0.09 (Vega to AB)
-  // M1450 = MAB,B + 0.524 (B to 1450A, assuming spectral index 0.44)
-  // => M1450 = -19.826 - 2.5*log10(LB)
-  *quasar_mag = -19.826 - 2.5 * log10(Lbol / kb);
+  *emissivity = physics->quasar_fobs * *quasar_luv * LB2EMISSIVITY * *accretion_time * run_globals.units.UnitTime_in_s / run_globals.params.Hubble_h; // 1e60 photon numbers
+
 }
 
 static double get_vvir(galaxy_t* gal) {
@@ -159,7 +156,7 @@ void previous_merger_driven_BH_growth(galaxy_t* gal, int snapshot)
   // If there is any cold gas to feed the black hole...
   double m_reheat;
   double accreted_mass;
-  double BHemissivity, accretion_time, quasar_mag;
+  double BHemissivity, accretion_time, quasar_luv;
   double t_off, t_resp;
   double Vvir = get_vvir(gal);
   run_units_t* units = &(run_globals.units);
@@ -204,10 +201,10 @@ void previous_merger_driven_BH_growth(galaxy_t* gal, int snapshot)
       gal->BHAccretionOnTime = -1.0;
 
     // N_gamma,q * N_bh; later 1e60*BHemissivity * PROTONMASS/1e10/SOLAR_MASS will be N_gamma,q * M_bh
-    calculate_BHemissivity(gal->BlackHoleMass, accreted_mass, &BHemissivity, &accretion_time, &quasar_mag);
+    calculate_BHemissivity(gal->BlackHoleMass, accreted_mass, &BHemissivity, &accretion_time, &quasar_luv);
     // historical reason for us to store nion rather than the emissivity in BHemissivity...
     gal->BHemissivity += BHemissivity;
-    gal->QuasarMag = quasar_mag;
+    gal->QuasarLuv += quasar_luv;  // Accumulate UV luminosity (summable for mergers)
     gal->DutyCycleAGN = accretion_time / dt;
     CLAMP_0_1(gal->DutyCycleAGN);
         

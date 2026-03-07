@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <hdf5_hl.h>
+#include <math.h>
 #include <unistd.h>
 
 #include "dist_func.h"
@@ -73,7 +74,7 @@ void prepare_galaxy_for_output(galaxy_t gal, galaxy_output_t* galout, int i_snap
   galout->BlackHoleMass = (float)(gal.BlackHoleMass);
   galout->FescBH = (float)(gal.FescBH);
   galout->BHemissivity = (float)(gal.BHemissivity);
-  galout->QuasarMag = (float)(gal.QuasarMag);
+  galout->QuasarMag = (gal.QuasarLuv > 0.0) ? (float)(-19.826 - 2.5 * log10(gal.QuasarLuv)) : 999.9f;
   galout->DutyCycleAGN = (float)(gal.DutyCycleAGN);
   galout->EffectiveBHM = (float)(gal.EffectiveBHM);
   galout->BlackHoleAccretedHotMass = (float)(gal.BlackHoleAccretedHotMass);
@@ -1431,10 +1432,10 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
       }
 #endif
       
-      // QuasarLF: bin QuasarMag weighted by DutyCycleAGN
+      // QuasarLF: bin QuasarMag weighted by DutyCycleAGN * quasar_fobs (opening angle)
       if (run_globals.params.Flag_OutputQuasarLF) {
         val = output_buffer[buffer_count].QuasarMag;
-        weight = output_buffer[buffer_count].DutyCycleAGN;
+        weight = output_buffer[buffer_count].DutyCycleAGN * run_globals.params.physics.quasar_fobs;
         // Only include quasars that are "on" (QuasarMag < 999) and have positive duty cycle
         if (val < 900.0 && weight > 0.0 && isfinite(val)) {
           if (val >= quasarlf.x_min && val <= quasarlf.x_max) {

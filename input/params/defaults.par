@@ -283,7 +283,7 @@ SMF_BinsPerDex             : 2     # Number of bins per decade in log10(M_*)
 
 # UV Luminosity Function (UVLF) - requires CALC_MAGS compilation flag
 Flag_OutputUVLF            : 1      # Enable UVLF calculation and output (0=disabled, 1=enabled)
-UVLF_MinMag                : -26.0   # Minimum magnitude for UVLF bins (most faint, positive numbers)
+UVLF_MinMag                : -28.0   # Minimum magnitude for UVLF bins (most faint, positive numbers)
 UVLF_MaxMag                : -8.0  # Maximum magnitude for UVLF bins (most luminous, negative numbers)
 UVLF_BinsPerMag            : 2      # Number of bins per magnitude (linear binning)
 

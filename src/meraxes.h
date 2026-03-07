@@ -640,7 +640,7 @@ typedef struct galaxy_t
   double BlackHoleMass;
   double FescBH;
   double BHemissivity;
-  double QuasarMag;  //!< UV magnitude M1450 of quasar (AB system)
+  double QuasarLuv;  //!< UV luminosity LUV of quasar (1e10 Lsun, summable for mergers)
   double EffectiveBHM;
   double EffectiveBHAR;
   double DutyCycleAGN;
