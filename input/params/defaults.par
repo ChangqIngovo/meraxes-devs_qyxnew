@@ -7,7 +7,7 @@
 #--------------------------------
 
 NSteps                 : 1  # Current version of code requires NSteps=1 
-FlagInteractive        : 0
+FlagInteractive        : 0  # 0: standard run, 1: interactive/cached, 2: dist. functions only (skip galaxy writes)
 FlagSubhaloVirialProps : 0  # 0 -> approximate subhalo virial props using particle number; 1 -> use catalogue values
 FlagMCMC               : 0  # Don't do any writing and activate MCMC related routines
 FlagIgnoreProgIndex    : 0
