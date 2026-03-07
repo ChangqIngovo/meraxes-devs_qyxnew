@@ -1564,9 +1564,9 @@ void assign_Mvir_crit_to_galaxies(int ngals_in_slabs, int flag_feed)
                 gamma12_local = grid_value * run_globals.params.Hubble_h * run_globals.params.Hubble_h;
                 CLAMP_NEGATIVE(gamma12_local);
                 double dt_myr = gal->dt * run_globals.units.UnitTime_in_s / SEC_PER_MEGAYEAR;
-                double cumulative_ionization = gamma12_local * dt_myr;
-                // Normalize at value of 1.0 (e.g., Gamma12=0.1 for 10 Myr)
-                suppression_factor = cumulative_ionization;
+                gal->cumulative_ionization += gamma12_local * dt_myr;
+                // Normalize at cumulative value of 1.0 (e.g., Gamma12=0.1 for 10 Myr)
+                suppression_factor = gal->cumulative_ionization;
                 break;
               }
                 

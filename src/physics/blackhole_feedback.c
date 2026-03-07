@@ -14,8 +14,6 @@ void calculate_BHemissivity(double BlackHoleMass, double accreted_mass, double *
   *accretion_time = log1p(accreted_mass / BlackHoleMass) * run_globals.EddingtonTimescale * ETA / physics->EddingtonRatio;
 
   // Bolometric luminosity in 1e10 Lsun at the MIDDLE of accretion time
-  // TODO: this introduce inconsistency compared to the calculation of luminosity.
-  // Here we assume Lbol(t) = Lbol(t = accretion_time/2), which is only an approximation!
   Lbol = sqrt(1. + accreted_mass / BlackHoleMass) * physics->EddingtonRatio * BlackHoleMass /
          run_globals.params.Hubble_h * LUMINOSITY_CONVERTOR;
   kb = 6.25 * pow(Lbol, -0.37) + 9.0 * pow(Lbol, -0.012);
@@ -24,8 +22,8 @@ void calculate_BHemissivity(double BlackHoleMass, double accreted_mass, double *
   // (Can be converted to M1450 magnitude via: M1450 = -19.826 - 2.5*log10(LUV))
   *quasar_luv = Lbol / kb;
 
+  // Approximation using the emissivity at the MIDDLE of accretion time
   *emissivity = physics->quasar_fobs * *quasar_luv * LB2EMISSIVITY * *accretion_time * run_globals.units.UnitTime_in_s / run_globals.params.Hubble_h; // 1e60 photon numbers
-
 }
 
 static double get_vvir(galaxy_t* gal) {
