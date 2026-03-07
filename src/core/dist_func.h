@@ -20,7 +20,8 @@ typedef struct distribution_function_t
   double bin_width;   //!< Bin width in dex or linear units
   distribution_bin_t* bins;    //!< Array of bin data
   double volume;      //!< Comoving volume in (Mpc/h)^3
-  int* bin_counts;    //!< Count array for use in MPI reductions
+  double* bin_counts;    //!< Count array for use in MPI reductions (supports weighted counts)
+  double* bin_variance;  //!< Variance accumulator for Bernoulli uncertainty: sum(p*(1-p))
   char description[256];  //!< Description of what this function represents
 } distribution_function_t;
 

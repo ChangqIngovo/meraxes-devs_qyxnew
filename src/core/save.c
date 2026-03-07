@@ -73,6 +73,7 @@ void prepare_galaxy_for_output(galaxy_t gal, galaxy_output_t* galout, int i_snap
   galout->BlackHoleMass = (float)(gal.BlackHoleMass);
   galout->FescBH = (float)(gal.FescBH);
   galout->BHemissivity = (float)(gal.BHemissivity);
+  galout->QuasarMag = (float)(gal.QuasarMag);
   galout->DutyCycleAGN = (float)(gal.DutyCycleAGN);
   galout->EffectiveBHM = (float)(gal.EffectiveBHM);
   galout->BlackHoleAccretedHotMass = (float)(gal.BlackHoleAccretedHotMass);
@@ -141,7 +142,7 @@ void calc_hdf5_props()
     galaxy_output_t galout;
     int i; // dummy
 
-    h5props->n_props = 52;
+    h5props->n_props = 53;
 #if USE_MINI_HALOS
     h5props->n_props += 15; // Double check later
 #endif
@@ -649,6 +650,13 @@ void calc_hdf5_props()
     h5props->field_h_conv[i] = "None";
     h5props->field_types[i++] = H5T_NATIVE_FLOAT;
 
+    h5props->dst_offsets[i] = HOFFSET(galaxy_output_t, QuasarMag);
+    h5props->dst_field_sizes[i] = sizeof(galout.QuasarMag);
+    h5props->field_names[i] = "QuasarMag";
+    h5props->field_units[i] = "AB mag (M1450)";
+    h5props->field_h_conv[i] = "None";
+    h5props->field_types[i++] = H5T_NATIVE_FLOAT;
+
     h5props->dst_offsets[i] = HOFFSET(galaxy_output_t, DutyCycleAGN);
     h5props->dst_field_sizes[i] = sizeof(galout.DutyCycleAGN);
     h5props->field_names[i] = "DutyCycleAGN";
@@ -1023,6 +1031,12 @@ void create_master_file()
     }
 #endif
     
+    // QuasarLF external link (not dependent on CALC_MAGS)
+    if (run_globals.params.Flag_OutputQuasarLF && H5LTfind_dataset(source_group_id, "QuasarLF")) {
+      sprintf(source_ds, "Snap%03d/QuasarLF", run_globals.ListOutputSnaps[i_out]);
+      H5Lcreate_external(relative_source_file, source_ds, snap_group_id, "QuasarLF", H5P_DEFAULT, H5P_DEFAULT);
+    }
+    
     H5Gclose(source_group_id);
     H5Fclose(source_file_id);
 
@@ -1161,6 +1175,7 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
 
   // Distribution function structures
   distribution_function_t hmf, smf;
+  distribution_function_t quasarlf;
 #ifdef CALC_MAGS
   distribution_function_t uvlf, dustylf;
 #endif
@@ -1247,6 +1262,13 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
     dustylf.volume = df_volume;
   }
 #endif
+
+  // QuasarLF uses same mag bins as UVLF but weighted by duty cycle
+  if (run_globals.params.Flag_OutputQuasarLF) {
+    df_init(&quasarlf, run_globals.params.UVLF_MinMag, run_globals.params.UVLF_MaxMag, 
+            run_globals.params.UVLF_BinsPerMag, "Quasar UV Luminosity Function");
+    quasarlf.volume = df_volume;
+  }
 
   // If the immediately preceding snapshot was also written, then save the
   // descendent indices
@@ -1355,7 +1377,7 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
   gal = run_globals.FirstGal;
   output_buffer = calloc((int)chunk_size, sizeof(galaxy_output_t));
   // Accumulate into distribution functions from output buffer
-  double val;
+  double val, weight;
   int bin_idx;
 
   int buffer_count = 0;
@@ -1369,7 +1391,7 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
         val = log10(output_buffer[buffer_count].Mvir * 1e10 / run_globals.params.Hubble_h);
         if (val >= hmf.x_min && val <= hmf.x_max) {
           bin_idx = (int)((val - hmf.x_min) / hmf.bin_width);
-          hmf.bin_counts[bin_idx]++;
+          hmf.bin_counts[bin_idx] += 1.0;
         }
       }
       
@@ -1380,7 +1402,7 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
           val = log10(val);
           if (val >= smf.x_min && val <= smf.x_max) {
             bin_idx = (int)((val - smf.x_min) / smf.bin_width);
-            smf.bin_counts[bin_idx]++;
+            smf.bin_counts[bin_idx] += 1.0;
           }
         }
       }
@@ -1392,7 +1414,7 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
           val = output_buffer[buffer_count].Mags[0];
           if (val >= uvlf.x_min && val <= uvlf.x_max) {
             bin_idx = (int)((val - uvlf.x_min) / uvlf.bin_width);
-            uvlf.bin_counts[bin_idx]++;
+            uvlf.bin_counts[bin_idx] += 1.0;
           }
         }
       }
@@ -1403,13 +1425,27 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
           val = output_buffer[buffer_count].DustyMags[0];
           if (val >= dustylf.x_min && val <= dustylf.x_max) {
             bin_idx = (int)((val - dustylf.x_min) / dustylf.bin_width);
-            dustylf.bin_counts[bin_idx]++;
+            dustylf.bin_counts[bin_idx] += 1.0;
           }
         }
       }
 #endif
       
-      buffer_count++;
+      // QuasarLF: bin QuasarMag weighted by DutyCycleAGN
+      if (run_globals.params.Flag_OutputQuasarLF) {
+        val = output_buffer[buffer_count].QuasarMag;
+        weight = output_buffer[buffer_count].DutyCycleAGN;
+        // Only include quasars that are "on" (QuasarMag < 999) and have positive duty cycle
+        if (val < 900.0 && weight > 0.0 && isfinite(val)) {
+          if (val >= quasarlf.x_min && val <= quasarlf.x_max) {
+            bin_idx = (int)((val - quasarlf.x_min) / quasarlf.bin_width);
+            quasarlf.bin_counts[bin_idx] += weight;  // Weight by duty cycle
+            quasarlf.bin_variance[bin_idx] += weight * (1.0 - weight);  // Bernoulli variance
+          }
+        }
+      }
+      
+      buffer_count++;;
     }
     if (buffer_count == (int)chunk_size) {
       H5TBwrite_records(group_id,
@@ -1486,6 +1522,15 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
     df_free(&dustylf);
   }
 #endif
+
+  // QuasarLF - uses weighted MPI reduce and write
+  if (run_globals.params.Flag_OutputQuasarLF) {
+    df_mpi_reduce(&quasarlf, run_globals.mpi_rank, run_globals.mpi_size);
+    if (run_globals.mpi_rank == 0) {
+      df_write_hdf5(file_id, target_group, &quasarlf, "QuasarLF", "per Mpc^3 per mag");
+    }
+    df_free(&quasarlf);
+  }
 
   // Close the group.
   H5Gclose(group_id);

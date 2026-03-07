@@ -27,9 +27,11 @@ void df_init(distribution_function_t* df, double x_min, double x_max, int bins_p
 
   // Allocate memory for bins and counts
   df->bins = (distribution_bin_t*)malloc(df->n_bins * sizeof(distribution_bin_t));
-  df->bin_counts = (int*)calloc(df->n_bins, sizeof(int));
+  df->bin_counts = (double*)calloc(df->n_bins, sizeof(double));
+  df->bin_variance = (double*)calloc(df->n_bins, sizeof(double));
   assert(df->bins != NULL);
   assert(df->bin_counts != NULL);
+  assert(df->bin_variance != NULL);
 
   // Store description
   if (description != NULL) {
@@ -58,6 +60,10 @@ void df_free(distribution_function_t* df)
     free(df->bin_counts);
     df->bin_counts = NULL;
   }
+  if (df->bin_variance != NULL) {
+    free(df->bin_variance);
+    df->bin_variance = NULL;
+  }
 }
 
 void df_mpi_reduce(distribution_function_t* df, int mpi_rank, int mpi_size)
@@ -68,10 +74,12 @@ void df_mpi_reduce(distribution_function_t* df, int mpi_rank, int mpi_size)
     // Sum counts across all processes to rank 0 only
     if (mpi_rank == 0) {
       // Rank 0 uses MPI_IN_PLACE to reduce in-place into df->bin_counts
-      MPI_Reduce(MPI_IN_PLACE, df->bin_counts, df->n_bins, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+      MPI_Reduce(MPI_IN_PLACE, df->bin_counts, df->n_bins, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+      MPI_Reduce(MPI_IN_PLACE, df->bin_variance, df->n_bins, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
     } else {
       // Other ranks send their data (recvbuf is ignored for non-root ranks)
-      MPI_Reduce(df->bin_counts, NULL, df->n_bins, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+      MPI_Reduce(df->bin_counts, NULL, df->n_bins, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+      MPI_Reduce(df->bin_variance, NULL, df->n_bins, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
     }
   }
 }
@@ -94,9 +102,16 @@ void df_write_hdf5(hid_t file_id, const char* group_name, const distribution_fun
   double* data = (double*)malloc(df->n_bins * 3 * sizeof(double));
   assert(data != NULL);
 
+  // Check if Bernoulli variance has been accumulated (sum > 0)
+  double total_variance = 0.0;
+  for (int i = 0; i < df->n_bins; i++) {
+    total_variance += df->bin_variance[i];
+  }
+  int use_bernoulli = (total_variance > 0.0);
+
   for (int i = 0; i < df->n_bins; i++) {
     // Compute number density and uncertainty from bin counts
-    double count = (double)(df->bin_counts[i]);
+    double count = df->bin_counts[i];
     double bin_width = df->bin_width;
 
     // Column 0: bin center
@@ -105,11 +120,18 @@ void df_write_hdf5(hid_t file_id, const char* group_name, const distribution_fun
     // Column 1: number density N / (volume * bin_width)
     data[i * 3 + 1] = count / (df->volume * bin_width);
 
-    // Column 2: Poisson uncertainty sqrt(N) / (volume * bin_width)
-    if (count > 0) {
-      data[i * 3 + 2] = sqrt(count) / (df->volume * bin_width);
+    // Column 2: uncertainty
+    if (use_bernoulli) {
+      // Bernoulli uncertainty: sqrt(sum(p*(1-p))) / (volume * bin_width)
+      double var = df->bin_variance[i];
+      data[i * 3 + 2] = sqrt(var) / (df->volume * bin_width);
     } else {
-      data[i * 3 + 2] = 0.0;
+      // Poisson uncertainty: sqrt(N) / (volume * bin_width)
+      if (count > 0) {
+        data[i * 3 + 2] = sqrt(count) / (df->volume * bin_width);
+      } else {
+        data[i * 3 + 2] = 0.0;
+      }
     }
   }
 

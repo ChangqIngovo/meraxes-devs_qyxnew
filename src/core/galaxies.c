@@ -54,6 +54,7 @@ galaxy_t* new_galaxy(int snapshot, unsigned long halo_ID)
   gal->BlackHoleMass = run_globals.params.physics.BlackHoleSeed;
   gal->FescBH = 1.0;
   gal->BHemissivity = 0.0;
+  gal->QuasarMag = 999.9;
   gal->EffectiveBHM = 0.0;
   gal->EffectiveBHAR = 0.0;
   gal->DutyCycleAGN = 0.0;
@@ -181,6 +182,7 @@ void reset_galaxy_properties(galaxy_t* gal, int snapshot)
   gal->tau_cgm = 0.0;
   gal->cumulative_ionization = 0.0;
   gal->BHemissivity = 0.0;
+  gal->QuasarMag = 999.9;
   gal->BaryonFracModifier = 1.0;
   gal->FOFMvirModifier = 1.0;
   gal->EffectiveBHAR = 0.0;

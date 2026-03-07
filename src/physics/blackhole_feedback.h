@@ -36,7 +36,7 @@ extern "C"
 {
 #endif
 
-  void calculate_BHemissivity(double BlackHoleMass, double accreted_mass, double *emissivity, double *accretion_time);
+  void calculate_BHemissivity(double BlackHoleMass, double accreted_mass, double *emissivity, double *accretion_time, double *quasar_mag);
   double radio_mode_BH_heating(struct galaxy_t* gal, double cooling_mass, double x);
   void merger_driven_BH_growth(struct galaxy_t* gal, double merger_ratio, int snapshot);
   void previous_merger_driven_BH_growth(struct galaxy_t* gal, int snapshot);

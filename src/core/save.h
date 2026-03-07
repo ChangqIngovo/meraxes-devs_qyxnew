@@ -55,6 +55,7 @@ typedef struct galaxy_output_t
   float BlackHoleMass;
   float FescBH;
   float BHemissivity;
+  float QuasarMag;
   float EffectiveBHM;
   float BlackHoleAccretedHotMass;
   float BlackHoleAccretedColdMass;

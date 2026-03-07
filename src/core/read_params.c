@@ -1297,6 +1297,11 @@ void read_parameter_file(char* fname, int mode)
 #endif
       params_type[n_param++] = PARAM_TYPE_INT;
 
+      strncpy(params_tag[n_param], "Flag_OutputQuasarLF", tag_length);
+      params_addr[n_param] = &(run_params->Flag_OutputQuasarLF);
+      required_tag[n_param] = 0;  // Optional - disabled by default
+      params_type[n_param++] = PARAM_TYPE_INT;
+
       hdf5props->params_count = n_param;
     }
 

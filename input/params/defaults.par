@@ -273,19 +273,22 @@ DeltaT                     : 1.0 # Time at which the burst of PopIII SF happens 
 Flag_OutputHMF             : 1      # Enable HMF calculation and output (0=disabled, 1=enabled)
 HMF_MinMass                : 8.0    # Minimum log10(M_vir) in solar masses/h for HMF bins
 HMF_MaxMass                : 15.0   # Maximum log10(M_vir) in solar masses/h for HMF bins
-HMF_BinsPerDex             : 10     # Number of bins per decade in log10(M_vir)
+HMF_BinsPerDex             : 2     # Number of bins per decade in log10(M_vir)
 
 # Stellar Mass Function (SMF)
 Flag_OutputSMF             : 1      # Enable SMF calculation and output (0=disabled, 1=enabled)
 SMF_MinMass                : 6.0    # Minimum log10(M_*) in solar masses for SMF bins
 SMF_MaxMass                : 13.0   # Maximum log10(M_*) in solar masses for SMF bins
-SMF_BinsPerDex             : 10     # Number of bins per decade in log10(M_*)
+SMF_BinsPerDex             : 2     # Number of bins per decade in log10(M_*)
 
 # UV Luminosity Function (UVLF) - requires CALC_MAGS compilation flag
 Flag_OutputUVLF            : 1      # Enable UVLF calculation and output (0=disabled, 1=enabled)
 UVLF_MinMag                : -26.0   # Minimum magnitude for UVLF bins (most faint, positive numbers)
-UVLF_MaxMag                : -12.0  # Maximum magnitude for UVLF bins (most luminous, negative numbers)
+UVLF_MaxMag                : -8.0  # Maximum magnitude for UVLF bins (most luminous, negative numbers)
 UVLF_BinsPerMag            : 2      # Number of bins per magnitude (linear binning)
 
 # Dusty UV Luminosity Function (DustyLF) - requires CALC_MAGS compilation flag
 Flag_OutputDustyLF         : 1      # Enable DustyLF calculation and output (0=disabled, 1=enabled)
+
+# Quasar UV Luminosity Function (QuasarLF) - uses QuasarMag weighted by DutyCycleAGN
+Flag_OutputQuasarLF        : 1      # Enable QuasarLF calculation and output (0=disabled, 1=enabled)

@@ -324,6 +324,7 @@ typedef struct run_params_t
   double UVLF_MaxMag;     //!< Maximum magnitude for UVLF bins
   int UVLF_BinsPerMag;    //!< Number of UVLF bins per magnitude (linear bins)
   int Flag_OutputDustyLF; //!< Flag to enable/disable Dusty UV Luminosity Function output
+  int Flag_OutputQuasarLF; //!< Flag to enable/disable Quasar UV Luminosity Function output
   int FlagIgnoreProgIndex;
 } run_params_t;
 
@@ -639,6 +640,7 @@ typedef struct galaxy_t
   double BlackHoleMass;
   double FescBH;
   double BHemissivity;
+  double QuasarMag;  //!< UV magnitude M1450 of quasar (AB system)
   double EffectiveBHM;
   double EffectiveBHAR;
   double DutyCycleAGN;
