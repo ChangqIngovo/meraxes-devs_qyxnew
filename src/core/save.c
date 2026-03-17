@@ -82,7 +82,7 @@ void prepare_galaxy_for_output(galaxy_t gal, galaxy_output_t* galout, int i_snap
   galout->DiskScaleLength = (float)(gal.DiskScaleLength);
   galout->MetalsStellarMass = (float)(gal.MetalsStellarMass);
   galout->Sfr = (float)(gal.Sfr * units->UnitMass_in_g / units->UnitTime_in_s * SEC_PER_YEAR / SOLAR_MASS);
-  galout->LOIII = (float)(gal.LOIII);
+  galout->LOIII = (float)(gal.LOIII / 1e40); // Output in units of 1e40 erg/s
   galout->ionization_param = (float)(gal.ionization_param);
   galout->FescWeightedSfr = (float)(gal.FescWeightedSfr * units->UnitMass_in_g / units->UnitTime_in_s * SEC_PER_YEAR / SOLAR_MASS);
   galout->EjectedGas = (float)(gal.EjectedGas);
@@ -435,7 +435,7 @@ void calc_hdf5_props()
     h5props->dst_offsets[i] = HOFFSET(galaxy_output_t, LOIII);
     h5props->dst_field_sizes[i] = sizeof(galout.LOIII);
     h5props->field_names[i] = "LOIII";
-    h5props->field_units[i] = "erg/s";
+    h5props->field_units[i] = "1e40 erg/s";
     h5props->field_h_conv[i] = "None";
     h5props->field_types[i++] = H5T_NATIVE_FLOAT;
 
@@ -1536,7 +1536,7 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
       if (run_globals.params.Flag_OutputOIIILF) {
         val = output_buffer[buffer_count].LOIII;
         if (val > 0.0 && isfinite(val)) {
-          val = log10(val);
+          val = log10(val) + 40;
           if (val >= oiiilf.x_min && val <= oiiilf.x_max) {
             bin_idx = (int)((val - oiiilf.x_min) / oiiilf.bin_width);
             oiiilf.bin_counts[bin_idx] += 1.0;
