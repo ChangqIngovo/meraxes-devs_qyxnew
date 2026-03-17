@@ -16,9 +16,6 @@ void set_OIII_coeffs(double T)
 
 void compute_LOIII(galaxy_t* gal, int snapshot)
 {
-  if (gal == NULL || snapshot < 0 || run_globals.ZZ == NULL)
-    return;
-
   run_units_t* units = &run_globals.units;
 
   double cs_cms_sq = COLD_GAS_SOUND_SPEED_CMS * COLD_GAS_SOUND_SPEED_CMS;
@@ -56,15 +53,17 @@ void compute_LOIII(galaxy_t* gal, int snapshot)
   double QHI = ((sfr_gs / Nbub / PROTONMASS)) * 4000.0;
   double Rs  = pow(3 * QHI / (4 * M_PI * ALPHA_HII * np2 * np2), 1.0/3.0);   // cm
 
-  gal->ionization_param = 1.5874 * QHI / (4 * M_PI * Rs * Rs * np2); // cm/s
-  if (!isfinite(gal->ionization_param) || gal->ionization_param < 0.0)
-    gal->ionization_param = 0.0;
+  double ionization_param = 1.5874 * QHI / (4 * M_PI * Rs * Rs * np2); // cm/s
+  if (!isfinite(ionization_param) || ionization_param < 0.0)
+    ionization_param = 0.0;
+  gal->ionization_param += ionization_param;
 
-  gal->LOIII = ((pow(10.0, 8.69) / 1e12) * (gal->MetalsColdGas / gal->ColdGas / Z_SUN) *
+  double LOIII = ((pow(10.0, 8.69) / 1e12) * (gal->MetalsColdGas / gal->ColdGas / Z_SUN) *
                   (run_globals.loiii_params.k03 + run_globals.loiii_params.k04 * (LOIII_A43 / (LOIII_A43 + LOIII_A41))) *
                   (LOIII_A32 / (LOIII_A32 + LOIII_A31)) *
                   (QHI * Nbub / ALPHA_HII) * PLANCK_SI * nu32 * 0.8) * 1e7;
 
-  if (!isfinite(gal->LOIII) || gal->LOIII < 0.0)
-    gal->LOIII = 0.0;
+  if (!isfinite(LOIII) || LOIII < 0.0)
+    LOIII = 0.0;
+  gal->LOIII += LOIII;
 }
