@@ -40,8 +40,8 @@
 #define EDDINGTON_TIME_SCALE 450.514890  // Eddington timescale in Megayears
 
 // Extra constants for emission-line calculations
-#define HBAR_SI 1.0545718176461565e-34    // [J s]
-#define BOLTZMANN_SI 1.380649e-23         // [J/K]
+#define HBAR_SI (PLANCK * 1e-7 / 2 / M_PI)       // [J s]
+#define BOLTZMANN_SI (BOLTZMANN * 1e-7)   // [J/K]
 #define ELECTRON_MASS_SI 9.1093837015e-31 // [kg]
 #define PLANCK_SI (PLANCK * 1e-7)         // [J s], converted from PLANCK [erg s]
 #define ALPHA_HII 2.6e-13                 // [cm^3/s]

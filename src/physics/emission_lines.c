@@ -28,7 +28,7 @@ void compute_LOIII(galaxy_t* gal, int snapshot)
     return;
   }
 
-  double Rd_cm_sq = gal->DiskScaleLength * units->UnitLength_in_cm;
+  double Rd_cm_sq = gal->DiskScaleLength / run_globals.params.Hubble_h * units->UnitLength_in_cm;
   Rd_cm_sq = Rd_cm_sq * Rd_cm_sq;
   double frac_md = (gal->StellarMass + gal->ColdGas) / gal->Mvir;
   double Re_kpc = 0.08 * pow(gal->Spin / 0.05, 4.0 / 3.0) * pow(frac_md / 0.17, -2.0 / 3.0) *
@@ -61,7 +61,7 @@ void compute_LOIII(galaxy_t* gal, int snapshot)
   double LOIII = ((pow(10.0, 8.69) / 1e12) * (gal->MetalsColdGas / gal->ColdGas / Z_SUN) *
                   (run_globals.loiii_params.k03 + run_globals.loiii_params.k04 * (LOIII_A43 / (LOIII_A43 + LOIII_A41))) *
                   (LOIII_A32 / (LOIII_A32 + LOIII_A31)) *
-                  (QHI * Nbub / ALPHA_HII) * PLANCK_SI * nu32 * 0.8) * 1e7;
+                  (QHI * Nbub / ALPHA_HII) * PLANCK * nu32 * 0.8);
 
   if (!isfinite(LOIII) || LOIII < 0.0)
     LOIII = 0.0;
