@@ -93,7 +93,7 @@ void update_reservoirs_from_sf(galaxy_t* gal, double new_stars, int snapshot, SF
 
       update_galaxy_fesc_vals(gal, new_stars, snapshot);
     }
-	compute_LOIII(gal, snapshot);
+	  compute_LOIII(gal, snapshot);
 
     // Check the validity of the modified reservoir values.
     // Note that the ColdGas reservers *can* be negative at this point.  This
