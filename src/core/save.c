@@ -1539,8 +1539,6 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
           val = log10(val);
           if (val >= oiiilf.x_min && val <= oiiilf.x_max) {
             bin_idx = (int)((val - oiiilf.x_min) / oiiilf.bin_width);
-            if (bin_idx >= oiiilf.n_bins)
-              bin_idx = oiiilf.n_bins - 1;
             oiiilf.bin_counts[bin_idx] += 1.0;
           }
         }
