@@ -1299,7 +1299,27 @@ void read_parameter_file(char* fname, int mode)
 
       strncpy(params_tag[n_param], "Flag_OutputQuasarLF", tag_length);
       params_addr[n_param] = &(run_params->Flag_OutputQuasarLF);
-      required_tag[n_param] = 0;  // Optional - disabled by default
+      required_tag[n_param] = 1; 
+      params_type[n_param++] = PARAM_TYPE_INT;
+
+      strncpy(params_tag[n_param], "Flag_OutputOIIILF", tag_length);
+      params_addr[n_param] = &(run_params->Flag_OutputOIIILF);
+      required_tag[n_param] = 1; 
+      params_type[n_param++] = PARAM_TYPE_INT;
+
+      strncpy(params_tag[n_param], "OIIILF_MinLogL", tag_length);
+      params_addr[n_param] = &(run_params->OIIILF_MinLogL);
+      required_tag[n_param] = 1; 
+      params_type[n_param++] = PARAM_TYPE_DOUBLE;
+
+      strncpy(params_tag[n_param], "OIIILF_MaxLogL", tag_length);
+      params_addr[n_param] = &(run_params->OIIILF_MaxLogL);
+      required_tag[n_param] = 1; 
+      params_type[n_param++] = PARAM_TYPE_DOUBLE;
+
+      strncpy(params_tag[n_param], "OIIILF_BinsPerDex", tag_length);
+      params_addr[n_param] = &(run_params->OIIILF_BinsPerDex);
+      required_tag[n_param] = 1;
       params_type[n_param++] = PARAM_TYPE_INT;
 
       hdf5props->params_count = n_param;

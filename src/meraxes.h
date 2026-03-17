@@ -39,6 +39,15 @@
 #define T_RE 1e4
 #define EDDINGTON_TIME_SCALE 450.514890  // Eddington timescale in Megayears
 
+// Extra constants for emission-line calculations
+#define HBAR_SI 1.0545718176461565e-34    // [J s]
+#define BOLTZMANN_SI 1.380649e-23         // [J/K]
+#define ELECTRON_MASS_SI 9.1093837015e-31 // [kg]
+#define PLANCK_SI (PLANCK * 1e-7)         // [J s], converted from PLANCK [erg s]
+#define ALPHA_HII 2.6e-13                 // [cm^3/s]
+#define Z_SUN 0.0134                      // solar metallicity fraction
+#define SN_PROGENITOR_MASS_MSUN 12.26     // [Msun]
+
 // ======================================================
 // Don't change these unless you know what you are doing!
 #define STRLEN 256 //!< Default string length
@@ -325,6 +334,10 @@ typedef struct run_params_t
   int UVLF_BinsPerMag;    //!< Number of UVLF bins per magnitude (linear bins)
   int Flag_OutputDustyLF; //!< Flag to enable/disable Dusty UV Luminosity Function output
   int Flag_OutputQuasarLF; //!< Flag to enable/disable Quasar UV Luminosity Function output
+  int Flag_OutputOIIILF;  //!< Flag to enable/disable OIII Luminosity Function output
+  double OIIILF_MinLogL;  //!< Minimum log10(LOIII [erg/s]) for OIIILF bins
+  double OIIILF_MaxLogL;  //!< Maximum log10(LOIII [erg/s]) for OIIILF bins
+  int OIIILF_BinsPerDex;  //!< Number of OIIILF bins per dex
   int FlagIgnoreProgIndex;
 } run_params_t;
 
@@ -635,6 +648,8 @@ typedef struct galaxy_t
   double MetalsStellarMass;
   double DiskScaleLength;
   double Sfr;
+  double LOIII;
+  double ionization_param;
   double EjectedGas;
   double MetalsEjectedGas;
   double BlackHoleMass;
@@ -803,6 +818,14 @@ typedef struct mag_params_t
 } mag_params_t;
 #endif
 
+typedef struct loiii_params_t
+{
+  double o30;
+  double o40;
+  double k03;
+  double k04;
+} loiii_params_t;
+
 //! Global variables which will will be passed around
 typedef struct run_globals_t
 {
@@ -843,6 +866,7 @@ typedef struct run_globals_t
   double G;
   double Csquare;
   double EddingtonTimescale;
+  loiii_params_t loiii_params;
   // PopIII stuff
 
   double IMFnorm;

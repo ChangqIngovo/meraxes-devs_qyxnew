@@ -2,6 +2,7 @@
 #include "blackhole_feedback.h"
 #include "cooling.h"
 #include "core/stellar_feedback.h"
+#include "emission_lines.h"
 #if USE_MINI_HALOS
 #include "core/PopIII.h"
 #include "core/misc_tools.h"
@@ -151,6 +152,7 @@ int evolve_galaxies(fof_group_t* fof_group, int snapshot, int NGal, int NFof)
         }
         halo = halo->NextHaloInFOFGroup;
       }
+
     }
   }
 

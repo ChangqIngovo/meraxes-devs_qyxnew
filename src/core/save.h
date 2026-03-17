@@ -50,6 +50,8 @@ typedef struct galaxy_output_t
   float FescWeightedSfr;
   float MetalsStellarMass;
   float Sfr;
+  float LOIII;
+  float ionization_param;
   float EjectedGas;
   float MetalsEjectedGas;
   float BlackHoleMass;

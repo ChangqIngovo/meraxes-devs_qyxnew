@@ -17,6 +17,7 @@
 #include "save.h"
 #include "stellar_feedback.h"
 #include "virial_properties.h"
+#include "physics/emission_lines.h"
 #if USE_MINI_HALOS
 #include "PopIII.h"
 #include "metal_evo.h"
@@ -235,6 +236,9 @@ void init_meraxes()
 
   // set the units
   set_units();
+
+  // Right now we assume T=1e4 K for collisional rate coefficients in LOIII.
+  set_OIII_coeffs(1e4);
 
   // init the stdlib random number generator (for CN exceptions only)
   srand((unsigned)time(NULL));

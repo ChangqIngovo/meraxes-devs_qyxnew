@@ -49,6 +49,8 @@ galaxy_t* new_galaxy(int snapshot, unsigned long halo_ID)
   gal->Fesc = 1.0;
   gal->FescWeightedGSM = 0.0;
   gal->MetalsStellarMass = 0.0;
+  gal->LOIII = 0.0;
+  gal->ionization_param = 0.0;
   gal->mwmsa_num = 0.0;
   gal->mwmsa_denom = 0.0;
   gal->BlackHoleMass = run_globals.params.physics.BlackHoleSeed;
@@ -174,6 +176,8 @@ void reset_galaxy_properties(galaxy_t* gal, int snapshot)
   // Here we reset any galaxy properties which are calculated on a snapshot by
   // snapshot basis.
   gal->Sfr = 0.0;
+  gal->LOIII = 0.0;
+  gal->ionization_param = 0.0;
   gal->FescWeightedSfr = 0.0;
   gal->Mcool = 0.0;
   gal->Rcool = 0.0;

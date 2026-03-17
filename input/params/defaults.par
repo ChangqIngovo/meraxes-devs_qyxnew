@@ -292,3 +292,9 @@ Flag_OutputDustyLF         : 1      # Enable DustyLF calculation and output (0=d
 
 # Quasar UV Luminosity Function (QuasarLF) - uses QuasarMag weighted by DutyCycleAGN
 Flag_OutputQuasarLF        : 1      # Enable QuasarLF calculation and output (0=disabled, 1=enabled)
+
+# OIII Luminosity Function (OIIILF) - uses log10(LOIII [erg/s])
+Flag_OutputOIIILF          : 1      # Enable OIIILF calculation and output (0=disabled, 1=enabled)
+OIIILF_MinLogL             : 38.0   # Minimum log10(LOIII [erg/s]) for OIIILF bins
+OIIILF_MaxLogL             : 45.0   # Maximum log10(LOIII [erg/s]) for OIIILF bins
+OIIILF_BinsPerDex          : 2      # Number of OIIILF bins per dex
