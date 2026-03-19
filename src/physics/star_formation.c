@@ -47,10 +47,6 @@ void update_reservoirs_from_sf(galaxy_t* gal, double new_stars, int snapshot, SF
 
     // update the galaxy's SFR value
     double sfr = new_stars / gal->dt;
-    gal->ColdGas -= new_stars;
-    gal->MetalsColdGas -= new_stars * metallicity;
-    gal->StellarMass += new_stars;
-    gal->MetalsStellarMass += new_stars * metallicity;
 
 #if USE_MINI_HALOS
     if (gal->Galaxy_Population == 2) {
@@ -70,6 +66,13 @@ void update_reservoirs_from_sf(galaxy_t* gal, double new_stars, int snapshot, SF
     gal->GrossStellarMass +=
       new_stars; // If you are not distinguishing III/II you just have one variable which is the total one
 #endif
+
+	compute_LOIII(gal, snapshot);
+
+    gal->ColdGas -= new_stars;
+    gal->MetalsColdGas -= new_stars * metallicity;
+    gal->StellarMass += new_stars;
+    gal->MetalsStellarMass += new_stars * metallicity;
 
     if ((type == INSITU) && !Flag_IRA && (gal->LastIdentSnap < (snapshot - 1))) {
       // If this is a reidentified ghost, then back fill NewStars and
@@ -93,7 +96,6 @@ void update_reservoirs_from_sf(galaxy_t* gal, double new_stars, int snapshot, SF
 
       update_galaxy_fesc_vals(gal, new_stars, snapshot);
     }
-	  compute_LOIII(gal, snapshot);
 
     // Check the validity of the modified reservoir values.
     // Note that the ColdGas reservers *can* be negative at this point.  This
@@ -201,6 +203,7 @@ void insitu_star_formation(galaxy_t* gal, int snapshot)
     }
     if (m_stars > gal->ColdGas)
       m_stars = gal->ColdGas;
+	
     // calculate the total supernova feedback which would occur if this star
     // formation happened continuously and evenly throughout the snapshot
     contemporaneous_supernova_feedback(
