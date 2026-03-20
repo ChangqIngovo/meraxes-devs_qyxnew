@@ -15,9 +15,12 @@ RandomSeed             : 1809  # seed for random number generator
 VolumeFactor           : 1.0  # Set to 1.0 unless the trees are subsampled
 
 Flag_IncludeRecombinations : 0   # if 1 reionization accounts for H-recombination
+Flag_EvolvingReionRBubbleMax : 1 # if 1, ReionRBubbleMaxRecomb follows Qin+25 and ReionRBubbleMax/ReionRBubbleMaxRecomb are ignored
+Flag_TemperatureDependentRec : 1 # if 1, Recombination depends on gas temperature as well
 Flag_Compute21cmBrightTemp : 0   # if 1 Meraxes computes the 21cm Brightness Temperature 
 Flag_ComputePS             : 0   # if 1 Meraxes computes the 21cm Power Spectrum
 Flag_IncludeSpinTemp       : 0   # if 0 Ts>>Tg
+Flag_InstantaneousSFR      : 1   # if 1, Stopping using (as have been) smoothed SFR for X-ray calculations (20/03/2026)
 Flag_IncludePecVelsFor21cm : 0   # if 1 the computation of 21cm Tb accounts for peculiar velocities
 Flag_ConstructLightcone    : 0   # Construct reionization light cones
 Flag_IncludeLymanWerner    : 0   # if 1 Meraxes computes Lyman-Werner background (crucial for Minihalos)
@@ -181,6 +184,7 @@ MergerBurstScaling        : 0.7
 #--------------------------------
 
 Flag_BHFeedback           : 1
+Flag_BHARExponentialCut   : 0 # if 1, accretion starts at a random time and emissivity decays exponentially after accretion stops
 
 RadioModeEff              : 0.3
 QuasarModeEff             : 0.0005
@@ -212,6 +216,7 @@ ReionGnedin_zr         : 7
 Flag_PatchyReion       : 1  # Use 21cmFAST (ensure Flag_ReionizationModifier=1 if wish to couple to galaxy formation).
 Flag_OutputGrids       : 1
 Flag_OutputGridsPostReion  : 1
+Flag_FescCGMSuppression : 0 # if >0, CGM further suppresses fesc; modulation uses (1) instantaneous Gamma12, (2) cumulative Gamma12, or (3) clumping factor
 
 ReionUVBFlag           : 1  # 0: do not use 21cmFAST; 1: const J_21 at ionization, 2: update J_21 after ionization
 ReionGridDim           : 128 
@@ -236,6 +241,10 @@ EscapeFracPropScaling      : 0.5
 EscapeFracBHNorm           : 1
 EscapeFracBHScaling        : 0
 
+FescCGMSuppressionNorm     : 0.00008 # CGM suppression normalization
+FescCGMSuppressionScaling  : 0.2 # scaling index with column density
+FescCGMGamma12Scaling      : 6.0 # scaling index with Gamma12 or clumping
+
 ReionSMParam_m0        : 0.18984  # internal units
 ReionSMParam_a         : 0.17
 ReionSMParam_b         : -2.1
@@ -252,7 +261,6 @@ TsVelocityComponent        : 3 # 1->X, 2->Y, 3->Z
 EndRedshiftLightcone       : 6.0
 ReionRBubbleMaxRecomb      : 33.9
 ReionMaxHeatingRedshift    : 30.
-
 
 #----------------------------------
 #----- Luminosity calculation -----
