@@ -464,7 +464,7 @@ static int read_vr_multi(const enum grid_prop property, const int snapshot, floa
 
       // create the memspace
       hid_t memspace_id =
-        H5Screate_simple(1, (hsize_t[1]){ (hsize_t)(rank_nx[mpi_rank] * file_n_cell[1] * file_n_cell[1]) }, NULL);
+        H5Screate_simple(1, (hsize_t[1]){ (hsize_t)(rank_nx[mpi_rank] * file_n_cell[1] * file_n_cell[2]) }, NULL);
       H5Sselect_hyperslab(memspace_id,
                           H5S_SELECT_SET,
                           (hsize_t[1]){ (hsize_t)(rank_start * file_n_cell[1] * file_n_cell[2]) },
