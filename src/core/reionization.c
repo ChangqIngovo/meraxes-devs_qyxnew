@@ -2253,7 +2253,8 @@ void save_reion_output_grids(int snapshot)
     H5Dclose(dset_id);
   }
 
-  save_reion_output_attributes(snapshot);
+  if (run_globals.mpi_rank == 0)
+    save_reion_output_attributes(snapshot);
 
   if (run_globals.params.Flag_ComputePS) {
 
