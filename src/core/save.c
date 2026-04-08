@@ -830,6 +830,7 @@ void create_master_file()
       H5LTset_attribute_string(file_id, group_name, "z_at_ionization", "None");
       H5LTset_attribute_string(file_id, group_name, "r_bubble", "Mpc");
       H5LTset_attribute_string(file_id, group_name, "Mvir_crit", "1e10 solMass");
+      H5LTset_attribute_string(file_id, group_name, "effective_bhar", "solMass/yr");
       H5LTset_attribute_string(file_id, group_name, "stars", "1e10 solMass");
       H5LTset_attribute_string(file_id, group_name, "weighted_sfr", "solMass/yr");
       H5LTset_attribute_string(file_id, group_name, "deltax", "None");
@@ -887,6 +888,7 @@ void create_master_file()
       H5LTset_attribute_string(file_id, group_name, "Mvir_crit", "v/h");
       H5LTset_attribute_string(file_id, group_name, "stars", "v/h");
       H5LTset_attribute_string(file_id, group_name, "weighted_sfr", "None");
+      H5LTset_attribute_string(file_id, group_name, "effective_bhar", "None");
       H5LTset_attribute_string(file_id, group_name, "deltax", "None");
       H5LTset_attribute_string(file_id, group_name, "residual_xH", "None");
       H5LTset_attribute_string(file_id, group_name, "clumping_factor", "None");
