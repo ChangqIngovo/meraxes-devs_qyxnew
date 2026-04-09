@@ -77,10 +77,14 @@ static int read_swift(const enum grid_prop property, const int snapshot, float* 
   char fname[STRLEN];
   sprintf(dirname, "%s/grids/resampled/N%d", params->SimulationDir, run_globals.params.ReionGridDim);
   DIR* dir = opendir(dirname);
-  if (dir)
+  bool use_resampled_file = (dir != NULL);
+  if (use_resampled_file)
     sprintf(fname, "%s/snap_%04d.hdf5", dirname, snapshot);
   else
     sprintf(fname, "%s/grids/snap_%04d.hdf5", params->SimulationDir, snapshot);
+
+  if (dir)
+    closedir(dir);
 
   hid_t file_id = H5Fopen(fname, H5F_ACC_RDONLY, plist_id);
   H5Pclose(plist_id);
@@ -90,10 +94,15 @@ static int read_swift(const enum grid_prop property, const int snapshot, float* 
   double box_size[3] = { 0 };
 
   if (run_globals.mpi_rank == 0) {
-    grid_dim = run_globals.params.ReionGridDim;
-    if (dir)
-      closedir(dir);
-  
+    if (use_resampled_file) {
+      grid_dim = run_globals.params.ReionGridDim;
+    } else {
+      char data[20] = { '\0' };
+      status = H5LTget_attribute_string(file_id, "/Parameters", "DensityGrids:grid_dim", data);
+      assert(status >= 0);
+      grid_dim = atoi(data);
+    }
+
     status = H5LTget_attribute_double(file_id, "/Header", "BoxSize", box_size);
     assert(status >= 0);
   }
