@@ -272,6 +272,7 @@ void call_find_HII_bubbles(int snapshot, int nout_gals, timer_info* timer)
     read_grid(DENSITY, snapshot, grids->deltax);
 
     // save the grids prior to doing FFTs to avoid precision loss and aliasing etc.
+    // NOTE: I dont think we are reusing them... 
     if (!run_globals.params.FlagMCMC){
       for (int i_out = 0; i_out < run_globals.NOutputSnaps; i_out++)
         if (snapshot == run_globals.ListOutputSnaps[i_out] && run_globals.params.Flag_OutputGrids){
@@ -2253,9 +2254,6 @@ void save_reion_output_grids(int snapshot)
     H5Dclose(dset_id);
   }
 
-  if (run_globals.mpi_rank == 0)
-    save_reion_output_attributes(snapshot);
-
   if (run_globals.params.Flag_ComputePS) {
 
     // create the filespace
@@ -2339,6 +2337,9 @@ void save_reion_output_grids(int snapshot)
   H5Sclose(memspace_id);
   H5Sclose(fspace_id);
   H5Fclose(file_id);
+
+  if (run_globals.mpi_rank == 0)
+    save_reion_output_attributes(snapshot);
 
   mlog("...done", MLOG_CLOSE); // Saving tocf grids
 }
