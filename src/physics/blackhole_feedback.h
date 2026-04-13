@@ -35,9 +35,24 @@
 extern "C"
 {
 #endif
-
-  void calculate_BHemissivity(double BlackHoleMass, double accreted_mass, double *emissivity, double *accretion_time, double *quasar_luv);
   double radio_mode_BH_heating(struct galaxy_t* gal, double cooling_mass, double x);
+
+  /*
+   * calculate_BHemissivity
+   * Computes UV and intrinsic hard X-ray luminosities and emissivities.
+   *
+   * Outputs:
+   *   emissivity      UV ionising photon emissivity  [1e60 photons]
+   *   accretion_time  e-folding accretion timescale  [internal units]
+   *   quasar_luv      UV luminosity                  [1e10 Lsun]
+   *   quasar_lx       intrinsic log10(LX / Lsun)     hard X-ray
+   *   xray_emissivity intrinsic X-ray emissivity     [1e60 erg]
+   */
+  void calculate_BHemissivity(double BlackHoleMass, double accreted_mass,
+                              double *emissivity,     double *accretion_time,
+                              double *quasar_luv,     double *quasar_lx,
+                              double *xray_emissivity);
+
   void merger_driven_BH_growth(struct galaxy_t* gal, double merger_ratio, int snapshot);
   void previous_merger_driven_BH_growth(struct galaxy_t* gal, int snapshot);
 

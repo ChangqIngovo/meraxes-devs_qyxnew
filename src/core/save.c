@@ -75,6 +75,12 @@ void prepare_galaxy_for_output(galaxy_t gal, galaxy_output_t* galout, int i_snap
   galout->FescBH = (float)(gal.FescBH);
   galout->BHemissivity = (float)(gal.BHemissivity);
   galout->QuasarMag = (gal.QuasarLuv > 0.0) ? (float)(-19.826 - 2.5 * log10(gal.QuasarLuv)) : 999.9f;
+  /* Intrinsic hard X-ray log10(LX/L_sun); sentinel 999.9 when inactive */
+  galout->QuasarLX     = (gal.QuasarLX     > -90.0) ? (float)gal.QuasarLX     : 999.9f;
+  /* Observed hard X-ray log10(LX/L_sun) after obscuration model */
+  galout->QuasarLX_obs = (gal.QuasarLX_obs > -90.0) ? (float)gal.QuasarLX_obs : 999.9f;
+  /* Observed X-ray emissivity [1e60 erg] — already obscuration-weighted in blackhole_feedback.c */
+  galout->BHXrayEmissivity = (float)gal.BHXrayEmissivity;
   galout->DutyCycleAGN = (float)(gal.DutyCycleAGN);
   galout->EffectiveBHM = (float)(gal.EffectiveBHM);
   galout->BlackHoleAccretedHotMass = (float)(gal.BlackHoleAccretedHotMass);
@@ -145,7 +151,7 @@ void calc_hdf5_props()
     galaxy_output_t galout;
     int i; // dummy
 
-    h5props->n_props = 55;
+    h5props->n_props = 58;
 #if USE_MINI_HALOS
     h5props->n_props += 15; // Double check later
 #endif
@@ -674,6 +680,27 @@ void calc_hdf5_props()
     h5props->field_h_conv[i] = "None";
     h5props->field_types[i++] = H5T_NATIVE_FLOAT;
 
+    h5props->dst_offsets[i] = HOFFSET(galaxy_output_t, QuasarLX);
+    h5props->dst_field_sizes[i] = sizeof(galout.QuasarLX);
+    h5props->field_names[i] = "QuasarLX";
+    h5props->field_units[i] = "log10(LX / L_sun) [2-10 keV, intrinsic]";
+    h5props->field_h_conv[i] = "None";
+    h5props->field_types[i++] = H5T_NATIVE_FLOAT;
+
+    h5props->dst_offsets[i] = HOFFSET(galaxy_output_t, QuasarLX_obs);
+    h5props->dst_field_sizes[i] = sizeof(galout.QuasarLX_obs);
+    h5props->field_names[i] = "QuasarLX_obs";
+    h5props->field_units[i] = "log10(LX / L_sun) [2-10 keV, obscuration-corrected]";
+    h5props->field_h_conv[i] = "None";
+    h5props->field_types[i++] = H5T_NATIVE_FLOAT;
+
+    h5props->dst_offsets[i] = HOFFSET(galaxy_output_t, BHXrayEmissivity);
+    h5props->dst_field_sizes[i] = sizeof(galout.BHXrayEmissivity);
+    h5props->field_names[i] = "BHXrayEmissivity";
+    h5props->field_units[i] = "1e60 erg";
+    h5props->field_h_conv[i] = "None";
+    h5props->field_types[i++] = H5T_NATIVE_FLOAT;
+
     h5props->dst_offsets[i] = HOFFSET(galaxy_output_t, DutyCycleAGN);
     h5props->dst_field_sizes[i] = sizeof(galout.DutyCycleAGN);
     h5props->field_names[i] = "DutyCycleAGN";
@@ -1063,6 +1090,11 @@ void create_master_file()
       sprintf(source_ds, "Snap%03d/OIIILF", run_globals.ListOutputSnaps[i_out]);
       H5Lcreate_external(relative_source_file, source_ds, snap_group_id, "OIIILF", H5P_DEFAULT, H5P_DEFAULT);
     }
+
+    if (run_globals.params.Flag_OutputXrayLF && H5LTfind_dataset(source_group_id, "XrayLF")) {
+      sprintf(source_ds, "Snap%03d/XrayLF", run_globals.ListOutputSnaps[i_out]);
+      H5Lcreate_external(relative_source_file, source_ds, snap_group_id, "XrayLF", H5P_DEFAULT, H5P_DEFAULT);
+    }
     
     H5Gclose(source_group_id);
     H5Fclose(source_file_id);
@@ -1204,6 +1236,7 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
   distribution_function_t hmf, smf;
   distribution_function_t quasarlf;
   distribution_function_t oiiilf;
+  distribution_function_t xraylf;
 #ifdef CALC_MAGS
   distribution_function_t uvlf, dustylf;
 #endif
@@ -1355,6 +1388,23 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
             run_globals.params.OIIILF_BinsPerDex,
             "OIII Luminosity Function");
     oiiilf.volume = df_volume;
+  }
+
+  if (run_globals.params.Flag_OutputXrayLF) {
+    if (run_globals.params.XrayLF_MaxLogL <= run_globals.params.XrayLF_MinLogL) {
+      mlog_error("XrayLF_MaxLogL must be greater than XrayLF_MinLogL.");
+      ABORT(EXIT_FAILURE);
+    }
+    if (run_globals.params.XrayLF_BinsPerDex <= 0) {
+      mlog_error("XrayLF_BinsPerDex must be > 0.");
+      ABORT(EXIT_FAILURE);
+    }
+    df_init(&xraylf,
+            run_globals.params.XrayLF_MinLogL,
+            run_globals.params.XrayLF_MaxLogL,
+            run_globals.params.XrayLF_BinsPerDex,
+            "X-ray Luminosity Function (2-10 keV, observed)");
+    xraylf.volume = df_volume;
   }
 
   // If the immediately preceding snapshot was also written, then save the
@@ -1545,6 +1595,35 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
           }
         }
       }
+
+      /* XrayLF — observed 2-10 keV X-ray luminosity function.
+       *
+       * Binning value : QuasarLX_obs  [log10(LX/L_sun)]
+       *   converted to log10(LX/erg/s) by adding log10(L_sun) = 33.583
+       *   so the LF axis is in log10(erg/s), matching observational convention.
+       *
+       * Weight : DutyCycleAGN
+       *   Each AGN contributes fractionally according to its duty cycle,
+       *   exactly as in the UV QuasarLF.  The obscuration has already been
+       *   folded into QuasarLX_obs (via apply_xray_obscuration in
+       *   blackhole_feedback.c), so no additional obscuration factor is
+       *   needed here.
+       *
+       * Sentinel : QuasarLX_obs >= 999 means the AGN was inactive this snap.
+       */
+      if (run_globals.params.Flag_OutputXrayLF) {
+        float lx_obs = output_buffer[buffer_count].QuasarLX_obs;
+        weight = output_buffer[buffer_count].DutyCycleAGN;
+        if (lx_obs < 900.0f && weight > 0.0 && isfinite(lx_obs)) {
+          /* Convert log10(LX/L_sun) → log10(LX/erg/s) */
+          val = (double)lx_obs + 33.583;
+          if (val >= xraylf.x_min && val <= xraylf.x_max) {
+            bin_idx = (int)((val - xraylf.x_min) / xraylf.bin_width);
+            xraylf.bin_counts[bin_idx]   += weight;
+            xraylf.bin_variance[bin_idx] += weight * (1.0 - weight); /* Bernoulli */
+          }
+        }
+      }
       
       buffer_count++;;
     }
@@ -1647,6 +1726,14 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
       df_write_hdf5(file_id, target_group, &oiiilf, "OIIILF", "per Mpc^3 per dex");
     }
     df_free(&oiiilf);
+  }
+
+  if (run_globals.params.Flag_OutputXrayLF) {
+    df_mpi_reduce(&xraylf, run_globals.mpi_rank, run_globals.mpi_size);
+    if (run_globals.mpi_rank == 0) {
+      df_write_hdf5(file_id, target_group, &xraylf, "XrayLF", "per Mpc^3 per dex");
+    }
+    df_free(&xraylf);
   }
 
   // Close the group.

@@ -58,6 +58,9 @@ typedef struct galaxy_output_t
   float FescBH;
   float BHemissivity;
   float QuasarMag;
+  float QuasarLX;        //!< Intrinsic hard X-ray log10(LX/L_sun); 999.9 if inactive
+  float QuasarLX_obs;    //!< Observed  hard X-ray log10(LX/L_sun) after obscuration; 999.9 if inactive
+  float BHXrayEmissivity;//!< Observed X-ray emissivity [1e60 erg], obscuration- and duty-cycle-weighted
   float EffectiveBHM;
   float BlackHoleAccretedHotMass;
   float BlackHoleAccretedColdMass;
