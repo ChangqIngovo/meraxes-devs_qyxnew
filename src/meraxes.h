@@ -338,6 +338,10 @@ typedef struct run_params_t
   double OIIILF_MinLogL;  //!< Minimum log10(LOIII [erg/s]) for OIIILF bins
   double OIIILF_MaxLogL;  //!< Maximum log10(LOIII [erg/s]) for OIIILF bins
   int OIIILF_BinsPerDex;  //!< Number of OIIILF bins per dex
+  int Flag_OutputXrayLF;  //!< Flag to enable/disable X-ray Luminosity Function output
+  double XrayLF_MinLogL;  //!< Minimum log10(LX [erg/s]) for XrayLF bins (e.g. 40.0)
+  double XrayLF_MaxLogL;  //!< Maximum log10(LX [erg/s]) for XrayLF bins (e.g. 48.0)
+  int XrayLF_BinsPerDex;  //!< Number of XrayLF bins per dex
   int FlagIgnoreProgIndex;
 } run_params_t;
 
@@ -655,7 +659,10 @@ typedef struct galaxy_t
   double BlackHoleMass;
   double FescBH;
   double BHemissivity;
-  double QuasarLuv;  //!< UV luminosity LUV of quasar (1e10 Lsun, summable for mergers)
+  double QuasarLuv;         //!< UV luminosity LUV of quasar (1e10 Lsun, summable for mergers)
+  double QuasarLX;          //!< Intrinsic hard X-ray log10(LX / L_sun); -99 if inactive
+  double QuasarLX_obs;      //!< Observed hard X-ray log10(LX / L_sun) after obscuration; -99 if inactive
+  double BHXrayEmissivity;  //!< Observed X-ray emissivity [1e60 erg], after obscuration × duty-cycle weighting
   double EffectiveBHM;
   double EffectiveBHAR;
   double DutyCycleAGN;

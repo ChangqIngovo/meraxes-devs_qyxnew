@@ -1322,6 +1322,26 @@ void read_parameter_file(char* fname, int mode)
       required_tag[n_param] = 1;
       params_type[n_param++] = PARAM_TYPE_INT;
 
+      strncpy(params_tag[n_param], "Flag_OutputXrayLF", tag_length);
+      params_addr[n_param] = &(run_params->Flag_OutputXrayLF);
+      required_tag[n_param] = 1;
+      params_type[n_param++] = PARAM_TYPE_INT;
+
+      strncpy(params_tag[n_param], "XrayLF_MinLogL", tag_length);
+      params_addr[n_param] = &(run_params->XrayLF_MinLogL);
+      required_tag[n_param] = 1;
+      params_type[n_param++] = PARAM_TYPE_DOUBLE;
+
+      strncpy(params_tag[n_param], "XrayLF_MaxLogL", tag_length);
+      params_addr[n_param] = &(run_params->XrayLF_MaxLogL);
+      required_tag[n_param] = 1;
+      params_type[n_param++] = PARAM_TYPE_DOUBLE;
+
+      strncpy(params_tag[n_param], "XrayLF_BinsPerDex", tag_length);
+      params_addr[n_param] = &(run_params->XrayLF_BinsPerDex);
+      required_tag[n_param] = 1;
+      params_type[n_param++] = PARAM_TYPE_INT;
+
       hdf5props->params_count = n_param;
     }
 
