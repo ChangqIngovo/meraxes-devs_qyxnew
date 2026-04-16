@@ -55,6 +55,15 @@
 #define ABS_TOL (float)1e-8
 // ======================================================
 
+//=========================
+//Parameters for remove SHMR scatter
+#define SHMR_NSNAPS 120
+#define SHMR_NTYPES 3
+#define SHMR_NX     900
+#define SHMR_XMIN   (-2.995)
+#define SHMR_DX     (0.01)
+#define SHMR_XMAX   (SHMR_XMIN + SHMR_DX * (SHMR_NX - 1))
+//=========================
 // Define things used for aborting exceptions
 #ifdef __cplusplus
 extern "C"
@@ -178,7 +187,8 @@ typedef struct physics_params_t
   double EscapeFracPropScaling;
   double EscapeFracBHNorm;
   double EscapeFracBHScaling;
-
+  double EscapeFracScatterDex;
+  
   // CGM suppression of fesc
   double FescCGMSuppressionNorm;
   double FescCGMSuppressionScaling;
@@ -216,6 +226,7 @@ typedef struct physics_params_t
   int Flag_FixVmaxOnInfall;
   int Flag_ReheatToFOFGroupTemp;
   int Flag_FescCGMSuppression;
+  int Flag_RemoveSHMRScatter;
 } physics_params_t;
 
 enum tree_ids
@@ -256,7 +267,7 @@ typedef struct run_params_t
   char MassRatioModifier[STRLEN];
   char BaryonFracModifier[STRLEN];
   char FFTW3WisdomDir[STRLEN];
-
+  char SHMRTableFile[STRLEN];//SHMR table
   physics_params_t physics;
 
   double BoxSize;
@@ -879,6 +890,7 @@ typedef struct run_globals_t
   float* Mass_Values;
   float* Time_Values;
 
+  float SHMRs[SHMR_NSNAPS][SHMR_NTYPES][SHMR_NX];//
 #ifdef CALC_MAGS
   struct mag_params_t mag_params;
 #endif

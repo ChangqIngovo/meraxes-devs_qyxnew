@@ -173,6 +173,12 @@ void read_parameter_file(char* fname, int mode)
 #endif
       params_type[n_param++] = PARAM_TYPE_STRING;
 
+      strncpy(params_tag[n_param], "SHMRTableFile", tag_length);
+      params_addr[n_param] = run_params->SHMRTableFile;
+      required_tag[n_param] = 0;
+      params_type[n_param++] = PARAM_TYPE_STRING;
+      *(run_params->SHMRTableFile) = '\0';
+
       strcpy(params_tag[n_param], "TargetSnaps");
       params_addr[n_param] = run_params->TargetSnaps;
 #ifndef CALC_MAGS
@@ -1019,6 +1025,17 @@ void read_parameter_file(char* fname, int mode)
       params_addr[n_param] = &(run_params->physics).EscapeFracBHScaling;
       required_tag[n_param] = 1;
       params_type[n_param++] = PARAM_TYPE_DOUBLE;
+
+      strncpy(params_tag[n_param], "EscapeFracScatterDex", tag_length);
+      params_addr[n_param] = &(run_params->physics).EscapeFracScatterDex;
+      required_tag[n_param] = 0;
+      params_type[n_param++] = PARAM_TYPE_DOUBLE;
+      
+      strncpy(params_tag[n_param], "Flag_RemoveSHMRScatter", tag_length);
+      params_addr[n_param] = &(run_params->physics).Flag_RemoveSHMRScatter;
+      required_tag[n_param] = 0;
+      params_type[n_param++] = PARAM_TYPE_INT;
+
 
       strncpy(params_tag[n_param], "FescCGMSuppressionNorm", tag_length);
       params_addr[n_param] = &(run_params->physics).FescCGMSuppressionNorm;
