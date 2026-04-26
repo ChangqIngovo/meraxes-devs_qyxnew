@@ -161,6 +161,24 @@ typedef struct physics_params_t
   double SpecIndexXrayIII;
   double NuXraySoftCut;
   double NuXrayMax;
+  double SpecIndexXrayAGNSoft;
+  double SpecIndexXrayAGNHard;
+
+
+  // ComputTS.c , this is the added paramters to the spin temp. file 
+  // AGN spectral paramters used in the ComputTs fucntion 
+  double NuXrayAGNThreshold;            // eV, e.g. 200 eV
+  //double NuXrayAGNBreak;                // eV, e.g. 2000 eV (2 keV break)
+  //double NuXrayAGNHardCut;              // eV, e.g. 10000 eV (10 keV cutoff)
+  double SpecIndexXrayAGNSoft;          // e.g. 1.5 (soft end, steeper)
+  double SpecIndexXrayAGNHard;          // e.g. 0.9 (hard end, flatter)
+  //double AGNLuminosityFunction_norm;    // Phi*, Mpc^-3, e.g. 1e-6
+  //double AGNLuminosityFunction_Lstar;   // erg/s, e.g. 1e44
+  // double AGNLuminosityFunction_alpha;   // faint-end slope, e.g. 1.7 , I was thinking that we gonna consider the broken power spectrum from faint and bright ends of the quasars.
+  //double AGNLuminosityFunction_beta;    // bright-end slope, e.g. 2.8
+  //double AGNDensityEvolution;           // gamma, e.g. 3.0
+  //double AGNzMin;                       // e.g. 6.0
+  //double AGNzMax;                       // e.g. 30.0
 
   double ReionMaxHeatingRedshift;
 
@@ -673,6 +691,8 @@ typedef struct galaxy_t
   double t_resp;                //!< Local relaxation timescale (in Myr)
   int Galaxy_Population; // You need it also if you are not disentangling PopIII/PopII (when Mini_halos is off, this is
                          // = 2)
+
+  
 #if USE_MINI_HALOS
   // Differentiation Pop III / Pop II
   double SfrIII;

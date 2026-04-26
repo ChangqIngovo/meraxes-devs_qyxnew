@@ -1596,27 +1596,14 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
         }
       }
 
-      /* XrayLF — observed 2-10 keV X-ray luminosity function.
-       *
-       * Binning value : QuasarLX_obs  [log10(LX/L_sun)]
-       *   converted to log10(LX/erg/s) by adding log10(L_sun) = 33.583
-       *   so the LF axis is in log10(erg/s), matching observational convention.
-       *
-       * Weight : DutyCycleAGN
-       *   Each AGN contributes fractionally according to its duty cycle,
-       *   exactly as in the UV QuasarLF.  The obscuration has already been
-       *   folded into QuasarLX_obs (via apply_xray_obscuration in
-       *   blackhole_feedback.c), so no additional obscuration factor is
-       *   needed here.
-       *
-       * Sentinel : QuasarLX_obs >= 999 means the AGN was inactive this snap.
-       */
+      // XrayLF — observed 2-10 keV X-ray luminosity function.
+   
       if (run_globals.params.Flag_OutputXrayLF) {
         float lx_obs = output_buffer[buffer_count].QuasarLX_obs;
         weight = output_buffer[buffer_count].DutyCycleAGN;
         if (lx_obs < 900.0f && weight > 0.0 && isfinite(lx_obs)) {
           /* Convert log10(LX/L_sun) → log10(LX/erg/s) */
-          val = (double)lx_obs + 33.583;
+          val = (double)lx_obs; // LX/L_sun =LX/ 3.828e33 erg/s → log10(3.828e33) ≈ 33.585
           if (val >= xraylf.x_min && val <= xraylf.x_max) {
             bin_idx = (int)((val - xraylf.x_min) / xraylf.bin_width);
             xraylf.bin_counts[bin_idx]   += weight;

@@ -3,6 +3,12 @@
 
 #include "meraxes.h"
 
+/* Energy band parameters — change these to use a different band */
+#define E_MIN_KEV = 2.0;    /* lower energy bound in keV */
+#define E_MAX_KEV = 10.0;   /* upper energy bound in keV */
+#define N_NH      = 20;     /* NH samples per bin (Cell 10 default) */
+#define N_E       = 40;     /* energy samples for integration        */
+
 #define ETA 0.06
 // standard efficiency, 6% accreted mass is radiated
 

@@ -1120,6 +1120,16 @@ void read_parameter_file(char* fname, int mode)
       required_tag[n_param] = 1;
       params_type[n_param++] = PARAM_TYPE_DOUBLE;
 
+      strcpy(params_tag[n_param], "SpecIndexXrayAGNSoft");
+      params_addr[n_param] = &(run_params->physics).SpecIndexXrayAGNSoft;
+      required_tag[n_param] = 1;
+      params_type[n_param++] = PARAM_TYPE_DOUBLE;
+
+      strcpy(params_tag[n_param], "SpecIndexXrayAGNHard");
+      params_addr[n_param] = &(run_params->physics).SpecIndexXrayAGNHard;
+      required_tag[n_param] = 1;
+      params_type[n_param++] = PARAM_TYPE_DOUBLE;
+
       strcpy(params_tag[n_param], "LXrayGalIII");
       params_addr[n_param] = &(run_params->physics).LXrayGalIII;
 #if USE_MINI_HALOS
