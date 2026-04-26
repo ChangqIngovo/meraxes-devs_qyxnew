@@ -47,13 +47,16 @@ ZCrit                      : 0.0001 # Critical metallicity. If Z >= Zcrit -> Pop
 
 LXrayGal                   : 3.16e40         # Soft-band (< NuXraySoftCut keV) X-ray luminosity for galaxy based sources (HMXB)
 LXrayGalIII                : 3.16e40         # Same as above for PopIII
+#I did not add the LXrayAGN variabel here because we calculte it itnthe luminsosity fucntion anyways 
 
-NuXrayGalThreshold         : 500.            # Energy threshold for HMXB X-rays escaping host galaxy (eV)
 SpecIndexXrayGal           : 1.              # Spectral index of galaxy X-ray sources  (nu^-alpha)
 SpecIndexXrayIII           : 1.              # Same as above for Pop III
-NuXraySoftCut              : 2000.           # X-ray soft-band cut off in (eV)
-NuXrayMax                  : 10000.          # Maximum energy for X-ray band integration
+SpecIndexXrayAGNHard       : 1.7             # the spectral index for the hard x-rays part (comtonization wih the high energy electrons, multiple scattering)
+SpecIndexXrayAGNSoft       : 2.2             # the spectral index for the soft x-rays part (including the soft access) of the qusars spectral shape
 
+NuXrayGalThreshold         : 500.            # Energy threshold for HMXB X-rays escaping host galaxy (eV), this threshold used for Gal, popIII, and AGN
+NuXraySoftCut              : 2000.           # X-ray soft-band cut off in (eV)
+NuXrayMax                  : 10000.          # Maximum energy for X-ray band integration, I did not add specific energy band threshold there , because they follow the AGN energy bands threshold anyways, we do not need to add extra variable ! 
 
 #---------------------------------------------
 #----- star formation (including PopIII) -----

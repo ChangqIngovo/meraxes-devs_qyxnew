@@ -57,6 +57,24 @@ double growth_factor_zp;
 double dgrowth_factor_dzp;
 double const_zp_prefactor_GAL;
 double const_zp_prefactor_III;
+/*
+ * ============================================================
+ * THIS ADDITION IS MADE TO ADD THE X-RAY CONTRIBUTION BY AGN
+ * ============================================================
+ * Physical motivation:
+ *   const_zp_prefactor_AGN is the redshift-dependent normalisation
+ *   prefactor for the AGN X-ray contribution in evolveInt(), exactly
+ *   analogous to const_zp_prefactor_GAL for Pop II galaxies. It encodes:
+ *
+ *     const_zp_prefactor_AGN = L_X_AGN * Lum_conv_AGN
+ *                              / (ν_thresh_AGN × h_Planck)
+ *                              × c × (1+z_p)^{Γ_soft + 3}
+ *
+ *   where Γ_soft is the AGN soft X-ray photon index. The value is
+ *   computed in ComputeTs.c and consumed here in evolveInt().
+ * ============================================================
+ */
+double const_zp_prefactor_AGN;
 float x_int_XHII[x_int_NXHII];
 #else
 extern double x_e_ave;
@@ -73,6 +91,15 @@ extern double growth_factor_zp;
 extern double dgrowth_factor_dzp;
 extern double const_zp_prefactor_GAL;
 extern double const_zp_prefactor_III;
+/*
+ * ============================================================
+ * THIS ADDITION IS MADE TO ADD THE X-RAY CONTRIBUTION BY AGN
+ * ============================================================
+ * External declaration of const_zp_prefactor_AGN — see definition
+ * block above for physical motivation.
+ * ============================================================
+ */
+extern double const_zp_prefactor_AGN;
 extern float x_int_XHII[x_int_NXHII];
 #endif
 
@@ -179,26 +206,54 @@ extern "C"
   double interpolate_fcoll(double redshift, int snap_i, int flag_population);
 
 #if USE_MINI_HALOS
+  /*
+   * ============================================================
+   * THIS ADDITION IS MADE TO ADD THE X-RAY CONTRIBUTION BY AGN
+   * ============================================================
+   * The AGN arrays SFR_AGN, freq_int_heat_AGN, freq_int_ion_AGN,
+   * freq_int_lya_AGN are added to evolveInt() alongside the existing
+   * Pop II (GAL) and Pop III (III) arrays. They carry the smoothed AGN
+   * X-ray emissivity and the broken power-law frequency integrals
+   * pre-computed in ComputeTs.c, allowing the AGN contribution to IGM
+   * heating (dT_K/dz), ionisation (dx_e/dz), and Ly-alpha coupling
+   * (dJ_alpha/dz) to be correctly folded into the evolution equations.
+   * ============================================================
+   */
   void evolveInt(float zp,
                  float curr_delNL0,
                  const double SFR_GAL[],
                  const double SFR_III[],
+                 const double SFR_AGN[],
                  const double freq_int_heat_GAL[],
                  const double freq_int_ion_GAL[],
                  const double freq_int_lya_GAL[],
                  const double freq_int_heat_III[],
                  const double freq_int_ion_III[],
                  const double freq_int_lya_III[],
+                 const double freq_int_heat_AGN[],
+                 const double freq_int_ion_AGN[],
+                 const double freq_int_lya_AGN[],
                  int COMPUTE_Ts,
                  const double y[],
                  double deriv[]);
 #else
+  /*
+   * ============================================================
+   * THIS ADDITION IS MADE TO ADD THE X-RAY CONTRIBUTION BY AGN
+   * ============================================================
+   * Same as above for the non-mini-halo code path.
+   * ============================================================
+   */
   void evolveInt(float zp,
                  float curr_delNL0,
                  const double SFR_GAL[],
+                 const double SFR_AGN[],
                  const double freq_int_heat_GAL[],
                  const double freq_int_ion_GAL[],
                  const double freq_int_lya_GAL[],
+                 const double freq_int_heat_AGN[],
+                 const double freq_int_ion_AGN[],
+                 const double freq_int_lya_AGN[],
                  int COMPUTE_Ts,
                  const double y[],
                  double deriv[]);
