@@ -53,8 +53,10 @@ NuXrayThreshold            : 500.            # Energy threshold for HMXB X-rays 
 NuXraySoftCut              : 2000.           # X-ray soft-band cut off in (eV)
 NuXrayMax                  : 10000.          # Maximum energy for X-ray band integration, I did not add specific energy band threshold there , because they follow the AGN energy bands threshold anyways, we do not need to add extra variable ! 
 
-SpecIndexXrayAGNHard       : 1.7             # the spectral index for the hard x-rays part (comtonization wih the high energy electrons, multiple scattering)
-SpecIndexXrayAGNSoft       : 2.2             # the spectral index for the soft x-rays part (including the soft access) of the qusars spectral shape
+# Adding AGN broken-power Spectral index
+Flag_IncludeAGNXray        : 0               # 0=off, 1=soft+hard BPL, 2=hard only, 3=Soft only
+SpecIndexXrayAGNSoft       : 2.2             # Soft-band spectral index (nu^{-alpha}, E < E_break)
+SpecIndexXrayAGNHard       : 1.7             # Hard-band spectral index (nu^{-alpha}, E >= E_break)
 
 #---------------------------------------------
 #----- star formation (including PopIII) -----
