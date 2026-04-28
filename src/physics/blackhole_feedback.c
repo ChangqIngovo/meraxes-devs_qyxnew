@@ -69,38 +69,55 @@ static double xray_transmission_band(double log_NH_min, double log_NH_max,
                                      double E_min_keV,  double E_max_keV,
                                      int    n_NH,       int    n_E)
 {
-  double T_NH_avg = 0.0;
-  double dlog_NH  = (log_NH_max - log_NH_min) / (double)n_NH;
+  /* --- all variables declared at function scope --- */
+  double T_NH_avg;
+  double dlog_NH;
+  double dE;
+  double log_NH;
+  double NH;
+  double T_E_sum;
+  double E;
+  double sigma;
+  double tau;
+  double T;
+  int    i_NH;
+  int    i_E;
 
-  for (int i_NH = 0; i_NH < n_NH; i_NH++) {
-    /* Sample logNH uniformly across the bin — midpoint of each sub-interval */
-    double log_NH = log_NH_min + (i_NH + 0.5) * dlog_NH;
-    double NH     = pow(10.0, log_NH);
+  const double sigma_T = 6.6524e-25;   /* Thomson cross-section [cm^2] */
 
-    /* Integrate transmission over energy band using simple trapezoidal rule */
-    double T_E_sum = 0.0;
-    double dE      = (E_max_keV - E_min_keV) / (double)n_E;
+  /* --- initialisations --- */
+  T_NH_avg = 0.0;
+  dlog_NH  = (log_NH_max - log_NH_min) / (double)n_NH;
+  dE       = (E_max_keV  - E_min_keV)  / (double)n_E;
 
-    for (int i_E = 0; i_E < n_E; i_E++) {
-      double E     = E_min_keV + (i_E + 0.5) * dE;   /* midpoint */
-      double sigma = morrison_mccammon_sigma(E);  /* Morrison & McCammon (1983), Table 2 */
-      double tau   = sigma * NH;
-      double T     = exp(-tau);
+  /* --- outer loop: average over NH bin --- */
+  for (i_NH = 0; i_NH < n_NH; i_NH++) {
 
-      
-      if (log_NH >= 24.0) {
-        const double sigma_T = 6.6524e-25;   /* Thomson cross-section [cm^2] */
+    /* midpoint of each log-NH sub-interval */
+    log_NH  = log_NH_min + (i_NH + 0.5) * dlog_NH;
+    NH      = pow(10.0, log_NH);
+    T_E_sum = 0.0;
+
+    /* --- inner loop: integrate transmission over energy band --- */
+    for (i_E = 0; i_E < n_E; i_E++) {
+
+      E     = E_min_keV + (i_E + 0.5) * dE;   /* midpoint */
+      sigma = morrison_mccammon_sigma(E);       /* Morrison & McCammon (1983), Table 2 */
+      tau   = sigma * NH;
+      T     = exp(-tau);
+
+      /* add Compton scattering correction for Compton-thick columns */
+      if (log_NH >= 24.0)
         T *= exp(-NH * 1.21 * sigma_T);
-      }
 
       T_E_sum += T;
     }
 
-    /* Average over energy band */
+    /* average over energy band */
     T_NH_avg += T_E_sum / (double)n_E;
   }
 
-  /* Average over NH bin */
+  /* average over NH bin */
   return T_NH_avg / (double)n_NH;
 }
 
