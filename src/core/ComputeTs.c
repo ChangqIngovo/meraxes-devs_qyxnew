@@ -136,7 +136,7 @@ void _ComputeTs(int snapshot)
    *
    * New parameters needed in run_globals.params.physics:
    *   LXrayAGN          - AGN X-ray soft-band luminosity per unit BH accretion rate (erg/s per M_sun/yr)
-   *   NuXrayAGNThreshold - minimum X-ray frequency for AGN (eV), same role as NuXrayGalThreshold
+   *   NuXrayThreshold - minimum X-ray frequency for AGN (eV), same role as NuXrayGalThreshold
    *   NuXrayAGNBreak    - break frequency separating soft/hard components (eV)
    *   NuXrayAGNHardCut  - upper cutoff of hard component (eV)
    *   SpecIndexXrayAGNSoft - spectral index alpha for soft component (nu^-alpha)
@@ -766,7 +766,7 @@ void _ComputeTs(int snapshot)
       /* Soft band lower limit: opacity cutoff or AGN threshold, whichever is higher */
       lower_int_limit_AGN_soft = fmax(
         nu_tau_one(zp, zpp, x_e_ave, filling_factor_of_HI_zp, snapshot),
-        run_globals.params.physics.NuXrayAGNThreshold * NU_over_EV);
+        run_globals.params.physics.NuXrayThreshold * NU_over_EV);
 
       /* Hard band lower limit: start at break frequency (no double counting) */
       lower_int_limit_AGN_hard = fmax(
@@ -779,19 +779,19 @@ void _ComputeTs(int snapshot)
         freq_int_heat_tbl_AGN_soft[x_e_ct][R_ct] = integrate_over_nu(
           zp, x_int_XHII[x_e_ct],
           lower_int_limit_AGN_soft,
-          run_globals.params.physics.NuXrayAGNThreshold,
+          run_globals.params.physics.NuXrayThreshold,
           run_globals.params.physics.SpecIndexXrayAGNSoft, 0);
 
         freq_int_ion_tbl_AGN_soft[x_e_ct][R_ct] = integrate_over_nu(
           zp, x_int_XHII[x_e_ct],
           lower_int_limit_AGN_soft,
-          run_globals.params.physics.NuXrayAGNThreshold,
+          run_globals.params.physics.NuXrayThreshold,
           run_globals.params.physics.SpecIndexXrayAGNSoft, 1);
 
         freq_int_lya_tbl_AGN_soft[x_e_ct][R_ct] = integrate_over_nu(
           zp, x_int_XHII[x_e_ct],
           lower_int_limit_AGN_soft,
-          run_globals.params.physics.NuXrayAGNThreshold,
+          run_globals.params.physics.NuXrayThreshold,
           run_globals.params.physics.SpecIndexXrayAGNSoft, 2);
 
         /*
@@ -960,19 +960,19 @@ void _ComputeTs(int snapshot)
     /* --- Soft component: nu_thresh to nu_break --- */
     if (fabs(run_globals.params.physics.SpecIndexXrayAGNSoft - 1.0) < 1e-6) {
       Luminosity_converstion_factor_AGN_soft =
-        (run_globals.params.physics.NuXrayAGNThreshold * NU_over_EV) *
+        (run_globals.params.physics.NuXrayThreshold * NU_over_EV) *
         log(run_globals.params.physics.NuXrayAGNBreak /
-            run_globals.params.physics.NuXrayAGNThreshold);
+            run_globals.params.physics.NuXrayThreshold);
       Luminosity_converstion_factor_AGN_soft = 1.0 / Luminosity_converstion_factor_AGN_soft;
     } else {
       Luminosity_converstion_factor_AGN_soft =
         pow(run_globals.params.physics.NuXrayAGNBreak * NU_over_EV,
             1.0 - run_globals.params.physics.SpecIndexXrayAGNSoft) -
-        pow(run_globals.params.physics.NuXrayAGNThreshold * NU_over_EV,
+        pow(run_globals.params.physics.NuXrayThreshold * NU_over_EV,
             1.0 - run_globals.params.physics.SpecIndexXrayAGNSoft);
       Luminosity_converstion_factor_AGN_soft = 1.0 / Luminosity_converstion_factor_AGN_soft;
       Luminosity_converstion_factor_AGN_soft *=
-        pow(run_globals.params.physics.NuXrayAGNThreshold * NU_over_EV,
+        pow(run_globals.params.physics.NuXrayThreshold * NU_over_EV,
             -run_globals.params.physics.SpecIndexXrayAGNSoft) *
         (1.0 - run_globals.params.physics.SpecIndexXrayAGNSoft);
     }
@@ -1049,7 +1049,7 @@ void _ComputeTs(int snapshot)
      */
     const_zp_prefactor_AGN_soft =
       (run_globals.params.physics.LXrayAGN * Luminosity_converstion_factor_AGN_soft) /
-      (run_globals.params.physics.NuXrayAGNThreshold * NU_over_EV) * SPEED_OF_LIGHT *
+      (run_globals.params.physics.NuXrayThreshold * NU_over_EV) * SPEED_OF_LIGHT *
       pow(1.0 + zp, run_globals.params.physics.SpecIndexXrayAGNSoft + 3.0);
 
     const_zp_prefactor_AGN_hard =
