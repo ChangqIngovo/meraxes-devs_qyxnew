@@ -2,7 +2,7 @@
 #include "mlog.h"
 #include "parse_paramfile.h"
 #include <string.h>
-
+//test
 static void check_problem_params(run_params_t* run_params)
 {
   if (run_params->NSteps != 1) {
