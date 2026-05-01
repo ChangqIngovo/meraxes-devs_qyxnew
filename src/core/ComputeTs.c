@@ -136,8 +136,8 @@ void _ComputeTs(int snapshot)
    *
    * New parameters needed in run_globals.params.physics:
    *   LXrayAGN          - AGN X-ray soft-band luminosity per unit BH accretion rate (erg/s per M_sun/yr)
-   *   NuXrayThreshold - minimum X-ray frequency for AGN (eV), same role as NuXrayGalThreshold
-   *   NuXrayAGNBreak    - break frequency separating soft/hard components (eV)
+   *   NuXrayThreshold - minimum X-ray frequency for AGN (eV), same role as NuXrayThreshold
+   *   NuXraySoftCut    - break frequency separating soft/hard components (eV)
    *   NuXrayAGNHardCut  - upper cutoff of hard component (eV)
    *   SpecIndexXrayAGNSoft - spectral index alpha for soft component (nu^-alpha)
    *   SpecIndexXrayAGNHard - spectral index alpha for hard component (nu^-alpha), harder = smaller alpha
@@ -616,7 +616,7 @@ void _ComputeTs(int snapshot)
 #endif
 
       lower_int_limit_GAL = fmax(nu_tau_one(zp, zpp, x_e_ave, filling_factor_of_HI_zp, snapshot),
-                                 run_globals.params.physics.NuXrayGalThreshold * NU_over_EV);
+                                 run_globals.params.physics.NuXrayThreshold * NU_over_EV);
 
       if (filling_factor_of_HI_zp < 0)
         filling_factor_of_HI_zp =
@@ -626,19 +626,19 @@ void _ComputeTs(int snapshot)
         freq_int_heat_tbl_GAL[x_e_ct][R_ct] = integrate_over_nu(zp,
                                                                 x_int_XHII[x_e_ct],
                                                                 lower_int_limit_GAL,
-                                                                run_globals.params.physics.NuXrayGalThreshold,
+                                                                run_globals.params.physics.NuXrayThreshold,
                                                                 run_globals.params.physics.SpecIndexXrayGal,
                                                                 0);
         freq_int_ion_tbl_GAL[x_e_ct][R_ct] = integrate_over_nu(zp,
                                                                x_int_XHII[x_e_ct],
                                                                lower_int_limit_GAL,
-                                                               run_globals.params.physics.NuXrayGalThreshold,
+                                                               run_globals.params.physics.NuXrayThreshold,
                                                                run_globals.params.physics.SpecIndexXrayGal,
                                                                1);
         freq_int_lya_tbl_GAL[x_e_ct][R_ct] = integrate_over_nu(zp,
                                                                x_int_XHII[x_e_ct],
                                                                lower_int_limit_GAL,
-                                                               run_globals.params.physics.NuXrayGalThreshold,
+                                                               run_globals.params.physics.NuXrayThreshold,
                                                                run_globals.params.physics.SpecIndexXrayGal,
                                                                2);
 
@@ -646,19 +646,19 @@ void _ComputeTs(int snapshot)
         freq_int_heat_tbl_III[x_e_ct][R_ct] = integrate_over_nu(zp,
                                                                 x_int_XHII[x_e_ct],
                                                                 lower_int_limit_GAL,
-                                                                run_globals.params.physics.NuXrayGalThreshold,
+                                                                run_globals.params.physics.NuXrayThreshold,
                                                                 run_globals.params.physics.SpecIndexXrayIII,
                                                                 0);
         freq_int_ion_tbl_III[x_e_ct][R_ct] = integrate_over_nu(zp,
                                                                x_int_XHII[x_e_ct],
                                                                lower_int_limit_GAL,
-                                                               run_globals.params.physics.NuXrayGalThreshold,
+                                                               run_globals.params.physics.NuXrayThreshold,
                                                                run_globals.params.physics.SpecIndexXrayIII,
                                                                1);
         freq_int_lya_tbl_III[x_e_ct][R_ct] = integrate_over_nu(zp,
                                                                x_int_XHII[x_e_ct],
                                                                lower_int_limit_GAL,
-                                                               run_globals.params.physics.NuXrayGalThreshold,
+                                                               run_globals.params.physics.NuXrayThreshold,
                                                                run_globals.params.physics.SpecIndexXrayIII,
                                                                2);
 #endif
@@ -771,7 +771,7 @@ void _ComputeTs(int snapshot)
       /* Hard band lower limit: start at break frequency (no double counting) */
       lower_int_limit_AGN_hard = fmax(
         nu_tau_one(zp, zpp, x_e_ave, filling_factor_of_HI_zp, snapshot),
-        run_globals.params.physics.NuXrayAGNBreak * NU_over_EV);
+        run_globals.params.physics.NuXraySoftCut * NU_over_EV);
 
       for (x_e_ct = 0; x_e_ct < x_int_NXHII; x_e_ct++) {
 
@@ -796,26 +796,26 @@ void _ComputeTs(int snapshot)
 
         /*
          * Hard component integrals: alpha_hard, from lower_hard to nu_hard_cut.
-         * Note: we pass NuXrayAGNBreak as the "threshold" argument so that
+         * Note: we pass NuXraySoftCut as the "threshold" argument so that
          * integrate_over_nu normalises the power law to the hard-band pivot,
          * consistent with how the luminosity conversion was computed above.
          */
         freq_int_heat_tbl_AGN_hard[x_e_ct][R_ct] = integrate_over_nu(
           zp, x_int_XHII[x_e_ct],
           lower_int_limit_AGN_hard,
-          run_globals.params.physics.NuXrayAGNBreak,
+          run_globals.params.physics.NuXraySoftCut,
           run_globals.params.physics.SpecIndexXrayAGNHard, 0);
 
         freq_int_ion_tbl_AGN_hard[x_e_ct][R_ct] = integrate_over_nu(
           zp, x_int_XHII[x_e_ct],
           lower_int_limit_AGN_hard,
-          run_globals.params.physics.NuXrayAGNBreak,
+          run_globals.params.physics.NuXraySoftCut,
           run_globals.params.physics.SpecIndexXrayAGNHard, 1);
 
         freq_int_lya_tbl_AGN_hard[x_e_ct][R_ct] = integrate_over_nu(
           zp, x_int_XHII[x_e_ct],
           lower_int_limit_AGN_hard,
-          run_globals.params.physics.NuXrayAGNBreak,
+          run_globals.params.physics.NuXraySoftCut,
           run_globals.params.physics.SpecIndexXrayAGNHard, 2);
       }
 
@@ -912,17 +912,17 @@ void _ComputeTs(int snapshot)
     // Conversion here means the code otherwise remains the same as the original Ts.c
     if (fabs(run_globals.params.physics.SpecIndexXrayGal - 1.0) < 0.000001) {
       Luminosity_converstion_factor_GAL =
-        (run_globals.params.physics.NuXrayGalThreshold * NU_over_EV) *
-        log(run_globals.params.physics.NuXraySoftCut / run_globals.params.physics.NuXrayGalThreshold);
+        (run_globals.params.physics.NuXrayThreshold * NU_over_EV) *
+        log(run_globals.params.physics.NuXraySoftCut / run_globals.params.physics.NuXrayThreshold);
       Luminosity_converstion_factor_GAL = 1. / Luminosity_converstion_factor_GAL;
     } else {
       Luminosity_converstion_factor_GAL =
         pow(run_globals.params.physics.NuXraySoftCut * NU_over_EV, 1. - run_globals.params.physics.SpecIndexXrayGal) -
-        pow(run_globals.params.physics.NuXrayGalThreshold * NU_over_EV,
+        pow(run_globals.params.physics.NuXrayThreshold * NU_over_EV,
             1. - run_globals.params.physics.SpecIndexXrayGal);
       Luminosity_converstion_factor_GAL = 1. / Luminosity_converstion_factor_GAL;
       Luminosity_converstion_factor_GAL *=
-        pow(run_globals.params.physics.NuXrayGalThreshold * NU_over_EV, -run_globals.params.physics.SpecIndexXrayGal) *
+        pow(run_globals.params.physics.NuXrayThreshold * NU_over_EV, -run_globals.params.physics.SpecIndexXrayGal) *
         (1 - run_globals.params.physics.SpecIndexXrayGal);
     }
     // Finally, convert to the correct units. NU_over_EV*hplank as only want to divide by eV -> erg (owing to the
@@ -961,12 +961,12 @@ void _ComputeTs(int snapshot)
     if (fabs(run_globals.params.physics.SpecIndexXrayAGNSoft - 1.0) < 1e-6) {
       Luminosity_converstion_factor_AGN_soft =
         (run_globals.params.physics.NuXrayThreshold * NU_over_EV) *
-        log(run_globals.params.physics.NuXrayAGNBreak /
+        log(run_globals.params.physics.NuXraySoftCut /
             run_globals.params.physics.NuXrayThreshold);
       Luminosity_converstion_factor_AGN_soft = 1.0 / Luminosity_converstion_factor_AGN_soft;
     } else {
       Luminosity_converstion_factor_AGN_soft =
-        pow(run_globals.params.physics.NuXrayAGNBreak * NU_over_EV,
+        pow(run_globals.params.physics.NuXraySoftCut * NU_over_EV,
             1.0 - run_globals.params.physics.SpecIndexXrayAGNSoft) -
         pow(run_globals.params.physics.NuXrayThreshold * NU_over_EV,
             1.0 - run_globals.params.physics.SpecIndexXrayAGNSoft);
@@ -981,19 +981,19 @@ void _ComputeTs(int snapshot)
     /* --- Hard component: nu_break to nu_hard_cut --- */
     if (fabs(run_globals.params.physics.SpecIndexXrayAGNHard - 1.0) < 1e-6) {
       Luminosity_converstion_factor_AGN_hard =
-        (run_globals.params.physics.NuXrayAGNBreak * NU_over_EV) *
+        (run_globals.params.physics.NuXraySoftCut * NU_over_EV) *
         log(run_globals.params.physics.NuXrayAGNHardCut /
-            run_globals.params.physics.NuXrayAGNBreak);
+            run_globals.params.physics.NuXraySoftCut);
       Luminosity_converstion_factor_AGN_hard = 1.0 / Luminosity_converstion_factor_AGN_hard;
     } else {
       Luminosity_converstion_factor_AGN_hard =
         pow(run_globals.params.physics.NuXrayAGNHardCut * NU_over_EV,
             1.0 - run_globals.params.physics.SpecIndexXrayAGNHard) -
-        pow(run_globals.params.physics.NuXrayAGNBreak * NU_over_EV,
+        pow(run_globals.params.physics.NuXraySoftCut * NU_over_EV,
             1.0 - run_globals.params.physics.SpecIndexXrayAGNHard);
       Luminosity_converstion_factor_AGN_hard = 1.0 / Luminosity_converstion_factor_AGN_hard;
       Luminosity_converstion_factor_AGN_hard *=
-        pow(run_globals.params.physics.NuXrayAGNBreak * NU_over_EV,
+        pow(run_globals.params.physics.NuXraySoftCut * NU_over_EV,
             -run_globals.params.physics.SpecIndexXrayAGNHard) *
         (1.0 - run_globals.params.physics.SpecIndexXrayAGNHard);
     }
@@ -1004,17 +1004,17 @@ void _ComputeTs(int snapshot)
 #if USE_MINI_HALOS
     if (fabs(run_globals.params.physics.SpecIndexXrayIII - 1.0) < 0.000001) {
       Luminosity_converstion_factor_III =
-        (run_globals.params.physics.NuXrayGalThreshold * NU_over_EV) *
-        log(run_globals.params.physics.NuXraySoftCut / run_globals.params.physics.NuXrayGalThreshold);
+        (run_globals.params.physics.NuXrayThreshold * NU_over_EV) *
+        log(run_globals.params.physics.NuXraySoftCut / run_globals.params.physics.NuXrayThreshold);
       Luminosity_converstion_factor_III = 1. / Luminosity_converstion_factor_III;
     } else {
       Luminosity_converstion_factor_III =
         pow(run_globals.params.physics.NuXraySoftCut * NU_over_EV, 1. - run_globals.params.physics.SpecIndexXrayIII) -
-        pow(run_globals.params.physics.NuXrayGalThreshold * NU_over_EV,
+        pow(run_globals.params.physics.NuXrayThreshold * NU_over_EV,
             1. - run_globals.params.physics.SpecIndexXrayIII);
       Luminosity_converstion_factor_III = 1. / Luminosity_converstion_factor_III;
       Luminosity_converstion_factor_III *=
-        pow(run_globals.params.physics.NuXrayGalThreshold * NU_over_EV, -run_globals.params.physics.SpecIndexXrayIII) *
+        pow(run_globals.params.physics.NuXrayThreshold * NU_over_EV, -run_globals.params.physics.SpecIndexXrayIII) *
         (1 - run_globals.params.physics.SpecIndexXrayIII);
     }
 
@@ -1023,14 +1023,14 @@ void _ComputeTs(int snapshot)
 
     // Leave the original 21cmFAST code for reference. Refer to Greig & Mesinger (2017) for the new parameterisation.
     //        const_zp_prefactor_GAL = (1.0/0.59)*( run_globals.params.physics.LXrayGal *
-    //        Luminosity_converstion_factor_GAL ) / (run_globals.params.physics.NuXrayGalThreshold*NU_over_EV) *
+    //        Luminosity_converstion_factor_GAL ) / (run_globals.params.physics.NuXrayThreshold*NU_over_EV) *
     //        SPEED_OF_LIGHT * pow(1+zp, run_globals.params.physics.SpecIndexXrayGal+3);
     const_zp_prefactor_GAL = (run_globals.params.physics.LXrayGal * Luminosity_converstion_factor_GAL) /
-                             (run_globals.params.physics.NuXrayGalThreshold * NU_over_EV) * SPEED_OF_LIGHT *
+                             (run_globals.params.physics.NuXrayThreshold * NU_over_EV) * SPEED_OF_LIGHT *
                              pow(1 + zp, run_globals.params.physics.SpecIndexXrayGal + 3);
 #if USE_MINI_HALOS
     const_zp_prefactor_III = (run_globals.params.physics.LXrayGalIII * Luminosity_converstion_factor_III) /
-                             (run_globals.params.physics.NuXrayGalThreshold * NU_over_EV) * SPEED_OF_LIGHT *
+                             (run_globals.params.physics.NuXrayThreshold * NU_over_EV) * SPEED_OF_LIGHT *
                              pow(1 + zp, run_globals.params.physics.SpecIndexXrayIII + 3);
 #endif
 
@@ -1054,7 +1054,7 @@ void _ComputeTs(int snapshot)
 
     const_zp_prefactor_AGN_hard =
       (run_globals.params.physics.LXrayAGN * Luminosity_converstion_factor_AGN_hard) /
-      (run_globals.params.physics.NuXrayAGNBreak * NU_over_EV) * SPEED_OF_LIGHT *
+      (run_globals.params.physics.NuXraySoftCut * NU_over_EV) * SPEED_OF_LIGHT *
       pow(1.0 + zp, run_globals.params.physics.SpecIndexXrayAGNHard + 3.0);
     // Note the factor of 0.59 appears to be required to match 21cmFAST
 

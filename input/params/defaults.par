@@ -44,7 +44,7 @@ ZCrit                      : 0.0001 # Critical metallicity. If Z >= Zcrit -> Pop
 #------------------------- X-Ray stuff -----------------------------
 #----- including PopIII which is required when using Minihalos -----
 #-------------------------------------------------------------------
-
+LXrayAGN                   : 3.16e42
 LXrayGal                   : 3.16e40         # Soft-band (< NuXraySoftCut keV) X-ray luminosity for galaxy based sources (HMXB)
 LXrayGalIII                : 3.16e40         # Same as above for PopIII 
 SpecIndexXrayGal           : 1.              # Spectral index of galaxy X-ray sources  (nu^-alpha)
