@@ -1115,8 +1115,8 @@ void read_parameter_file(char* fname, int mode)
       required_tag[n_param] = 1;
       params_type[n_param++] = PARAM_TYPE_DOUBLE;
 
-      strcpy(params_tag[n_param], "NuXrayGalThreshold");
-      params_addr[n_param] = &(run_params->physics).NuXrayGalThreshold;
+      strcpy(params_tag[n_param], "NuXrayThreshold");
+      params_addr[n_param] = &(run_params->physics).NuXrayThreshold;
       required_tag[n_param] = 1;
       params_type[n_param++] = PARAM_TYPE_DOUBLE;
 
