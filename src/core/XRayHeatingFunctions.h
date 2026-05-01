@@ -57,24 +57,11 @@ double growth_factor_zp;
 double dgrowth_factor_dzp;
 double const_zp_prefactor_GAL;
 double const_zp_prefactor_III;
-/*
- * ============================================================
- * THIS ADDITION IS MADE TO ADD THE X-RAY CONTRIBUTION BY AGN
- * ============================================================
- * Physical motivation:
- *   const_zp_prefactor_AGN is the redshift-dependent normalisation
- *   prefactor for the AGN X-ray contribution in evolveInt(), exactly
- *   analogous to const_zp_prefactor_GAL for Pop II galaxies. It encodes:
- *
- *     const_zp_prefactor_AGN = L_X_AGN * Lum_conv_AGN
- *                              / (ν_thresh_AGN × h_Planck)
- *                              × c × (1+z_p)^{Γ_soft + 3}
- *
- *   where Γ_soft is the AGN soft X-ray photon index. The value is
- *   computed in ComputeTs.c and consumed here in evolveInt().
- * ============================================================
- */
-double const_zp_prefactor_AGN;
+/* Broken power-law AGN prefactors: soft band (nu_thresh -> nu_break)
+ * and hard band (nu_break -> nu_hard_cut). Both are set once per
+ * snapshot in ComputeTs.c and consumed in evolveInt(). */
+double const_zp_prefactor_AGN_soft;
+double const_zp_prefactor_AGN_hard;
 float x_int_XHII[x_int_NXHII];
 #else
 extern double x_e_ave;
@@ -91,15 +78,8 @@ extern double growth_factor_zp;
 extern double dgrowth_factor_dzp;
 extern double const_zp_prefactor_GAL;
 extern double const_zp_prefactor_III;
-/*
- * ============================================================
- * THIS ADDITION IS MADE TO ADD THE X-RAY CONTRIBUTION BY AGN
- * ============================================================
- * External declaration of const_zp_prefactor_AGN — see definition
- * block above for physical motivation.
- * ============================================================
- */
-extern double const_zp_prefactor_AGN;
+extern double const_zp_prefactor_AGN_soft;
+extern double const_zp_prefactor_AGN_hard;
 extern float x_int_XHII[x_int_NXHII];
 #endif
 
