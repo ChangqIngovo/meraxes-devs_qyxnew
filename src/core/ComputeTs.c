@@ -136,7 +136,7 @@ void _ComputeTs(int snapshot)
    * New parameters needed in run_globals.params.physics:
    *   LXrayAGN          - AGN X-ray soft-band luminosity per unit BH accretion rate (erg/s per M_sun/yr)
    *   NuXrayThreshold - minimum X-ray frequency for AGN (eV), same role as NuXrayThreshold
-   *   NuXrayAGNHardCut  - upper cutoff of hard component (eV)
+   *   NuXraySoftCut  - upper cutoff of hard component (eV)
    *   SpecIndexXrayAGNSoft - spectral index alpha for soft component (nu^-alpha)
    *   SpecIndexXrayAGNHard - spectral index alpha for hard compon
    */
@@ -909,12 +909,12 @@ void _ComputeTs(int snapshot)
     if (fabs(run_globals.params.physics.SpecIndexXrayAGNHard - 1.0) < 1e-6) {
       Luminosity_converstion_factor_AGN_hard =
         (run_globals.params.physics.NuXrayThreshold * NU_over_EV) *
-        log(run_globals.params.physics.NuXrayAGNHardCut /
+        log(run_globals.params.physics.NuXraySoftCut /
             run_globals.params.physics.NuXrayThreshold);
       Luminosity_converstion_factor_AGN_hard = 1.0 / Luminosity_converstion_factor_AGN_hard;
     } else {
       Luminosity_converstion_factor_AGN_hard =
-        pow(run_globals.params.physics.NuXrayAGNHardCut * NU_over_EV,
+        pow(run_globals.params.physics.NuXraySoftCut * NU_over_EV,
             1.0 - run_globals.params.physics.SpecIndexXrayAGNHard) -
         pow(run_globals.params.physics.NuXrayThreshold * NU_over_EV,
             1.0 - run_globals.params.physics.SpecIndexXrayAGNHard);
