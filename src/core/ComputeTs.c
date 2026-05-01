@@ -176,11 +176,20 @@ void _ComputeTs(int snapshot)
   double freq_int_ion_tbl_AGN_hard[x_int_NXHII][TsNumFilterSteps];
   double freq_int_lya_tbl_AGN_hard[x_int_NXHII][TsNumFilterSteps];
 
-  /* Per-cell interpolated AGN integrals: soft and hard components are
-   * combined with a hard_weight factor into a single array per channel
-   * before being passed to evolveInt. The hard_weight absorbs
-   * (const_zp_prefactor_AGN_hard / const_zp_prefactor_AGN_soft) so that
-   * evolveInt only needs to apply one prefactor. */
+  /* Per-cell interpolated AGN integrals — kept separate for soft and hard
+   * so that Flag_includeAGN can select which components contribute:
+   *   0 = no AGN
+   *   1 = soft + hard
+   *   2 = hard only
+   *   3 = soft only                                                      */
+  double freq_int_heat_AGN_soft[TsNumFilterSteps];
+  double freq_int_ion_AGN_soft[TsNumFilterSteps];
+  double freq_int_lya_AGN_soft[TsNumFilterSteps];
+  double freq_int_heat_AGN_hard[TsNumFilterSteps];
+  double freq_int_ion_AGN_hard[TsNumFilterSteps];
+  double freq_int_lya_AGN_hard[TsNumFilterSteps];
+  /* Combined arrays passed to evolveInt — filled from soft/hard
+   * according to Flag_includeAGN before each evolveInt call.           */
   double freq_int_heat_AGN[TsNumFilterSteps];
   double freq_int_ion_AGN[TsNumFilterSteps];
   double freq_int_lya_AGN[TsNumFilterSteps];
@@ -196,9 +205,10 @@ void _ComputeTs(int snapshot)
 
   double ans[2], dansdz[20], xHII_call;
   double SFR_GAL[TsNumFilterSteps];
-  /* AGN source term per shell — single combined array; the hard/soft
-   * amplitude split is handled inside the freq_int tables via hard_weight. */
-  double SFR_AGN[TsNumFilterSteps];
+  /* AGN source term per shell — kept separate for soft and hard so that
+   * Flag_includeAGN can zero out either component independently.        */
+  double SFR_AGN_soft[TsNumFilterSteps];
+  double SFR_AGN_hard[TsNumFilterSteps];
 
 #if USE_MINI_HALOS
   double SFR_III[TsNumFilterSteps];
@@ -237,8 +247,9 @@ void _ComputeTs(int snapshot)
   double J_alpha_ave, xalpha_ave, Xheat_ave, Xion_ave, J_LW_ave;
   J_alpha_ave = xalpha_ave = Xheat_ave = Xion_ave = J_LW_ave = 0.0;
 
-  /* AGN diagnostic average — combined soft+hard X-ray heating */
-  double Xheat_ave_AGN = 0.0;
+  /* AGN diagnostic averages — kept separate to track soft/hard contributions */
+  double Xheat_ave_AGN_soft = 0.0;
+  double Xheat_ave_AGN_hard = 0.0;
 
 #if USE_MINI_HALOS
   double J_alpha_aveII, xalpha_aveII, Xheat_aveII, J_LW_aveII;
@@ -681,13 +692,11 @@ void _ComputeTs(int snapshot)
         nu_tau_one(zp, zpp, x_e_ave, filling_factor_of_HI_zp, snapshot),
         run_globals.params.physics.NuXrayAGNBreak * NU_over_EV);
 
-      /* AGN source term per shell: the emissivity at z'' (erg/s/Mpc^3).
-       * This is analogous to SMOOTHED_SFR_GAL for stellar sources.
-       * A full luminosity-function integral over AGN at zpp would replace
-       * the line below; for now we use the global input amplitude LXrayAGN
-       * as a uniform emissivity across all shells. */
-      agn_emissivity_zpp = run_globals.params.physics.LXrayAGN;
-      SFR_AGN[R_ct]      = agn_emissivity_zpp;
+      /* AGN source term per shell — same emissivity for both components;
+       * the spectral split is handled in the freq_int tables.           */
+      agn_emissivity_zpp  = run_globals.params.physics.LXrayAGN;
+      SFR_AGN_soft[R_ct]  = agn_emissivity_zpp;
+      SFR_AGN_hard[R_ct]  = agn_emissivity_zpp;
 
       for (x_e_ct = 0; x_e_ct < x_int_NXHII; x_e_ct++) {
 
@@ -1061,56 +1070,74 @@ void _ComputeTs(int snapshot)
 #endif
 
             /*
-             * AGN broken power law interpolation.
+             * AGN broken power law interpolation — same linear interpolation
+             * in x_e as for GAL/III, done separately for soft and hard
+             * components so that Flag_includeAGN can select which contribute.
              *
-             * We interpolate the soft and hard tables separately in x_e,
-             * then combine them weighted by the prefactor ratio:
-             *
-             *   freq_int_*_AGN[R_ct] = interp_soft
-             *                        + hard_weight * interp_hard
-             *
-             * where hard_weight = const_zp_prefactor_AGN_hard
-             *                   / const_zp_prefactor_AGN_soft
-             *
-             * This folds the hard-band amplitude boost into the freq_int
-             * arrays so that evolveInt only needs to apply one prefactor
-             * (const_zp_prefactor_AGN_soft), keeping the same interface
-             * as the GAL/III populations.
+             * Soft (nu_thresh -> nu_break): intrinsic soft emission + any
+             *   hard photons from high-z AGN redshifted into the soft band.
+             * Hard (nu_break -> nu_hard_cut): residual hard-band emission.
+             */
+
+            /* --- soft component --- */
+            freq_int_heat_AGN_soft[R_ct] =
+              (freq_int_heat_tbl_AGN_soft[m_xHII_high][R_ct] - freq_int_heat_tbl_AGN_soft[m_xHII_low][R_ct]) /
+              (x_int_XHII[m_xHII_high] - x_int_XHII[m_xHII_low]);
+            freq_int_heat_AGN_soft[R_ct] *= (xHII_call - x_int_XHII[m_xHII_low]);
+            freq_int_heat_AGN_soft[R_ct] += freq_int_heat_tbl_AGN_soft[m_xHII_low][R_ct];
+
+            freq_int_ion_AGN_soft[R_ct] =
+              (freq_int_ion_tbl_AGN_soft[m_xHII_high][R_ct] - freq_int_ion_tbl_AGN_soft[m_xHII_low][R_ct]) /
+              (x_int_XHII[m_xHII_high] - x_int_XHII[m_xHII_low]);
+            freq_int_ion_AGN_soft[R_ct] *= (xHII_call - x_int_XHII[m_xHII_low]);
+            freq_int_ion_AGN_soft[R_ct] += freq_int_ion_tbl_AGN_soft[m_xHII_low][R_ct];
+
+            freq_int_lya_AGN_soft[R_ct] =
+              (freq_int_lya_tbl_AGN_soft[m_xHII_high][R_ct] - freq_int_lya_tbl_AGN_soft[m_xHII_low][R_ct]) /
+              (x_int_XHII[m_xHII_high] - x_int_XHII[m_xHII_low]);
+            freq_int_lya_AGN_soft[R_ct] *= (xHII_call - x_int_XHII[m_xHII_low]);
+            freq_int_lya_AGN_soft[R_ct] += freq_int_lya_tbl_AGN_soft[m_xHII_low][R_ct];
+
+            /* --- hard component --- */
+            freq_int_heat_AGN_hard[R_ct] =
+              (freq_int_heat_tbl_AGN_hard[m_xHII_high][R_ct] - freq_int_heat_tbl_AGN_hard[m_xHII_low][R_ct]) /
+              (x_int_XHII[m_xHII_high] - x_int_XHII[m_xHII_low]);
+            freq_int_heat_AGN_hard[R_ct] *= (xHII_call - x_int_XHII[m_xHII_low]);
+            freq_int_heat_AGN_hard[R_ct] += freq_int_heat_tbl_AGN_hard[m_xHII_low][R_ct];
+
+            freq_int_ion_AGN_hard[R_ct] =
+              (freq_int_ion_tbl_AGN_hard[m_xHII_high][R_ct] - freq_int_ion_tbl_AGN_hard[m_xHII_low][R_ct]) /
+              (x_int_XHII[m_xHII_high] - x_int_XHII[m_xHII_low]);
+            freq_int_ion_AGN_hard[R_ct] *= (xHII_call - x_int_XHII[m_xHII_low]);
+            freq_int_ion_AGN_hard[R_ct] += freq_int_ion_tbl_AGN_hard[m_xHII_low][R_ct];
+
+            freq_int_lya_AGN_hard[R_ct] =
+              (freq_int_lya_tbl_AGN_hard[m_xHII_high][R_ct] - freq_int_lya_tbl_AGN_hard[m_xHII_low][R_ct]) /
+              (x_int_XHII[m_xHII_high] - x_int_XHII[m_xHII_low]);
+            freq_int_lya_AGN_hard[R_ct] *= (xHII_call - x_int_XHII[m_xHII_low]);
+            freq_int_lya_AGN_hard[R_ct] += freq_int_lya_tbl_AGN_hard[m_xHII_low][R_ct];
+
+            /*
+             * Combine soft and hard into the single arrays passed to evolveInt,
+             * controlled by Flag_includeAGN:
+             *   0 = no AGN contribution
+             *   1 = soft + hard  (full broken power law)
+             *   2 = hard only
+             *   3 = soft only
              */
             {
-              double hard_weight = (const_zp_prefactor_AGN_soft > 0.0)
-                                   ? const_zp_prefactor_AGN_hard / const_zp_prefactor_AGN_soft
-                                   : 0.0;
-              double frac = (xHII_call - x_int_XHII[m_xHII_low])
-                          / (x_int_XHII[m_xHII_high] - x_int_XHII[m_xHII_low]);
-              double is, ih; /* interpolated soft, hard */
-
-              /* heat */
-              is = freq_int_heat_tbl_AGN_soft[m_xHII_low][R_ct]
-                 + frac * (freq_int_heat_tbl_AGN_soft[m_xHII_high][R_ct]
-                         - freq_int_heat_tbl_AGN_soft[m_xHII_low][R_ct]);
-              ih = freq_int_heat_tbl_AGN_hard[m_xHII_low][R_ct]
-                 + frac * (freq_int_heat_tbl_AGN_hard[m_xHII_high][R_ct]
-                         - freq_int_heat_tbl_AGN_hard[m_xHII_low][R_ct]);
-              freq_int_heat_AGN[R_ct] = is + hard_weight * ih;
-
-              /* ionization */
-              is = freq_int_ion_tbl_AGN_soft[m_xHII_low][R_ct]
-                 + frac * (freq_int_ion_tbl_AGN_soft[m_xHII_high][R_ct]
-                         - freq_int_ion_tbl_AGN_soft[m_xHII_low][R_ct]);
-              ih = freq_int_ion_tbl_AGN_hard[m_xHII_low][R_ct]
-                 + frac * (freq_int_ion_tbl_AGN_hard[m_xHII_high][R_ct]
-                         - freq_int_ion_tbl_AGN_hard[m_xHII_low][R_ct]);
-              freq_int_ion_AGN[R_ct] = is + hard_weight * ih;
-
-              /* lya */
-              is = freq_int_lya_tbl_AGN_soft[m_xHII_low][R_ct]
-                 + frac * (freq_int_lya_tbl_AGN_soft[m_xHII_high][R_ct]
-                         - freq_int_lya_tbl_AGN_soft[m_xHII_low][R_ct]);
-              ih = freq_int_lya_tbl_AGN_hard[m_xHII_low][R_ct]
-                 + frac * (freq_int_lya_tbl_AGN_hard[m_xHII_high][R_ct]
-                         - freq_int_lya_tbl_AGN_hard[m_xHII_low][R_ct]);
-              freq_int_lya_AGN[R_ct] = is + hard_weight * ih;
+              int flag = run_globals.params.physics.Flag_includeAGN;
+              double use_soft = (flag == 1 || flag == 3) ? 1.0 : 0.0;
+              double use_hard = (flag == 1 || flag == 2) ? 1.0 : 0.0;
+              int rc;
+              for (rc = 0; rc < TsNumFilterSteps; rc++) {
+                freq_int_heat_AGN[rc] = use_soft * freq_int_heat_AGN_soft[rc]
+                                      + use_hard * freq_int_heat_AGN_hard[rc];
+                freq_int_ion_AGN[rc]  = use_soft * freq_int_ion_AGN_soft[rc]
+                                      + use_hard * freq_int_ion_AGN_hard[rc];
+                freq_int_lya_AGN[rc]  = use_soft * freq_int_lya_AGN_soft[rc]
+                                      + use_hard * freq_int_lya_AGN_hard[rc];
+              }
             }
           }
 
@@ -1137,6 +1164,21 @@ void _ComputeTs(int snapshot)
            * We add delta_heat_AGN to dansdz[1] before the Euler step so that the
            * AGN heating is included in the T_K update at line below.
            */
+
+          /* Build the combined SFR_AGN array for evolveInt based on Flag_includeAGN.
+           * The freq_int_*_AGN arrays are already zeroed for excluded components,
+           * so SFR_AGN just needs to be non-zero for shells where any AGN emission
+           * contributes. We use SFR_AGN_soft as the representative amplitude since
+           * both soft and hard use the same agn_emissivity_zpp source.          */
+          {
+            int   flag_agn = run_globals.params.physics.Flag_includeAGN;
+            int   rc;
+            /* A combined SFR_AGN for evolveInt — same value as soft/hard since
+             * they share the same emissivity; zero if AGN is fully disabled.   */
+            double SFR_AGN[TsNumFilterSteps];
+            for (rc = 0; rc < TsNumFilterSteps; rc++)
+              SFR_AGN[rc] = (flag_agn > 0) ? SFR_AGN_soft[rc] : 0.0;
+
 #if USE_MINI_HALOS
           evolveInt((float)zp,
                     run_globals.reion_grids.deltax[i_padded],
@@ -1170,9 +1212,21 @@ void _ComputeTs(int snapshot)
                     ans,
                     dansdz);
 #endif
-          /* AGN heating diagnostic: evolveInt already folded soft+hard into
-           * deriv[3] (dxheat_dzp), so we just accumulate that here. */
-          Xheat_ave_AGN += dansdz[3];
+          /* AGN heating diagnostics — accumulate soft and hard separately.
+           * dansdz[3] holds the total AGN dxheat/dz from evolveInt.
+           * We split it back using the prefactor ratio for diagnostics.  */
+          if (flag_agn == 1) {
+            double ratio = (const_zp_prefactor_AGN_soft + const_zp_prefactor_AGN_hard > 0.0)
+                         ? const_zp_prefactor_AGN_soft / (const_zp_prefactor_AGN_soft + const_zp_prefactor_AGN_hard)
+                         : 0.5;
+            Xheat_ave_AGN_soft += dansdz[3] * ratio;
+            Xheat_ave_AGN_hard += dansdz[3] * (1.0 - ratio);
+          } else if (flag_agn == 3) {
+            Xheat_ave_AGN_soft += dansdz[3];
+          } else if (flag_agn == 2) {
+            Xheat_ave_AGN_hard += dansdz[3];
+          }
+          } /* end flag_agn block */
 
           x_e_box_prev[i_padded] += dansdz[0] * dzp; // remember dzp is negative
           if (x_e_box_prev[i_padded] > 1)            // can do this late in evolution if dzp is too large
@@ -1234,7 +1288,8 @@ void _ComputeTs(int snapshot)
     MPI_Allreduce(MPI_IN_PLACE, &xalpha_ave, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
     MPI_Allreduce(MPI_IN_PLACE, &Xheat_ave, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
     MPI_Allreduce(MPI_IN_PLACE, &Xion_ave, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
-    MPI_Allreduce(MPI_IN_PLACE, &Xheat_ave_AGN, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
+    MPI_Allreduce(MPI_IN_PLACE, &Xheat_ave_AGN_soft, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
+    MPI_Allreduce(MPI_IN_PLACE, &Xheat_ave_AGN_hard, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
 #if USE_MINI_HALOS
     MPI_Allreduce(MPI_IN_PLACE, &J_alpha_aveII, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
     MPI_Allreduce(MPI_IN_PLACE, &Xheat_aveII, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
@@ -1246,7 +1301,8 @@ void _ComputeTs(int snapshot)
     xalpha_ave /= total_n_cells;
     Xheat_ave /= total_n_cells;
     Xion_ave /= total_n_cells;
-    Xheat_ave_AGN /= total_n_cells;
+    Xheat_ave_AGN_soft /= total_n_cells;
+    Xheat_ave_AGN_hard /= total_n_cells;
 #if USE_MINI_HALOS
     J_alpha_aveII /= total_n_cells;
     Xheat_aveII /= total_n_cells;
@@ -1340,9 +1396,10 @@ void _ComputeTs(int snapshot)
        Xion_ave,
        J_LW_ave,
        J_LW_aveII);
-  /* AGN combined diagnostic */
-  mlog("zp = %e AGN_Xheat_combined (soft+hard) = %e",
-       MLOG_MESG, zp, Xheat_ave_AGN);
+  /* AGN broken power law diagnostic — soft and hard tracked separately */
+  mlog("zp = %e  AGN_Xheat_soft = %e  AGN_Xheat_hard = %e  (Flag_includeAGN=%d)",
+       MLOG_MESG, zp, Xheat_ave_AGN_soft, Xheat_ave_AGN_hard,
+       run_globals.params.physics.Flag_includeAGN);
 #else
   mlog("zp = %e Ts_ave = %e Tk_ave = %e x_e_ave = %e", MLOG_MESG, zp, Ave_Ts, Ave_Tk, Ave_x_e);
   mlog("zp = %e J_alpha_ave = %e xalpha_ave = %e Xheat_ave = %e Xion_ave = %e",
@@ -1352,9 +1409,10 @@ void _ComputeTs(int snapshot)
        xalpha_ave,
        Xheat_ave,
        Xion_ave);
-  /* AGN combined diagnostic */
-  mlog("zp = %e AGN_Xheat_combined (soft+hard) = %e",
-       MLOG_MESG, zp, Xheat_ave_AGN);
+  /* AGN broken power law diagnostic — soft and hard tracked separately */
+  mlog("zp = %e  AGN_Xheat_soft = %e  AGN_Xheat_hard = %e  (Flag_includeAGN=%d)",
+       MLOG_MESG, zp, Xheat_ave_AGN_soft, Xheat_ave_AGN_hard,
+       run_globals.params.physics.Flag_includeAGN);
 #endif
 }
 
