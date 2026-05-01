@@ -161,6 +161,9 @@ typedef struct physics_params_t
   double SpecIndexXrayIII;
   double NuXraySoftCut;
   double NuXrayMax;
+
+  double LXrayAGN;
+  int Flag_includeAGN;    /* 0=no AGN, 1=soft+hard, 2=hard only, 3=soft only */
   double SpecIndexXrayAGNSoft;
   double SpecIndexXrayAGNHard;
 
