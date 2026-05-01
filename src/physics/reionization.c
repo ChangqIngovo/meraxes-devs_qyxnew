@@ -7,13 +7,13 @@
 #include <string.h>
 #include <sys/stat.h>
 
-#include "ComputeTs.h"
-#include "find_HII_bubbles.h"
+#include "../ComputeTs.h"
+#include "../find_HII_bubbles.h"
 #include "meraxes.h"
-#include "misc_tools.h"
-#include "read_grids.h"
-#include "reionization.h"
-#include "virial_properties.h"
+#include "../misc_tools.h"
+#include "../read_grids.h"
+#include "../reionization.h"
+#include "../virial_properties.h"
 
 void update_galaxy_fesc_vals(galaxy_t* gal, double new_stars, int snapshot)
 {

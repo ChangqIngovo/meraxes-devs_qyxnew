@@ -155,7 +155,7 @@ typedef struct physics_params_t
 
   // Parameters to describe the X-ray properties of the sources
   double LXrayGal;
-  double NuXrayGalThreshold;
+  double NuXrayThreshold;
   double SpecIndexXrayGal;
   double LXrayGalIII;
   double SpecIndexXrayIII;
