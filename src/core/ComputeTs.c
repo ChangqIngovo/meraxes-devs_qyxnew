@@ -140,7 +140,8 @@ void _ComputeTs(int snapshot)
    *   SpecIndexXrayAGNSoft - spectral index alpha for soft component (nu^-alpha)
    *   SpecIndexXrayAGNHard - spectral index alpha for hard compon
    */
-  double lower_int_limit_AGN;
+  double lower_int_limit_AGN_soft;
+  double upper_int_limit_AGN_hard;
   double Luminosity_converstion_factor_AGN_soft;  /* soft band: nu_thresh -> nu_break   */
   double Luminosity_converstion_factor_AGN_hard;  /* hard band: nu_break  -> nu_hard_cut */
   double agn_emissivity_zpp;       /* AGN emissivity at shell redshift z'': integral of LF x SED */
