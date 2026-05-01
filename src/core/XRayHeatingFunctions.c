@@ -1318,7 +1318,7 @@ void evolveInt(float zp,
    *   coupling rates over all radial shells (zpp_ct loop below).
    *
    *   dxheat_dt_AGN   : AGN X-ray heating rate  [eV s^-1 per baryon]
-   *                     = const_zp_prefactor_AGN × Σ_shells SFR_AGN
+   *                     = const_zp_prefactor_AGN_soft × Σ_shells SFR_AGN
    *                       × (1+z'')^{-Γ_soft} × freq_int_heat_AGN
    *
    *   dxion_source_dt_AGN : AGN photo-ionisation source rate [s^-1]
@@ -1472,11 +1472,11 @@ void evolveInt(float zp,
      * Physical motivation — apply the AGN redshift-dependent prefactor:
      *
      *   After the shell integral is accumulated, we multiply by
-     *   const_zp_prefactor_AGN, which encodes the normalisation of the
+     *   const_zp_prefactor_AGN_soft, which encodes the normalisation of the
      *   AGN X-ray luminosity density and the cosmological (1+z)^{Γ+3}
-     *   factor. The n_b factor converts the Ly-alpha photon rate from
-     *   a per-baryon to a volumetric rate, consistent with the GAL
-     *   treatment.
+     *   factor. The hard-band amplitude is already folded into the freq_int
+     *   arrays via hard_weight in ComputeTs.c. The n_b factor converts the
+     *   Ly-alpha photon rate from a per-baryon to a volumetric rate.
      *
      *   Note: AGN do not contribute a stellar Ly-alpha term
      *   (dstarlya_dt_AGN = 0) because AGN continuum photons between
@@ -1484,9 +1484,12 @@ void evolveInt(float zp,
      *   recombination lines.
      * ============================================================
      */
-    dxheat_dt_AGN       *= const_zp_prefactor_AGN;
-    dxion_source_dt_AGN *= const_zp_prefactor_AGN;
-    dxlya_dt_AGN        *= const_zp_prefactor_AGN * n_b;
+    /* Broken power law: apply soft prefactor. The hard-band amplitude is
+     * already folded into freq_int_*_AGN[] via hard_weight in ComputeTs.c,
+     * so const_zp_prefactor_AGN_soft is the single normalisation needed. */
+    dxheat_dt_AGN       *= const_zp_prefactor_AGN_soft;
+    dxion_source_dt_AGN *= const_zp_prefactor_AGN_soft;
+    dxlya_dt_AGN        *= const_zp_prefactor_AGN_soft * n_b;
 
   } // end COMPUTE_Ts if statement YOU CAN SAVE SOME MORE OUTPUTS BUT FOR THE MOMENT THIS SHOULD BE FINE!
 
@@ -1507,7 +1510,7 @@ void evolveInt(float zp,
    *
    *     dx_e/dz = dt/dz × [ Γ_ion,GAL + Γ_ion,AGN − α_A × C × x_e² × f_H × n_b ]
    *
-   *   where Γ_ion,AGN = dxion_source_dt_AGN × const_zp_prefactor_AGN.
+   *   where Γ_ion,AGN = dxion_source_dt_AGN × const_zp_prefactor_AGN_soft.
    *   AGN X-rays can ionise HI, HeI, and HeII, and this term captures
    *   their contribution to the global reionisation history alongside
    *   stellar sources.
@@ -1545,6 +1548,7 @@ void evolveInt(float zp,
   dspec_dzp_II = -dxe_dzp * TII / (1 + x_e);
 
   dcomp_dzp_II = dT_comp(zp, TII, x_e);
+#endif /* USE_MINI_HALOS — dadia_dzp_II / dcomp_dzp_II block */
 
   /*
    * ============================================================
