@@ -31,6 +31,26 @@
 // BHemissivity = fobs*Lbol/kb*2.1276330276278045e+54*accretion_time(seconds)/1e60; // photon numbers/1e60
 // BHemissivity = fobs*Lbol/kb*2.1276330276278045e-6*accretion_time(seconds); // photon numbers/1e60
 
+/* Morrison & McCammon (1983) Table 2: photoelectric cross-section coefficients.
+ * σ(E) = (C0 + C1·E + C2·E²) × E^{-3} × 10^{-24} cm²,  E in keV.
+ * Columns: E_low [keV], E_high [keV], C0, C1, C2 */
+static const double mm83[14][5] = {
+  { 0.030,  0.100,  17.3,    608.1,  -2150.0 },
+  { 0.100,  0.284,  34.6,    267.9,   -476.1 },
+  { 0.284,  0.400,  78.1,     18.8,      4.3 },
+  { 0.400,  0.532,  71.4,     66.8,    -51.4 },
+  { 0.532,  0.707,  95.5,    145.8,    -61.1 },
+  { 0.707,  0.867, 308.9,   -380.6,    294.0 },
+  { 0.867,  1.303, 120.6,    169.3,    -47.7 },
+  { 1.303,  1.840, 141.3,    146.8,    -31.5 },
+  { 1.840,  2.471, 202.7,    104.7,    -17.0 },
+  { 2.471,  3.210, 342.7,     18.7,      0.0 },
+  { 3.210,  4.038, 352.2,     18.7,      0.0 },
+  { 4.038,  7.111, 433.9,     -2.4,      0.75},
+  { 7.111,  8.331, 629.0,     30.9,      0.0 },
+  { 8.331, 10.000, 701.2,     25.2,      0.0 },
+};
+
 #ifdef __cplusplus
 extern "C"
 {
@@ -51,10 +71,11 @@ extern "C"
   void calculate_BHemissivity(double BlackHoleMass, double accreted_mass,
                               double *emissivity,     double *accretion_time,
                               double *quasar_luv,     double *quasar_lx,
-                              double *xray_emissivity);
+                              double *quasar_lx_soft, double *xray_emissivity);
 
   void merger_driven_BH_growth(struct galaxy_t* gal, double merger_ratio, int snapshot);
   void previous_merger_driven_BH_growth(struct galaxy_t* gal, int snapshot);
+
 
 #ifdef __cplusplus
 }

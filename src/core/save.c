@@ -7,6 +7,7 @@
 #include "magnitudes.h"
 #include "meraxes.h"
 #include "parse_paramfile.h"
+#include "physics/blackhole_feedback.h"
 #include "reionization.h"
 #include "save.h"
 #if USE_MINI_HALOS
@@ -683,14 +684,14 @@ void calc_hdf5_props()
     h5props->dst_offsets[i] = HOFFSET(galaxy_output_t, QuasarLX);
     h5props->dst_field_sizes[i] = sizeof(galout.QuasarLX);
     h5props->field_names[i] = "QuasarLX";
-    h5props->field_units[i] = "log10(LX / L_sun) [2-10 keV, intrinsic]";
+    h5props->field_units[i] = "LX [1e10 L_sun, 2-10 keV, intrinsic]";
     h5props->field_h_conv[i] = "None";
     h5props->field_types[i++] = H5T_NATIVE_FLOAT;
 
     h5props->dst_offsets[i] = HOFFSET(galaxy_output_t, QuasarLX_obs);
     h5props->dst_field_sizes[i] = sizeof(galout.QuasarLX_obs);
     h5props->field_names[i] = "QuasarLX_obs";
-    h5props->field_units[i] = "log10(LX / L_sun) [2-10 keV, obscuration-corrected]";
+    h5props->field_units[i] = "LX [1e10 L_sun, 2-10 keV, obscured]";
     h5props->field_h_conv[i] = "None";
     h5props->field_types[i++] = H5T_NATIVE_FLOAT;
 
@@ -1095,6 +1096,10 @@ void create_master_file()
       sprintf(source_ds, "Snap%03d/XrayLF", run_globals.ListOutputSnaps[i_out]);
       H5Lcreate_external(relative_source_file, source_ds, snap_group_id, "XrayLF", H5P_DEFAULT, H5P_DEFAULT);
     }
+    if (run_globals.params.Flag_OutputXrayLF && H5LTfind_dataset(source_group_id, "XrayLF_obs")) {
+      sprintf(source_ds, "Snap%03d/XrayLF_obs", run_globals.ListOutputSnaps[i_out]);
+      H5Lcreate_external(relative_source_file, source_ds, snap_group_id, "XrayLF_obs", H5P_DEFAULT, H5P_DEFAULT);
+    }
     
     H5Gclose(source_group_id);
     H5Fclose(source_file_id);
@@ -1237,6 +1242,7 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
   distribution_function_t quasarlf;
   distribution_function_t oiiilf;
   distribution_function_t xraylf;
+  distribution_function_t xraylf_obs;
 #ifdef CALC_MAGS
   distribution_function_t uvlf, dustylf;
 #endif
@@ -1403,8 +1409,14 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
             run_globals.params.XrayLF_MinLogL,
             run_globals.params.XrayLF_MaxLogL,
             run_globals.params.XrayLF_BinsPerDex,
-            "X-ray Luminosity Function (2-10 keV, observed)");
+            "X-ray Luminosity Function (2-10 keV, intrinsic)");
     xraylf.volume = df_volume;
+    df_init(&xraylf_obs,
+            run_globals.params.XrayLF_MinLogL,
+            run_globals.params.XrayLF_MaxLogL,
+            run_globals.params.XrayLF_BinsPerDex,
+            "X-ray Luminosity Function (2-10 keV, observed after obscuration)");
+    xraylf_obs.volume = df_volume;
   }
 
   // If the immediately preceding snapshot was also written, then save the
@@ -1596,18 +1608,26 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
         }
       }
 
-      // XrayLF — observed 2-10 keV X-ray luminosity function.
-   
+      // XrayLF — intrinsic 2-10 keV X-ray luminosity function.
+      // XrayLF_obs — observed (post-obscuration) 2-10 keV X-ray luminosity function.
       if (run_globals.params.Flag_OutputXrayLF) {
-        float lx_obs = output_buffer[buffer_count].QuasarLX_obs;
+        double lx_int_lin = (double)output_buffer[buffer_count].QuasarLX;
+        double lx_obs_lin = (double)output_buffer[buffer_count].QuasarLX_obs;
         weight = output_buffer[buffer_count].DutyCycleAGN;
-        if (lx_obs < 900.0f && weight > 0.0 && isfinite(lx_obs)) {
-          /* Convert log10(LX/L_sun) → log10(LX/erg/s) */
-          val = (double)lx_obs; // LX/L_sun =LX/ 3.828e33 erg/s → log10(3.828e33) ≈ 33.585
+        if (lx_int_lin > 0.0 && weight > 0.0) {
+          val = log10(lx_int_lin * 1e10 * SOLAR_LUM);
           if (val >= xraylf.x_min && val <= xraylf.x_max) {
             bin_idx = (int)((val - xraylf.x_min) / xraylf.bin_width);
             xraylf.bin_counts[bin_idx]   += weight;
             xraylf.bin_variance[bin_idx] += weight * (1.0 - weight); /* Bernoulli */
+          }
+        }
+        if (lx_obs_lin > 0.0 && weight > 0.0) {
+          val = log10(lx_obs_lin * 1e10 * SOLAR_LUM);
+          if (val >= xraylf_obs.x_min && val <= xraylf_obs.x_max) {
+            bin_idx = (int)((val - xraylf_obs.x_min) / xraylf_obs.bin_width);
+            xraylf_obs.bin_counts[bin_idx]   += weight;
+            xraylf_obs.bin_variance[bin_idx] += weight * (1.0 - weight);
           }
         }
       }
@@ -1717,10 +1737,13 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
 
   if (run_globals.params.Flag_OutputXrayLF) {
     df_mpi_reduce(&xraylf, run_globals.mpi_rank, run_globals.mpi_size);
+    df_mpi_reduce(&xraylf_obs, run_globals.mpi_rank, run_globals.mpi_size);
     if (run_globals.mpi_rank == 0) {
-      df_write_hdf5(file_id, target_group, &xraylf, "XrayLF", "per Mpc^3 per dex");
+      df_write_hdf5(file_id, target_group, &xraylf,     "XrayLF",     "per Mpc^3 per dex");
+      df_write_hdf5(file_id, target_group, &xraylf_obs, "XrayLF_obs", "per Mpc^3 per dex");
     }
     df_free(&xraylf);
+    df_free(&xraylf_obs);
   }
 
   // Close the group.
