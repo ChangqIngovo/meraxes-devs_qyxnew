@@ -8,6 +8,7 @@ void calculate_BHemissivity(double BlackHoleMass, double accreted_mass, double *
 {
   double Lbol; // bolometric luminosity
   double kb;   // bolometric correction
+  double obscuration_factor;
   physics_params_t* physics = &(run_globals.params.physics);
 
   // Compute accretion_time directly in internal units using pre-computed EddingtonTimescale
@@ -22,8 +23,10 @@ void calculate_BHemissivity(double BlackHoleMass, double accreted_mass, double *
   // (Can be converted to M1450 magnitude via: M1450 = -19.826 - 2.5*log10(LUV))
   *quasar_luv = Lbol / kb;
 
+  obscuration_factor = physics->Flag_BHObscuedIonization ? physics->quasar_fobs : 1.0;
+
   // Approximation using the emissivity at the MIDDLE of accretion time
-  *emissivity = physics->quasar_fobs * *quasar_luv * LB2EMISSIVITY * *accretion_time * run_globals.units.UnitTime_in_s / run_globals.params.Hubble_h; // 1e60 photon numbers
+  *emissivity = obscuration_factor * *quasar_luv * LB2EMISSIVITY * *accretion_time * run_globals.units.UnitTime_in_s / run_globals.params.Hubble_h; // 1e60 photon numbers
 }
 
 static double get_vvir(galaxy_t* gal) {
