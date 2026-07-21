@@ -370,10 +370,19 @@ static int read_vr_multi(const enum grid_prop property, const int snapshot, floa
       recvcounts[ii] = sizeof(ptrdiff_t);
       displs[ii] = ii * sizeof(ptrdiff_t);
     }
-    MPI_Allgatherv(&rank_nx[mpi_rank], 1, MPI_BYTE, rank_nx, recvcounts, displs, MPI_BYTE, run_globals.mpi_comm);
     MPI_Allgatherv(
-      &rank_ix_start[mpi_rank], 1, MPI_BYTE, rank_ix_start, recvcounts, displs, MPI_BYTE, run_globals.mpi_comm);
-    MPI_Allgatherv(&rank_nI[mpi_rank], 1, MPI_BYTE, rank_nI, recvcounts, displs, MPI_BYTE, run_globals.mpi_comm);
+      &rank_nx[mpi_rank], sizeof(ptrdiff_t), MPI_BYTE, rank_nx, recvcounts, displs, MPI_BYTE, run_globals.mpi_comm);
+    MPI_Allgatherv(
+      &rank_ix_start[mpi_rank],
+      sizeof(ptrdiff_t),
+      MPI_BYTE,
+      rank_ix_start,
+      recvcounts,
+      displs,
+      MPI_BYTE,
+      run_globals.mpi_comm);
+    MPI_Allgatherv(
+      &rank_nI[mpi_rank], sizeof(ptrdiff_t), MPI_BYTE, rank_nI, recvcounts, displs, MPI_BYTE, run_globals.mpi_comm);
   }
 
   fftwf_complex* rank_slab = fftwf_alloc_complex((size_t)rank_nI[mpi_rank]);
@@ -383,7 +392,7 @@ static int read_vr_multi(const enum grid_prop property, const int snapshot, floa
     rank_slab[ii] = 0 + 0 * I;
 
   MPI_Group run_group;
-  MPI_Comm_group(MPI_COMM_WORLD, &run_group);
+  MPI_Comm_group(run_globals.mpi_comm, &run_group);
 
   // We are currently assuming the grids to be float, but the VELOCIraptor
   // grids are doubles.  For the moment, let's just read the doubles into a
@@ -448,7 +457,7 @@ static int read_vr_multi(const enum grid_prop property, const int snapshot, floa
       MPI_Group_incl(run_group, n_required_ranks[ii], required_ranks + rr_index(ii, 0), &file_group);
 
       MPI_Comm file_comm;
-      MPI_Comm_create_group(MPI_COMM_WORLD, file_group, ii, &file_comm);
+      MPI_Comm_create_group(run_globals.mpi_comm, file_group, ii, &file_comm);
 
       // There must be a tidier work out these indices...
       int file_start = 0;
