@@ -76,10 +76,8 @@ void prepare_galaxy_for_output(galaxy_t gal, galaxy_output_t* galout, int i_snap
   galout->FescBH = (float)(gal.FescBH);
   galout->BHemissivity = (float)(gal.BHemissivity);
   galout->QuasarMag = (gal.QuasarLuv > 0.0) ? (float)(-19.826 - 2.5 * log10(gal.QuasarLuv)) : 999.9f;
-  /* Intrinsic hard X-ray log10(LX/L_sun); sentinel 999.9 when inactive */
-  galout->QuasarLX     = (gal.QuasarLX     > -90.0) ? (float)gal.QuasarLX     : 999.9f;
-  /* Observed hard X-ray log10(LX/L_sun) after obscuration model */
-  galout->QuasarLX_obs = (gal.QuasarLX_obs > -90.0) ? (float)gal.QuasarLX_obs : 999.9f;
+  galout->QuasarLX     = (float)gal.QuasarLX;      /* linear [1e10 Lsun]; 0 if inactive */
+  galout->QuasarLX_obs = (float)gal.QuasarLX_obs;  /* linear [1e10 Lsun]; 0 if inactive */
   /* Observed X-ray emissivity [1e60 erg] — already obscuration-weighted in blackhole_feedback.c */
   galout->BHXrayEmissivity = (float)gal.BHXrayEmissivity;
   galout->DutyCycleAGN = (float)(gal.DutyCycleAGN);

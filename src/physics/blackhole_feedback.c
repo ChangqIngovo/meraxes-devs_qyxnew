@@ -16,7 +16,7 @@ static double morrison_mccammon_sigma(double E_keV)
 
   if (E_keV > 10.0) return 0.0;
 
- /* The photoelectric-cross-section equation, loop over different energy ranges, with its correspondign coefficients */
+ /* The photoelectric-cross-section equation, loop over different energy ranges, with its corresponding coefficients */
   for (i = 0; i < 14; i++) {
     if (E_keV >= mm83[i][0] && E_keV < mm83[i][1]) {
       C0 = mm83[i][2];
@@ -32,13 +32,15 @@ static double morrison_mccammon_sigma(double E_keV)
 
 
 #define OBS_EPSILON   1.7     /* ratio logNH=23-24 to logNH=22-23 quasars  */
-/* ε = 1.7 means there are 1.7× more AGN 
+/* ε = 1.7 means there are 1.7× more AGN
 in the logNH=23–24 bin than the logNH=22–23 bin (the absorbed bins are not equal).*/
 #define OBS_FCTK      1.0     /* CTK fraction relative to absorbed CTN      */
 /*fCTK = 1.0 means the total CTK population equals the total absorbed CTN population.*/
 #define OBS_PSI_MIN   0.20    /* minimum absorbed fraction                  */
 #define OBS_PSI_MAX   0.84    /* maximum absorbed fraction                  */
 #define OBS_LX_REF    43.75   /* reference log10(LX/erg/s) for psi(LX,z)   */
+#define AGN_HARD_E_MIN 2.0    /* hard X-ray band lower limit [keV]          */
+#define AGN_HARD_E_MAX 10.0   /* hard X-ray band upper limit [keV]          */
 
 /* xray_transmission_at_NH — band-averaged transmission at a single representative NH.
  *
@@ -96,7 +98,7 @@ static double _psi_ref(double z)
   return 0.43 * pow(1.0 + zeff, 0.48);
 }
 
-static double _psi(double LX_log, double z)
+static double _psi(double LX_log, double z)  /* LX_log: log10(LX / erg s^-1) */
 {
   double val = _psi_ref(z) - 0.24 * (LX_log - OBS_LX_REF);
   if (val < OBS_PSI_MIN) val = OBS_PSI_MIN;
@@ -104,7 +106,7 @@ static double _psi(double LX_log, double z)
   return val;
 }
 
-static void _NH_distribution(double LX_log, double z, double f[5])
+static void _NH_distribution(double LX_log, double z, double f[5])  /* LX_log: log10(LX / erg s^-1) */
 {
   double p     = _psi(LX_log, z);
   double eps   = OBS_EPSILON;
@@ -138,7 +140,7 @@ static void apply_xray_obscuration(double LX_1e10Lsun,
                                    double LX_obs_bin[5],
                                    double f_out[5])
 {
-  double LX_log_ergs;
+  double LX_log_ergs; /* log10(LX / erg s^-1) — log scale, used only for NH model */
   double f[5];
   int    k;
 
@@ -150,8 +152,8 @@ static void apply_xray_obscuration(double LX_1e10Lsun,
 
   _ensure_T_init();
 
-  LX_log_ergs = log10(LX_1e10Lsun) + 10.0 + log10(SOLAR_LUM);
-  _NH_distribution(LX_log_ergs, redshift, f);
+  LX_log_ergs = log10(LX_1e10Lsun) + 10.0 + log10(SOLAR_LUM); /* convert linear [1e10 Lsun] → log10 [erg/s] */
+  _NH_distribution(LX_log_ergs, redshift, f);                  /* all other LX variables below are linear */
 
   /* Build CDF from f[k].
    * After _NH_distribution normalises, f[0]+f[1]+f[2]+f[3]+2*f[4] = 1,
@@ -441,8 +443,8 @@ void previous_merger_driven_BH_growth(galaxy_t* gal, int snapshot)
     gal->NHfrac2           = NHfrac[2];
     gal->NHfrac3           = NHfrac[3];
     gal->NHfrac4           = NHfrac[4];
-    gal->EffectiveXrayBHAR      += quasar_lx      * 1e10 * SOLAR_LUM * obs_fraction;
-    gal->EffectiveXrayBHAR_soft += quasar_lx_soft * 1e10 * SOLAR_LUM * obs_fraction;
+    gal->BHXrayEmissivity      += quasar_lx      * 1e10 * SOLAR_LUM * obs_fraction;
+    gal->BHXrayEmissivity_soft += quasar_lx_soft * 1e10 * SOLAR_LUM * obs_fraction;
     gal->EffectiveBHAR += BHemissivity;
     // quasar mode feedback
     m_reheat = run_globals.params.physics.QuasarModeEff * 2. * ETA * run_globals.Csquare * accreted_mass / Vvir / Vvir;
