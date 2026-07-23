@@ -65,11 +65,15 @@ static double xray_transmission_at_NH(double log_NH,
     sigma  = morrison_mccammon_sigma(E);
     tau    = NH * sigma;
     T      = exp(-tau);
+    if (log_NH >= 24.0)
+      T *= exp(-NH * 1.21 * 6.6524e-25);
     num += weight * T;
     den += weight;
   }
   return (den > 0.0) ? num / den : 0.0;
 }
+  
+
 
 /* log-midpoint NH for each of the 5 bins */
 static const double LOG_NH_MID[5] = {20.5, 21.5, 22.5, 23.5, 25.0};
@@ -130,13 +134,17 @@ static void _NH_distribution(double LX_log, double z, double f[5])
 static void apply_xray_obscuration(double LX_1e10Lsun,
                                    double redshift,
                                    double *LX_obs_1e10Lsun,
-                                   double *obs_fraction)
+                                   double *obs_fraction,
+                                   double LX_obs_bin[5],
+                                   double f_out[5])
 {
   double LX_log_ergs;
   double f[5];
+  int    k;
 
   *LX_obs_1e10Lsun = 0.0;
   *obs_fraction    = 0.0;
+  for (k = 0; k < 5; k++) { LX_obs_bin[k] = 0.0; f_out[k] = 0.0; }
 
   if (LX_1e10Lsun <= 0.0) return;
 
@@ -145,15 +153,42 @@ static void apply_xray_obscuration(double LX_1e10Lsun,
   LX_log_ergs = log10(LX_1e10Lsun) + 10.0 + log10(SOLAR_LUM);
   _NH_distribution(LX_log_ergs, redshift, f);
 
-  *obs_fraction = f[0] * s_T[0] + f[1] * s_T[1] + f[2] * s_T[2]
-                + f[3] * s_T[3] + 2.0 * f[4] * s_T[4];
+  /* Build CDF from f[k].
+   * After _NH_distribution normalises, f[0]+f[1]+f[2]+f[3]+2*f[4] = 1,
+   * so the 5 bin probabilities are f[k] for k=0.3 (1 dex each) and
+   * 2*f[4] for k=4 (CTK spans 2 dex). */
+  double cdf[5];
+  cdf[0] = f[0];
+  cdf[1] = cdf[0] + f[1];
+  cdf[2] = cdf[1] + f[2];
+  cdf[3] = cdf[2] + f[3];
+  cdf[4] = cdf[3] + 2.0*f[4]; /* = 1.0 by construction */
 
+  /* Draw one NH bin for this AGN. */
+  double u = gsl_rng_uniform(run_globals.random_generator);
+  int k_random = 4; /* default to CTK if u lands at the very top */
+  for (k = 0; k < 5; k++) {
+    if (u < cdf[k]) { k_random = k; break; }
+  }
 
-  *LX_obs_1e10Lsun = LX_1e10Lsun * f[0] * s_T[0] + LX_1e10Lsun *f[1] * s_T[1] + 
-                     LX_1e10Lsun *f[2] * s_T[2]+ LX_1e10Lsun *f[3] * s_T[3] +
-                     LX_1e10Lsun * 2.0 * f[4] * s_T[4];
+  /* Apply the transmission of the drawn bin. */
+  *obs_fraction    = s_T[k_random];
+  *LX_obs_1e10Lsun = LX_1e10Lsun * s_T[k_random];
+
+  for (k = 0; k < 5; k++) {
+    f_out[k]      = (k == k_random) ? 1.0 : 0.0;
+    LX_obs_bin[k] = (k == k_random) ? LX_1e10Lsun * s_T[k] : 0.0;
+  }
 }
 
+
+void get_nh_transmission(double T_out[5])
+{
+  int k;
+  _ensure_T_init();
+  for (k = 0; k < 5; k++)
+    T_out[k] = s_T[k];
+}
 
 void calculate_BHemissivity(double BlackHoleMass, double accreted_mass,
                             double *emissivity,     double *accretion_time,
@@ -319,6 +354,8 @@ void previous_merger_driven_BH_growth(galaxy_t* gal, int snapshot)
   double quasar_lx, quasar_lx_soft, xray_emissivity;
   double LX_obs_1e10Lsun;
   double obs_fraction;
+  double LX_obs_bin[5];
+  double NHfrac[5];
   double t_off, t_resp;
   
   if (dt <= 0.0) {
@@ -365,7 +402,9 @@ void previous_merger_driven_BH_growth(galaxy_t* gal, int snapshot)
     apply_xray_obscuration(quasar_lx,
                            run_globals.ZZ[snapshot],
                            &LX_obs_1e10Lsun,
-                           &obs_fraction);
+                           &obs_fraction,
+                           LX_obs_bin,
+                           NHfrac);
 
 
     gal->DutyCycleAGN = (accretion_time > 1e-30) ? (accretion_time / dt) : 0.0;
@@ -390,6 +429,16 @@ void previous_merger_driven_BH_growth(galaxy_t* gal, int snapshot)
     gal->QuasarLuv        += quasar_luv;
     gal->QuasarLX         += quasar_lx;
     gal->QuasarLX_obs     += LX_obs_1e10Lsun;
+    gal->QuasarLX_obs0    += LX_obs_bin[0];
+    gal->QuasarLX_obs1    += LX_obs_bin[1];
+    gal->QuasarLX_obs2    += LX_obs_bin[2];
+    gal->QuasarLX_obs3    += LX_obs_bin[3];
+    gal->QuasarLX_obs4    += LX_obs_bin[4];
+    gal->NHfrac0           = NHfrac[0];
+    gal->NHfrac1           = NHfrac[1];
+    gal->NHfrac2           = NHfrac[2];
+    gal->NHfrac3           = NHfrac[3];
+    gal->NHfrac4           = NHfrac[4];
     gal->EffectiveXrayBHAR      += quasar_lx      * 1e10 * SOLAR_LUM * obs_fraction;
     gal->EffectiveXrayBHAR_soft += quasar_lx_soft * 1e10 * SOLAR_LUM * obs_fraction;
     gal->EffectiveBHAR += BHemissivity;
