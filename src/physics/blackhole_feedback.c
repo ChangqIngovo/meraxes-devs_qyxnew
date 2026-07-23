@@ -156,7 +156,9 @@ static void apply_xray_obscuration(double LX_1e10Lsun,
   /* Build CDF from f[k].
    * After _NH_distribution normalises, f[0]+f[1]+f[2]+f[3]+2*f[4] = 1,
    * so the 5 bin probabilities are f[k] for k=0.3 (1 dex each) and
-   * 2*f[4] for k=4 (CTK spans 2 dex). */
+   * 2*f[4] for k=4 (CTK spans 2 dex). 
+   * If there is other approach to have random number based 
+   * on specific probalility ditribution, please let me know*/
   double cdf[5];
   cdf[0] = f[0];
   cdf[1] = cdf[0] + f[1];
