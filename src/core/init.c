@@ -255,7 +255,7 @@ void init_meraxes()
     run_globals.LTTime[i] = time_to_present(run_globals.ZZ[i]);
     run_globals.rhocrit[i] = 3 * pow(hubble_at_snapshot(i), 2) / (8 * M_PI * run_globals.G);
   }
-  run_globals.tau_e_postEoR = (snaplist_len > 0) ? integrate_tau_e_postEoR(run_globals.ZZ[snaplist_len - 1]) : 0.0;
+  run_globals.tau_e_postEoR = (run_globals.NOutputSnaps > 0) ? integrate_tau_e_postEoR(run_globals.ZZ[run_globals.LastOutputSnap]) : 0.0;
 
   // validation checks
   if (run_globals.params.Flag_IncludeSpinTemp) {
