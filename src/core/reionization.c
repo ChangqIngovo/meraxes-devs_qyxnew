@@ -2,6 +2,7 @@
 #include <complex.h>
 #include <fenv.h>
 #include <fftw3-mpi.h>
+#include <gsl/gsl_integration.h>
 #include <hdf5_hl.h>
 #include <math.h>
 #include <string.h>
@@ -16,6 +17,76 @@
 #include "virial_properties.h"
 
 static hid_t create_reion_grid(const int snapshot, const bool parallel);
+
+static inline double tau_e_prefactor_at_z(double z)
+{
+  // c * sigma_T * (1+z)^2 / H(z), with H evaluated continuously in redshift.
+  double zplus1 = 1.0 + z;
+  double Hz = hubble_at_z(z) * run_globals.params.Hubble_h / run_globals.units.UnitTime_in_s; // [s^-1]
+  return SPEED_OF_LIGHT * SIGMA_T_CGS * zplus1 * zplus1 / Hz;
+}// cm^3
+
+static inline double tau_e_sim_integrand_at_snapshot(int snapshot, double xHII)
+{
+  // Follow post-processing convention: n_e ~ xHII * (n_H + n_He)
+  return tau_e_prefactor_at_z(run_globals.ZZ[snapshot]) * N_b0 * xHII;
+}// unitless
+
+static inline double tau_e_postsim_integrand(double z, void* params)
+{
+  (void)params;
+  // Mirror run.py piecewise helium treatment:
+  // z <= 4: fully double-ionized helium (n_H + 2 n_He)
+  // z  > 4: singly-ionized helium (n_H + n_He)
+  double ne = (z <= 4.0) ? (No + 2.0 * He_No) : N_b0;
+  return tau_e_prefactor_at_z(z) * ne;
+}// unitless
+
+double integrate_tau_e_postEoR(double zmax)
+{
+  if (zmax <= 0.0)
+    return 0.0;
+
+  gsl_function F;
+  F.function = &tau_e_postsim_integrand;
+  F.params = NULL;
+
+  gsl_integration_workspace* w = gsl_integration_workspace_alloc(1000);
+  double result = 0.0;
+  double error = 0.0;
+
+  gsl_integration_qag(&F, 0.0, zmax, 0.0, 1e-7, 1000, GSL_INTEG_GAUSS61, w, &result, &error);
+
+  gsl_integration_workspace_free(w);
+  return result;
+}
+
+static void update_mass_weighted_tau_e(const int snapshot)
+{
+  reion_grids_t* grids = &(run_globals.reion_grids);
+
+  // Protect against accidental duplicate updates for the same snapshot.
+  if (grids->tau_e_prev_snapshot == snapshot)
+    return;
+
+  double xHII = fmax(0.0, fmin(1.0, 1.0 - grids->mass_weighted_global_xH));
+
+  if (grids->tau_e_prev_snapshot >= 0) {
+    int prev_snapshot = grids->tau_e_prev_snapshot;
+    double prev_z = run_globals.ZZ[prev_snapshot];
+    double curr_z = run_globals.ZZ[snapshot];
+    double dz = fabs(prev_z - curr_z);
+
+    double f_prev = tau_e_sim_integrand_at_snapshot(prev_snapshot, grids->tau_e_prev_mass_weighted_xHII);
+    double f_curr = tau_e_sim_integrand_at_snapshot(snapshot, xHII);
+    grids->mass_weighted_global_tau_e_sim += 0.5 * (f_prev + f_curr) * dz;
+  }
+
+  grids->mass_weighted_global_tau_e = grids->mass_weighted_global_tau_e_sim + run_globals.tau_e_postEoR;
+
+  grids->tau_e_prev_snapshot = snapshot;
+  grids->tau_e_prev_mass_weighted_xHII = xHII;
+}
 
 void update_galaxy_fesc_vals(galaxy_t* gal, double new_stars, int snapshot)
 {
@@ -310,6 +381,14 @@ void call_find_HII_bubbles(int snapshot, int nout_gals, timer_info* timer)
   mlog("sfrIII = %g (Msun/yr)", MLOG_MESG, grids->volume_weighted_global_weighted_sfrIII);
 #endif
   mlog("bhar = %g (equivlently Msun/yr)", MLOG_MESG, grids->volume_weighted_global_effective_bhar);
+
+  update_mass_weighted_tau_e(snapshot);
+  mlog("tau_e(mass-weighted) = %.6f [sim=%.6f, postsim=%.6f]",
+       MLOG_MESG,
+       grids->mass_weighted_global_tau_e,
+       grids->mass_weighted_global_tau_e_sim,
+      run_globals.tau_e_postEoR);
+
   mlog("...done", MLOG_CLOSE | MLOG_TIMERSTOP);
 }
 
@@ -384,6 +463,10 @@ void init_reion_grids()
   grids->volume_weighted_global_Gamma12 = 0.0;
   grids->volume_weighted_global_r_bubble = 0.0;
   grids->mass_weighted_global_xH = 1.0;
+  grids->mass_weighted_global_tau_e = run_globals.tau_e_postEoR;
+  grids->mass_weighted_global_tau_e_sim = 0.0;
+  grids->tau_e_prev_snapshot = -1;
+  grids->tau_e_prev_mass_weighted_xHII = 0.0;
   grids->started = 0;
   grids->finished = 0;
 
@@ -2376,6 +2459,9 @@ void save_reion_output_attributes(int snapshot)
 
   H5LTset_attribute_double(file_id, "xH", "volume_weighted_global_xH", &(grids->volume_weighted_global_xH), 1);
   H5LTset_attribute_double(file_id, "xH", "mass_weighted_global_xH", &(grids->mass_weighted_global_xH), 1);
+  H5LTset_attribute_double(file_id, "xH", "mass_weighted_global_tau_e", &(grids->mass_weighted_global_tau_e), 1);
+  H5LTset_attribute_double(
+    file_id, "xH", "mass_weighted_global_tau_e_sim", &(grids->mass_weighted_global_tau_e_sim), 1);
   H5LTset_attribute_double(file_id, "r_bubble", "volume_weighted_global_r_bubble", &(grids->volume_weighted_global_r_bubble), 1);
   H5LTset_attribute_double(file_id, "r_bubble", "mass_weighted_global_r_bubble", &(grids->mass_weighted_global_r_bubble), 1);
   H5LTset_attribute_double(file_id, "temp_kinetic_all_gas", "volume_weighted_global_temp_kinetic_all_gas", &(grids->volume_weighted_global_temp_kinetic_all_gas), 1);

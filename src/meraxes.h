@@ -38,6 +38,7 @@
 #define PLANCK_EV (double)(4.1357e-15)
 #define T_RE 1e4
 #define EDDINGTON_TIME_SCALE 450.514890  // Eddington timescale in Megayears
+#define SIGMA_T_CGS (double)(6.652e-25)
 
 // Extra constants for emission-line calculations
 #define HBAR_SI (PLANCK * 1e-7 / 2 / M_PI)       // [J s]
@@ -569,6 +570,12 @@ typedef struct reion_grids_t
   double mass_weighted_global_clumping_factor;
   double mass_weighted_global_t_resp;
 
+  // Thomson optical depth tracking based on mass-weighted ionization history.
+  double mass_weighted_global_tau_e;
+  double mass_weighted_global_tau_e_sim;
+  int tau_e_prev_snapshot;
+  double tau_e_prev_mass_weighted_xHII;
+
   double volume_ave_J_alpha;
   double volume_ave_xalpha;
   double volume_ave_Xheat;
@@ -863,6 +870,7 @@ typedef struct run_globals_t
   gsl_rng* random_generator;
   void* mhysa_self;
   double Hubble;
+  double tau_e_postEoR;
   double RhoCrit;
   double G;
   double Csquare;
