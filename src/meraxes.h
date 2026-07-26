@@ -39,6 +39,10 @@
 #define T_RE 1e4
 #define EDDINGTON_TIME_SCALE 450.514890  // Eddington timescale in Megayears
 #define SIGMA_T_CGS (double)(6.652e-25)
+#define EnergySN (double)(1e51) // Energy of a single supernova in ergs
+// Pop III stuff (Atm ENOVA_CC and ENOVA_PISN are the same but you could change)
+#define ENOVA_CC (double)(1e51)
+#define ENOVA_PISN (double)(1e51)
 
 // Extra constants for emission-line calculations
 #define HBAR_SI (PLANCK * 1e-7 / 2 / M_PI)       // [J s]
@@ -828,10 +832,9 @@ typedef struct mag_params_t
 
 typedef struct loiii_params_t
 {
-  double o30;
-  double o40;
-  double k03;
-  double k04;
+  double oxygen_abundance_over_z_sun;
+  double excitation_rate;
+  double branching_ratio;
 } loiii_params_t;
 
 //! Global variables which will will be passed around
