@@ -215,6 +215,60 @@ void read_parameter_file(char* fname, int mode)
 #endif
       params_type[n_param++] = PARAM_TYPE_DOUBLE;
 
+      strcpy(params_tag[n_param], "DustMetallicityScale");
+      params_addr[n_param] = &(run_params->DustMetallicityScale);
+#ifndef CALC_MAGS
+      required_tag[n_param] = 0;
+#else
+      required_tag[n_param] = 1;
+#endif
+      params_type[n_param++] = PARAM_TYPE_DOUBLE;
+
+      strcpy(params_tag[n_param], "DustTauUVISM");
+      params_addr[n_param] = &(run_params->DustTauUVISM);
+#ifndef CALC_MAGS
+      required_tag[n_param] = 0;
+#else
+      required_tag[n_param] = 1;
+#endif
+      params_type[n_param++] = PARAM_TYPE_DOUBLE;
+
+      strcpy(params_tag[n_param], "DustNISM");
+      params_addr[n_param] = &(run_params->DustNISM);
+#ifndef CALC_MAGS
+      required_tag[n_param] = 0;
+#else
+      required_tag[n_param] = 1;
+#endif
+      params_type[n_param++] = PARAM_TYPE_DOUBLE;
+
+      strcpy(params_tag[n_param], "DustTauUVBC");
+      params_addr[n_param] = &(run_params->DustTauUVBC);
+#ifndef CALC_MAGS
+      required_tag[n_param] = 0;
+#else
+      required_tag[n_param] = 1;
+#endif
+      params_type[n_param++] = PARAM_TYPE_DOUBLE;
+
+      strcpy(params_tag[n_param], "DustNBC");
+      params_addr[n_param] = &(run_params->DustNBC);
+#ifndef CALC_MAGS
+      required_tag[n_param] = 0;
+#else
+      required_tag[n_param] = 1;
+#endif
+      params_type[n_param++] = PARAM_TYPE_DOUBLE;
+
+      strcpy(params_tag[n_param], "DustAZ");
+      params_addr[n_param] = &(run_params->DustAZ);
+#ifndef CALC_MAGS
+      required_tag[n_param] = 0;
+#else
+      required_tag[n_param] = 1;
+#endif
+      params_type[n_param++] = PARAM_TYPE_DOUBLE;
+
       strcpy(params_tag[n_param], "DeltaT");
       params_addr[n_param] = &(run_params->DeltaT);
 #ifndef CALC_MAGS
