@@ -1525,7 +1525,7 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
     if (pass_write_check(gal, false)) {
       prepare_galaxy_for_output(*gal, &(output_buffer[buffer_count]), i_out);
             
-      if (run_globals.params.Flag_OutputHMF) {
+      if (run_globals.params.Flag_OutputHMF && !output_buffer[buffer_count].GhostFlag) {
         // Extract HMF value (log10 halo mass in solar masses/h)
         val = log10(output_buffer[buffer_count].Mvir * 1e10 / run_globals.params.Hubble_h);
         if (val >= hmf.x_min && val <= hmf.x_max) {
@@ -1534,7 +1534,7 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
         }
       }
       
-      if (run_globals.params.Flag_OutputSMF) {
+      if (run_globals.params.Flag_OutputSMF && !output_buffer[buffer_count].GhostFlag) {
         // Extract SMF value (log10 stellar mass in solar masses)
         val = output_buffer[buffer_count].StellarMass * 1e10 / run_globals.params.Hubble_h;
         if (val > 0.0) {
@@ -1547,7 +1547,7 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
       }
       
 #ifdef CALC_MAGS
-      if (is_target_snap && run_globals.params.Flag_OutputUVLF) {
+      if (is_target_snap && run_globals.params.Flag_OutputUVLF && !output_buffer[buffer_count].GhostFlag) {
         // Extract UVLF value (UV magnitude)
         if (isfinite(output_buffer[buffer_count].Mags[0])) {
           val = output_buffer[buffer_count].Mags[0];
@@ -1558,7 +1558,7 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
         }
       }
       
-      if (is_target_snap && run_globals.params.Flag_OutputDustyLF) {
+      if (is_target_snap && run_globals.params.Flag_OutputDustyLF && !output_buffer[buffer_count].GhostFlag) {
         // Extract DustyLF value (dusty UV magnitude)
         if (isfinite(output_buffer[buffer_count].DustyMags[0])) {
           val = output_buffer[buffer_count].DustyMags[0];
@@ -1571,7 +1571,7 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
 #endif
       
       // QuasarLF: bin QuasarMag weighted by DutyCycleAGN * quasar_fobs (opening angle)
-      if (run_globals.params.Flag_OutputQuasarLF) {
+      if (run_globals.params.Flag_OutputQuasarLF && !output_buffer[buffer_count].GhostFlag) {
         val = output_buffer[buffer_count].QuasarMag;
         weight = output_buffer[buffer_count].DutyCycleAGN * run_globals.params.physics.quasar_fobs;
         // Only include quasars that are "on" (QuasarMag < 999) and have positive duty cycle
@@ -1584,7 +1584,7 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
         }
       }
 
-      if (run_globals.params.Flag_OutputOIIILF) {
+      if (run_globals.params.Flag_OutputOIIILF && !output_buffer[buffer_count].GhostFlag) {
         val = output_buffer[buffer_count].LOIII;
         if (val > 0.0 && isfinite(val)) {
           val = log10(val) + 40;
@@ -1596,7 +1596,7 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
       }
 
 #ifdef CALC_MAGS
-      if (do_oiii_dusty_lf) {
+      if (do_oiii_dusty_lf && !output_buffer[buffer_count].GhostFlag) {
         val = output_buffer[buffer_count].LOIII_dusty;
         if (val > 0.0 && isfinite(val)) {
           val = log10(val) + 40;
