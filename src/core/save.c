@@ -1,6 +1,8 @@
 #include <assert.h>
 #include <hdf5_hl.h>
 #include <math.h>
+#include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
 #include "dist_func.h"
@@ -126,7 +128,26 @@ void prepare_galaxy_for_output(galaxy_t gal, galaxy_output_t* galout, int i_snap
   }
 
 #ifdef CALC_MAGS
+  galout->LOIII_dusty = galout->LOIII;
   get_output_magnitudes(galout->Mags, galout->DustyMags, &gal, run_globals.ListOutputSnaps[i_snap]);
+
+  const int loiii_band_idx = run_globals.loiii_rest_band_mag_index;
+  if (loiii_band_idx >= 0) {
+    const float mag = galout->Mags[loiii_band_idx];
+    const float dusty_mag = galout->DustyMags[loiii_band_idx];
+
+    if (isfinite(mag) && isfinite(dusty_mag) && mag < 900.0f && dusty_mag < 900.0f) {
+      const double attenuation_mag = (double)mag - (double)dusty_mag;
+      const double attenuation_factor = pow(10.0, 0.4 * attenuation_mag);
+      const double loiii_dusty = (double)galout->LOIII * attenuation_factor;
+
+      if (isfinite(loiii_dusty) && loiii_dusty >= 0.0)
+        galout->LOIII_dusty = (float)loiii_dusty;
+      else
+        galout->LOIII_dusty = 0.0f;
+    }
+  }
+
 #if USE_MINI_HALOS
   get_output_magnitudesIII(galout->MagsIII, &gal, run_globals.ListOutputSnaps[i_snap]);
 #endif
@@ -151,7 +172,7 @@ void calc_hdf5_props()
 #endif
 
 #ifdef CALC_MAGS
-    h5props->n_props += 2;
+    h5props->n_props += 3;
     h5props->array_nmag_f_tid = H5Tarray_create(H5T_NATIVE_FLOAT, 1, (hsize_t[]){ MAGS_N_BANDS });
 #if USE_MINI_HALOS
     h5props->n_props += 1;
@@ -438,6 +459,15 @@ void calc_hdf5_props()
     h5props->field_units[i] = "1e40 erg/s";
     h5props->field_h_conv[i] = "None";
     h5props->field_types[i++] = H5T_NATIVE_FLOAT;
+
+  #ifdef CALC_MAGS
+    h5props->dst_offsets[i] = HOFFSET(galaxy_output_t, LOIII_dusty);
+    h5props->dst_field_sizes[i] = sizeof(galout.LOIII_dusty);
+    h5props->field_names[i] = "LOIII_dusty";
+    h5props->field_units[i] = "1e40 erg/s";
+    h5props->field_h_conv[i] = "None";
+    h5props->field_types[i++] = H5T_NATIVE_FLOAT;
+  #endif
 
     h5props->dst_offsets[i] = HOFFSET(galaxy_output_t, ionization_param);
     h5props->dst_field_sizes[i] = sizeof(galout.ionization_param);
@@ -1051,6 +1081,11 @@ void create_master_file()
       sprintf(source_ds, "Snap%03d/DustyLF", run_globals.ListOutputSnaps[i_out]);
       H5Lcreate_external(relative_source_file, source_ds, snap_group_id, "DustyLF", H5P_DEFAULT, H5P_DEFAULT);
     }
+
+    if (run_globals.params.Flag_OutputOIIILF && H5LTfind_dataset(source_group_id, "OIIIDustyLF")) {
+      sprintf(source_ds, "Snap%03d/OIIIDustyLF", run_globals.ListOutputSnaps[i_out]);
+      H5Lcreate_external(relative_source_file, source_ds, snap_group_id, "OIIIDustyLF", H5P_DEFAULT, H5P_DEFAULT);
+    }
 #endif
     
     // QuasarLF external link (not dependent on CALC_MAGS)
@@ -1205,7 +1240,7 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
   distribution_function_t quasarlf;
   distribution_function_t oiiilf;
 #ifdef CALC_MAGS
-  distribution_function_t uvlf, dustylf;
+  distribution_function_t uvlf, dustylf, oiiidustylf;
 #endif
 
   // Volume will be set during initialization
@@ -1295,6 +1330,9 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
       break;
     }
   }
+
+  const int do_oiii_dusty_lf =
+    is_target_snap && run_globals.params.Flag_OutputOIIILF && (run_globals.loiii_rest_band_mag_index >= 0);
   
   if (is_target_snap && run_globals.params.Flag_OutputUVLF) {
     if (run_globals.params.UVLF_MaxMag <= run_globals.params.UVLF_MinMag) {
@@ -1355,6 +1393,17 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
             run_globals.params.OIIILF_BinsPerDex,
             "OIII Luminosity Function");
     oiiilf.volume = df_volume;
+
+    #ifdef CALC_MAGS
+        if (do_oiii_dusty_lf) {
+          df_init(&oiiidustylf,
+            run_globals.params.OIIILF_MinLogL,
+            run_globals.params.OIIILF_MaxLogL,
+            run_globals.params.OIIILF_BinsPerDex,
+            "Dusty OIII Luminosity Function");
+          oiiidustylf.volume = df_volume;
+        }
+    #endif
   }
 
   // If the immediately preceding snapshot was also written, then save the
@@ -1545,6 +1594,19 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
           }
         }
       }
+
+#ifdef CALC_MAGS
+      if (do_oiii_dusty_lf) {
+        val = output_buffer[buffer_count].LOIII_dusty;
+        if (val > 0.0 && isfinite(val)) {
+          val = log10(val) + 40;
+          if (val >= oiiidustylf.x_min && val <= oiiidustylf.x_max) {
+            bin_idx = (int)((val - oiiidustylf.x_min) / oiiidustylf.bin_width);
+            oiiidustylf.bin_counts[bin_idx] += 1.0;
+          }
+        }
+      }
+#endif
       
       buffer_count++;;
     }
@@ -1647,6 +1709,16 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
       df_write_hdf5(file_id, target_group, &oiiilf, "OIIILF", "per Mpc^3 per dex");
     }
     df_free(&oiiilf);
+
+#ifdef CALC_MAGS
+    if (do_oiii_dusty_lf) {
+      df_mpi_reduce(&oiiidustylf, run_globals.mpi_rank, run_globals.mpi_size);
+      if (run_globals.mpi_rank == 0) {
+        df_write_hdf5(file_id, target_group, &oiiidustylf, "OIIIDustyLF", "per Mpc^3 per dex");
+      }
+      df_free(&oiiidustylf);
+    }
+#endif
   }
 
   // Close the group.

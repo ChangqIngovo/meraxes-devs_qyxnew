@@ -89,6 +89,7 @@ typedef struct physics_params_t
   double SnReheatScaling;
   double SnReheatScaling2;
   double SnReheatNorm;
+  double SnMetalRetentionFraction;
   double SnEjectionRedshiftDep;
   double SnEjectionEff;
   double SnEjectionScaling;
@@ -893,6 +894,7 @@ typedef struct run_globals_t
 
 #ifdef CALC_MAGS
   struct mag_params_t mag_params;
+  int loiii_rest_band_mag_index;
 #endif
 
   int NOutputSnaps;

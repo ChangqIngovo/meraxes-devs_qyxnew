@@ -139,6 +139,7 @@ SnReheatScaling2          : 0.0     # mass loading factor for SN feedback scalin
 SnReheatScaling2_III      : 0.0
 SnReheatNorm              : 70.0    # mass loading factor for SN feedback scaling (with Vmax [internal units])
 SnReheatNorm_III          : 70.0
+SnMetalRetentionFraction  : 0.0     # fraction of reheated cold-gas metals retained in cold gas (0: legacy behaviour)
 
 
 #-------------------

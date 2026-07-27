@@ -51,6 +51,9 @@ typedef struct galaxy_output_t
   float MetalsStellarMass;
   float Sfr;
   float LOIII;
+#ifdef CALC_MAGS
+  float LOIII_dusty;
+#endif
   float ionization_param;
   float EjectedGas;
   float MetalsEjectedGas;

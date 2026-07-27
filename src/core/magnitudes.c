@@ -566,6 +566,22 @@ void init_magnitudes(void)
     int n_rest = 0;
     double *rest_bands = parse_bands(params->RestBands, &n_rest, "RestBands");
 
+    run_globals.loiii_rest_band_mag_index = -1;
+    for (int i_band = 0; i_band < n_rest; ++i_band) {
+      const double band_lo = fmin(rest_bands[2 * i_band], rest_bands[2 * i_band + 1]);
+      const double band_hi = fmax(rest_bands[2 * i_band], rest_bands[2 * i_band + 1]);
+
+      if (5008.0 >= band_lo && 5008.0 <= band_hi) {
+        run_globals.loiii_rest_band_mag_index = n_beta + i_band;
+        break;
+      }
+    }
+
+    if ((run_globals.params.Flag_OutputOIIILF == 1) && (run_globals.loiii_rest_band_mag_index < 0)) {
+      mlog("Warning: Flag_OutputOIIILF=1 but RestBands does not include 5008A; LOIII_dusty attenuation will not be applied.",
+           MLOG_MESG);
+    }
+
 #ifdef DEBUG
     mlog("# Rest-frame filters:", MLOG_MESG);
     for (int i_band = 0; i_band < n_rest; ++i_band)

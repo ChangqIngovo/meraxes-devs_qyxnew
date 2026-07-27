@@ -25,6 +25,12 @@ static void check_problem_params(run_params_t* run_params)
       ABORT(EXIT_FAILURE);
     }
   }
+
+  if ((run_params->physics.SnMetalRetentionFraction < 0.0) ||
+            (run_params->physics.SnMetalRetentionFraction > 1.0)) {
+      mlog_error("SnMetalRetentionFraction must be between 0 and 1.");
+      ABORT(EXIT_FAILURE);
+  }
 }
 
 static void store_params(entry_t entry[123],
@@ -704,6 +710,11 @@ void read_parameter_file(char* fname, int mode)
 #else
       required_tag[n_param] = 0;
 #endif
+      params_type[n_param++] = PARAM_TYPE_DOUBLE;
+
+      strncpy(params_tag[n_param], "SnMetalRetentionFraction", tag_length);
+      params_addr[n_param] = &(run_params->physics).SnMetalRetentionFraction;
+      required_tag[n_param] = 1;
       params_type[n_param++] = PARAM_TYPE_DOUBLE;
 
       strncpy(params_tag[n_param], "ReincorporationModel", tag_length);
