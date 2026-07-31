@@ -194,6 +194,23 @@ void get_nh_transmission(double T_out[5])
     T_out[k] = s_T[k];
 }
 
+/* Return the deterministic NH bin fractions f[0..4] for an AGN with
+ * LX_1e10Lsun (linear, units of 1e10 Lsun) at the given redshift.
+ * These are the probabilities from the NH distribution model — independent
+ * of the stochastic draw made per galaxy. */
+void get_nh_fracs(double LX_1e10Lsun, double redshift, double f_out[5])
+{
+  int k;
+  double LX_log_ergs;
+  double f[5];
+  for (k = 0; k < 5; k++) f_out[k] = 0.0;
+  if (LX_1e10Lsun <= 0.0) return;
+  _ensure_T_init();
+  LX_log_ergs = log10(LX_1e10Lsun) + 10.0 + log10(SOLAR_LUM);
+  _NH_distribution(LX_log_ergs, redshift, f);
+  for (k = 0; k < 5; k++) f_out[k] = f[k];
+}
+
 void calculate_BHemissivity(double BlackHoleMass, double accreted_mass,
                             double *emissivity,     double *accretion_time,
                             double *quasar_luv,     double *quasar_lx,
