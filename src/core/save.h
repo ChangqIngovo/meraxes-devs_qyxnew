@@ -60,6 +60,16 @@ typedef struct galaxy_output_t
   float QuasarMag;
   float QuasarLX;        //!< Intrinsic hard X-ray luminosity [1e10 L_sun, 2-10 keV]; 0 if inactive
   float QuasarLX_obs;    //!< Observed  hard X-ray luminosity [1e10 L_sun, 2-10 keV]; 0 if inactive
+  float QuasarLX_obs0;   //!< Observed LX in NH bin 0 (logNH 20-21) [1e10 L_sun]
+  float QuasarLX_obs1;   //!< Observed LX in NH bin 1 (logNH 21-22) [1e10 L_sun]
+  float QuasarLX_obs2;   //!< Observed LX in NH bin 2 (logNH 22-23) [1e10 L_sun]
+  float QuasarLX_obs3;   //!< Observed LX in NH bin 3 (logNH 23-24) [1e10 L_sun]
+  float QuasarLX_obs4;   //!< Observed LX in NH bin 4 (logNH 24-26, CTK) [1e10 L_sun]
+  float NHfrac0;         //!< 1 if AGN drawn into NH bin 0, else 0
+  float NHfrac1;         //!< 1 if AGN drawn into NH bin 1, else 0
+  float NHfrac2;         //!< 1 if AGN drawn into NH bin 2, else 0
+  float NHfrac3;         //!< 1 if AGN drawn into NH bin 3, else 0
+  float NHfrac4;         //!< 1 if AGN drawn into NH bin 4 (CTK), else 0
   float BHXrayEmissivity; //!< Observed hard X-ray emissivity [1e60 erg], obscuration-weighted
   float EffectiveBHM;
   float BlackHoleAccretedHotMass;

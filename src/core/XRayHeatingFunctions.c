@@ -1486,10 +1486,18 @@ void evolveInt(float zp,
      */
     /* Broken power law: apply soft prefactor. The hard-band amplitude is
      * already folded into freq_int_*_AGN[] via hard_weight in ComputeTs.c,
-     * so const_zp_prefactor_AGN_soft is the single normalisation needed. */
-    dxheat_dt_AGN       *= const_zp_prefactor_AGN_soft;
-    dxion_source_dt_AGN *= const_zp_prefactor_AGN_soft;
-    dxlya_dt_AGN        *= const_zp_prefactor_AGN_soft * n_b;
+     * so const_zp_prefactor_AGN_soft is the single normalisation needed.
+     * Guard against non-finite prefactor (degenerate band limits → 0 → Inf)
+     * which would corrupt x_e via 0 * Inf = NaN. */
+    if (isfinite(const_zp_prefactor_AGN_soft)) {
+      dxheat_dt_AGN       *= const_zp_prefactor_AGN_soft;
+      dxion_source_dt_AGN *= const_zp_prefactor_AGN_soft;
+      dxlya_dt_AGN        *= const_zp_prefactor_AGN_soft * n_b;
+    } else {
+      dxheat_dt_AGN       = 0.0;
+      dxion_source_dt_AGN = 0.0;
+      dxlya_dt_AGN        = 0.0;
+    }
 
   } // end COMPUTE_Ts if statement YOU CAN SAVE SOME MORE OUTPUTS BUT FOR THE MOMENT THIS SHOULD BE FINE!
 

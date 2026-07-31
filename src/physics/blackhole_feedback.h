@@ -75,6 +75,8 @@ extern "C"
 
   void merger_driven_BH_growth(struct galaxy_t* gal, double merger_ratio, int snapshot);
   void previous_merger_driven_BH_growth(struct galaxy_t* gal, int snapshot);
+  void get_nh_transmission(double T_out[5]);
+  void get_nh_fracs(double LX_1e10Lsun, double redshift, double f_out[5]);
 
 
 #ifdef __cplusplus

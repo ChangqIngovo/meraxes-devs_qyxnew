@@ -7,13 +7,159 @@
 #include <string.h>
 #include <sys/stat.h>
 
-#include "../ComputeTs.h"
-#include "../find_HII_bubbles.h"
+#include "core/ComputeTs.h"
+#include "core/find_HII_bubbles.h"
 #include "meraxes.h"
-#include "../misc_tools.h"
-#include "../read_grids.h"
-#include "../reionization.h"
-#include "../virial_properties.h"
+#include "core/misc_tools.h"
+#include "core/read_grids.h"
+#include "core/reionization.h"
+#include "core/virial_properties.h"
+#include "reionization.h"
+
+/* ---- reionization modifier functions (calculate_Mvir_crit, reionization_modifier, etc.) ---- */
+
+void calculate_Mvir_crit(double redshift)
+{
+  float* Mvir_crit  = run_globals.reion_grids.Mvir_crit;
+  int    ReionGridDim = run_globals.params.ReionGridDim;
+  int    local_n_x  = (int)(run_globals.reion_grids.slab_nix[run_globals.mpi_rank]);
+  int    local_n_cell = local_n_x * ReionGridDim * ReionGridDim;
+  double ReionSMParam_m0 = run_globals.params.physics.ReionSMParam_m0;
+  double ReionSMParam_a  = run_globals.params.physics.ReionSMParam_a;
+  double ReionSMParam_b  = run_globals.params.physics.ReionSMParam_b;
+  double ReionSMParam_c  = run_globals.params.physics.ReionSMParam_c;
+  double ReionSMParam_d  = run_globals.params.physics.ReionSMParam_d;
+  double Hubble_h = run_globals.params.Hubble_h;
+  float* J_21_at_ion = run_globals.reion_grids.J_21_at_ionization;
+  float* z_at_ion    = run_globals.reion_grids.z_at_ionization;
+
+  for (int ii = 0; ii < local_n_cell; ii++)
+    Mvir_crit[ii] = 0.0;
+
+  for (int ii = 0; ii < local_n_x; ii++)
+    for (int jj = 0; jj < ReionGridDim; jj++)
+      for (int kk = 0; kk < ReionGridDim; kk++) {
+        double cell_Mvir_crit = 0.0;
+        if (z_at_ion[grid_index(ii, jj, kk, ReionGridDim, INDEX_REAL)] > redshift)
+          cell_Mvir_crit =
+            ReionSMParam_m0 *
+            pow((double)(J_21_at_ion[grid_index(ii, jj, kk, ReionGridDim, INDEX_REAL)]) * Hubble_h * Hubble_h,
+                ReionSMParam_a) *
+            pow((1.0 + redshift) / 10.0, ReionSMParam_b) *
+            pow((1.0 - pow((1.0 + redshift) /
+                           (1.0 + (double)(z_at_ion[grid_index(ii, jj, kk, ReionGridDim, INDEX_REAL)])),
+                           ReionSMParam_c)),
+                ReionSMParam_d);
+        Mvir_crit[grid_index(ii, jj, kk, ReionGridDim, INDEX_REAL)] = (float)cell_Mvir_crit;
+      }
+}
+
+#if USE_MINI_HALOS
+void calculate_Mvir_crit_MC(double redshift)
+{
+  float* Mvir_crit_MC = run_globals.reion_grids.Mvir_crit_MC;
+  int    ReionGridDim  = run_globals.params.ReionGridDim;
+  int    local_n_x    = (int)(run_globals.reion_grids.slab_nix[run_globals.mpi_rank]);
+  int    local_n_cell = local_n_x * ReionGridDim * ReionGridDim;
+  float* JLW_box = run_globals.reion_grids.JLW_box;
+  double cell_Mvir_crit_MC = run_globals.params.Flag_IncludeStreamVel ? Mcool_SV(redshift, 1) : Mcool_SV(redshift, 0);
+
+  for (int ii = 0; ii < local_n_cell; ii++)
+    Mvir_crit_MC[ii] = 0.0;
+
+  for (int ii = 0; ii < local_n_x; ii++)
+    for (int jj = 0; jj < ReionGridDim; jj++)
+      for (int kk = 0; kk < ReionGridDim; kk++)
+        Mvir_crit_MC[grid_index(ii, jj, kk, ReionGridDim, INDEX_REAL)] =
+          (float)(cell_Mvir_crit_MC *
+                  (1.0 + 6.96 * pow(4 * M_PI * JLW_box[grid_index(ii, jj, kk, ReionGridDim, INDEX_REAL)], 0.47)));
+}
+#endif
+
+double tocf_modifier(galaxy_t* gal, double Mvir)
+{
+  return pow(2.0, -1.0 * gal->MvirCrit / Mvir);
+}
+
+static double inline M0(double z)
+{
+  return Tvir_to_Mvir(run_globals.params.physics.ReionSobacchi_T0, z);
+}
+
+static double inline Mcool_z(double z)
+{
+  return Tvir_to_Mvir(run_globals.params.physics.ReionTcool, z);
+}
+
+static double sobacchi_Mvir_min(double z)
+{
+  double current_Mcool = Mcool_z(z);
+  double current_M0    = M0(z);
+  physics_params_t* params = &(run_globals.params.physics);
+  double g_term = 1.0 / (1.0 + exp((z - (params->ReionSobacchi_Zre - params->ReionSobacchi_DeltaZsc)) /
+                                    params->ReionSobacchi_DeltaZre));
+  return current_Mcool * pow(current_M0 / current_Mcool, g_term);
+}
+
+double sobacchi2013_modifier(double Mvir, double redshift)
+{
+  return pow(2.0, -sobacchi_Mvir_min(redshift) / Mvir);
+}
+
+static double precomputed_Mcrit_modifier(galaxy_t* gal, double Mvir, int snapshot)
+{
+  double Mvir_crit = run_globals.params.MvirCrit[snapshot];
+  if (gal != NULL)
+    gal->MvirCrit = Mvir_crit;
+  return pow(2.0, -Mvir_crit / Mvir);
+}
+
+double gnedin2000_modifer(double Mvir, double redshift)
+{
+  double a0 = 1.0 / (1.0 + run_globals.params.physics.ReionGnedin_z0);
+  double ar = 1.0 / (1.0 + run_globals.params.physics.ReionGnedin_zr);
+  double alpha = 6.0;
+  double a = 1.0 / (1.0 + redshift);
+  double a_on_a0 = a / a0;
+  double a_on_ar = a / ar;
+  double f_of_a;
+
+  if (a <= a0)
+    f_of_a = 3.0 * a / ((2.0 + alpha) * (5.0 + 2.0 * alpha)) * pow(a_on_a0, alpha);
+  else if (a < ar)
+    f_of_a = (3.0 / a) * (a0 * a0 * (1.0 / (2.0 + alpha) - 2.0 * pow(a_on_a0, -0.5) / (5.0 + 2.0 * alpha)) +
+                          a * a / 10.0 - (a0 * a0 / 10.0) * (5.0 - 4.0 * pow(a_on_a0, -0.5)));
+  else
+    f_of_a = (3.0 / a) * (a0 * a0 * (1.0 / (2.0 + alpha) - 2.0 * pow(a_on_a0, -0.5) / (5.0 + 2.0 * alpha)) +
+                          (ar * ar / 10.0) * (5.0 - 4.0 * pow(a_on_ar, -0.5)) -
+                          (a0 * a0 / 10.0) * (5.0 - 4.0 * pow(a_on_a0, -0.5)) + a * ar / 3.0 -
+                          (ar * ar / 3.0) * (3.0 - 2.0 * pow(a_on_ar, -0.5)));
+
+  double Mjeans = 25.0 * pow(run_globals.params.OmegaM, -0.5) * 2.21;
+  double Mfiltering = Mjeans * pow(f_of_a, 1.5);
+  double Mchar = Mcool_z(redshift);
+  double mass_to_use = (Mfiltering > Mchar) ? Mfiltering : Mchar;
+  return 1.0 / pow(1.0 + 0.26 * (mass_to_use / Mvir), 3.0);
+}
+
+double reionization_modifier(galaxy_t* gal, double Mvir, int snapshot)
+{
+  double redshift = run_globals.ZZ[snapshot];
+  double modifier;
+
+  if ((run_globals.params.ReionUVBFlag) && (run_globals.params.Flag_PatchyReion))
+    return tocf_modifier(gal, Mvir);
+
+  switch (run_globals.params.physics.Flag_ReionizationModifier) {
+    case 1:  modifier = sobacchi2013_modifier(Mvir, redshift); break;
+    case 2:  modifier = gnedin2000_modifer(Mvir, redshift);    break;
+    case 3:  modifier = precomputed_Mcrit_modifier(gal, Mvir, snapshot); break;
+    default: modifier = 1.0; break;
+  }
+  return modifier;
+}
+
+/* ---- end reionization modifier functions ---- */
 
 void update_galaxy_fesc_vals(galaxy_t* gal, double new_stars, int snapshot)
 {
@@ -440,7 +586,7 @@ void init_reion_grids()
        * Zero the smoothed AGN emissivity buffer. Same size and layout
        * as SMOOTHED_SFR_GAL — one double per (R_ct, cell) pair.
        */
-      grids->SMOOTHED_SFR_AGN[ii] = 0.0;
+      grids->SMOOTHED_AGN[ii] = 0.0;
     }
   }
 
@@ -660,13 +806,13 @@ void malloc_reionization_grids()
    *                        load_reion_sfr_grids() so ComputeTs.c can
    *                        use the correct past AGN luminosity for each
    *                        radial shell at emission redshift z''.
-   *   SMOOTHED_SFR_AGN   — FFT-smoothed AGN emissivity per shell per
-   *                        cell, same layout as SMOOTHED_SFR_GAL.
-   *                        Consumed by ComputeTs.c and evolveInt().
+   *   SMOOTHED_AGN       — per-cell AGN X-ray luminosity density per shell
+   *                        [erg/s/cm^3], same layout as SMOOTHED_SFR_GAL.
+   *                        Populated in ComputeTs.c from BHXrayEmissivity.
    */
   grids->BHXrayEmissivity  = NULL;
   grids->bh_xray_histories = NULL;
-  grids->SMOOTHED_SFR_AGN  = NULL;
+  grids->SMOOTHED_AGN      = NULL;
 
 #if USE_MINI_HALOS
   grids->Tk_boxII = NULL;
@@ -923,7 +1069,7 @@ void malloc_reionization_grids()
        *     so ComputeTs.c uses the physically correct past luminosity
        *     for each radial shell at emission redshift z''.
        *
-       *   SMOOTHED_SFR_AGN — array of doubles with the same size as
+       *   SMOOTHED_AGN — array of doubles with the same size as
        *     SMOOTHED_SFR_GAL. Holds the FFT-smoothed AGN emissivity per
        *     (radial shell, cell). Written by ComputeTs.c during the
        *     FFT convolution loop and read by evolveInt() to compute the
@@ -992,7 +1138,7 @@ void malloc_reionization_grids()
        * THIS ADDITION IS MADE TO ADD THE X-RAY CONTRIBUTION BY AGN
        * Same size as SMOOTHED_SFR_GAL. calloc ensures zeroed on allocation.
        */
-      grids->SMOOTHED_SFR_AGN = calloc((size_t)slab_n_real_smoothedSFR, sizeof(double));
+      grids->SMOOTHED_AGN = calloc((size_t)slab_n_real_smoothedSFR, sizeof(double));
 
 #if USE_MINI_HALOS
       grids->Tk_boxII = fftwf_alloc_real((size_t)slab_n_real);
@@ -1179,7 +1325,7 @@ void free_reionization_grids()
      * Free the AGN smoothed-emissivity array and the raw grid/history
      * buffers, matching the allocation guards in malloc_reionization_grids.
      */
-    free(grids->SMOOTHED_SFR_AGN);
+    free(grids->SMOOTHED_AGN);
     if (run_globals.params.physics.Flag_BHFeedback) {
       fftwf_free(grids->BHXrayEmissivity);
       fftwf_free(grids->bh_xray_histories);
@@ -2027,7 +2173,7 @@ void construct_baryon_grids(int snapshot, int local_ngals)
            *   be divided by a timescale to convert to a rate,
            *   BHXrayEmissivity is already an energy integrated over the
            *   snapshot timestep. ComputeTs.c converts to a luminosity
-           *   density when building SMOOTHED_SFR_AGN.
+           *   density when building SMOOTHED_AGN.
            */
           case prop_bh_xray_emissivity:
             for (int ix = 0; ix < slab_nix[i_r]; ix++)
@@ -2641,14 +2787,21 @@ void save_reion_output_attributes(int snapshot)
   gen_grids_fname(snapshot, name, false);
 
   hid_t plist_id = H5Pcreate(H5P_FILE_ACCESS);
-  hid_t file_id = H5Fopen(name, H5F_ACC_RDWR, plist_id);
+  // Non-output snapshots have no pre-existing grids file — create it here
+  hid_t file_id = H5Fcreate(name, H5F_ACC_TRUNC, H5P_DEFAULT, plist_id);
   H5Pclose(plist_id);
 
-    // Create a scalar dataspace with 0-sized dimension (empty)
-  hsize_t dims[1] = {0};  // zero-length dataset
+  // Create a scalar dataspace with 0-sized dimension (empty)
+  hsize_t dims[1] = {0};
   hid_t fspace_id = H5Screate_simple(1, dims, NULL);
 
-  hid_t dset_id = H5Dcreate(file_id, "xH", H5T_NATIVE_FLOAT, fspace_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+  // Create stub datasets that will receive attributes later in this function
+  hid_t dset_id = H5Dcreate(file_id, "weighted_sfr", H5T_NATIVE_FLOAT, fspace_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+  H5Dclose(dset_id);
+  dset_id = H5Dcreate(file_id, "effective_bhar", H5T_NATIVE_FLOAT, fspace_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+  H5Dclose(dset_id);
+
+  dset_id = H5Dcreate(file_id, "xH", H5T_NATIVE_FLOAT, fspace_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
   H5LTset_attribute_double(file_id, "xH", "volume_weighted_global_xH", &(grids->volume_weighted_global_xH), 1);
   H5LTset_attribute_double(file_id, "xH", "mass_weighted_global_xH", &(grids->mass_weighted_global_xH), 1);
   H5Dclose(dset_id);

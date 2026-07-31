@@ -230,7 +230,7 @@ void read_parameter_file(char* fname, int mode)
 
       strcpy(params_tag[n_param], "RecombinationDir");
       params_addr[n_param] = run_params->RecombinationDir;
-      required_tag[n_param] = 1;
+      required_tag[n_param] = 0;
       params_type[n_param++] = PARAM_TYPE_STRING;
       strcpy(params_tag[n_param], "StellarFeedbackDir");
       params_addr[n_param] = run_params->StellarFeedbackDir;
@@ -406,6 +406,11 @@ void read_parameter_file(char* fname, int mode)
       strncpy(params_tag[n_param], "Flag_includeAGN", tag_length);
       params_addr[n_param] = &(run_params->physics.Flag_includeAGN);
       required_tag[n_param] = 1;
+      params_type[n_param++] = PARAM_TYPE_INT;
+
+      strncpy(params_tag[n_param], "Flag_IncludeAGNXray", tag_length);
+      params_addr[n_param] = &(run_params->physics.Flag_IncludeAGNXray);
+      required_tag[n_param] = 0;
       params_type[n_param++] = PARAM_TYPE_INT;
 
       strncpy(params_tag[n_param], "FlagMCMC", tag_length);

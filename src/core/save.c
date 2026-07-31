@@ -76,9 +76,18 @@ void prepare_galaxy_for_output(galaxy_t gal, galaxy_output_t* galout, int i_snap
   galout->FescBH = (float)(gal.FescBH);
   galout->BHemissivity = (float)(gal.BHemissivity);
   galout->QuasarMag = (gal.QuasarLuv > 0.0) ? (float)(-19.826 - 2.5 * log10(gal.QuasarLuv)) : 999.9f;
-  galout->QuasarLX     = (float)gal.QuasarLX;      /* linear [1e10 Lsun]; 0 if inactive */
-  galout->QuasarLX_obs = (float)gal.QuasarLX_obs;  /* linear [1e10 Lsun]; 0 if inactive */
-  /* Observed X-ray emissivity [1e60 erg] — already obscuration-weighted in blackhole_feedback.c */
+  galout->QuasarLX     = (float)gal.QuasarLX;
+  galout->QuasarLX_obs = (float)gal.QuasarLX_obs;
+  galout->QuasarLX_obs0 = (float)gal.QuasarLX_obs0;
+  galout->QuasarLX_obs1 = (float)gal.QuasarLX_obs1;
+  galout->QuasarLX_obs2 = (float)gal.QuasarLX_obs2;
+  galout->QuasarLX_obs3 = (float)gal.QuasarLX_obs3;
+  galout->QuasarLX_obs4 = (float)gal.QuasarLX_obs4;
+  galout->NHfrac0 = (float)gal.NHfrac0;
+  galout->NHfrac1 = (float)gal.NHfrac1;
+  galout->NHfrac2 = (float)gal.NHfrac2;
+  galout->NHfrac3 = (float)gal.NHfrac3;
+  galout->NHfrac4 = (float)gal.NHfrac4;
   galout->BHXrayEmissivity = (float)gal.BHXrayEmissivity;
   galout->DutyCycleAGN = (float)(gal.DutyCycleAGN);
   galout->EffectiveBHM = (float)(gal.EffectiveBHM);
@@ -150,7 +159,7 @@ void calc_hdf5_props()
     galaxy_output_t galout;
     int i; // dummy
 
-    h5props->n_props = 58;
+    h5props->n_props = 68; /* 58 base + 10: NHfrac0-4, QuasarLX_obs0-4 */
 #if USE_MINI_HALOS
     h5props->n_props += 15; // Double check later
 #endif
@@ -689,7 +698,77 @@ void calc_hdf5_props()
     h5props->dst_offsets[i] = HOFFSET(galaxy_output_t, QuasarLX_obs);
     h5props->dst_field_sizes[i] = sizeof(galout.QuasarLX_obs);
     h5props->field_names[i] = "QuasarLX_obs";
-    h5props->field_units[i] = "LX [1e10 L_sun, 2-10 keV, obscured]";
+    h5props->field_units[i] = "LX [1e10 L_sun, 2-10 keV, obscured total]";
+    h5props->field_h_conv[i] = "None";
+    h5props->field_types[i++] = H5T_NATIVE_FLOAT;
+
+    h5props->dst_offsets[i] = HOFFSET(galaxy_output_t, QuasarLX_obs0);
+    h5props->dst_field_sizes[i] = sizeof(galout.QuasarLX_obs0);
+    h5props->field_names[i] = "QuasarLX_obs0";
+    h5props->field_units[i] = "LX [1e10 L_sun, 2-10 keV, logNH 20-21]";
+    h5props->field_h_conv[i] = "None";
+    h5props->field_types[i++] = H5T_NATIVE_FLOAT;
+
+    h5props->dst_offsets[i] = HOFFSET(galaxy_output_t, QuasarLX_obs1);
+    h5props->dst_field_sizes[i] = sizeof(galout.QuasarLX_obs1);
+    h5props->field_names[i] = "QuasarLX_obs1";
+    h5props->field_units[i] = "LX [1e10 L_sun, 2-10 keV, logNH 21-22]";
+    h5props->field_h_conv[i] = "None";
+    h5props->field_types[i++] = H5T_NATIVE_FLOAT;
+
+    h5props->dst_offsets[i] = HOFFSET(galaxy_output_t, QuasarLX_obs2);
+    h5props->dst_field_sizes[i] = sizeof(galout.QuasarLX_obs2);
+    h5props->field_names[i] = "QuasarLX_obs2";
+    h5props->field_units[i] = "LX [1e10 L_sun, 2-10 keV, logNH 22-23]";
+    h5props->field_h_conv[i] = "None";
+    h5props->field_types[i++] = H5T_NATIVE_FLOAT;
+
+    h5props->dst_offsets[i] = HOFFSET(galaxy_output_t, QuasarLX_obs3);
+    h5props->dst_field_sizes[i] = sizeof(galout.QuasarLX_obs3);
+    h5props->field_names[i] = "QuasarLX_obs3";
+    h5props->field_units[i] = "LX [1e10 L_sun, 2-10 keV, logNH 23-24]";
+    h5props->field_h_conv[i] = "None";
+    h5props->field_types[i++] = H5T_NATIVE_FLOAT;
+
+    h5props->dst_offsets[i] = HOFFSET(galaxy_output_t, QuasarLX_obs4);
+    h5props->dst_field_sizes[i] = sizeof(galout.QuasarLX_obs4);
+    h5props->field_names[i] = "QuasarLX_obs4";
+    h5props->field_units[i] = "LX [1e10 L_sun, 2-10 keV, logNH 24-26 CTK]";
+    h5props->field_h_conv[i] = "None";
+    h5props->field_types[i++] = H5T_NATIVE_FLOAT;
+
+    h5props->dst_offsets[i] = HOFFSET(galaxy_output_t, NHfrac0);
+    h5props->dst_field_sizes[i] = sizeof(galout.NHfrac0);
+    h5props->field_names[i] = "NHfrac0";
+    h5props->field_units[i] = "1 if AGN in logNH 20-21 bin, else 0";
+    h5props->field_h_conv[i] = "None";
+    h5props->field_types[i++] = H5T_NATIVE_FLOAT;
+
+    h5props->dst_offsets[i] = HOFFSET(galaxy_output_t, NHfrac1);
+    h5props->dst_field_sizes[i] = sizeof(galout.NHfrac1);
+    h5props->field_names[i] = "NHfrac1";
+    h5props->field_units[i] = "1 if AGN in logNH 21-22 bin, else 0";
+    h5props->field_h_conv[i] = "None";
+    h5props->field_types[i++] = H5T_NATIVE_FLOAT;
+
+    h5props->dst_offsets[i] = HOFFSET(galaxy_output_t, NHfrac2);
+    h5props->dst_field_sizes[i] = sizeof(galout.NHfrac2);
+    h5props->field_names[i] = "NHfrac2";
+    h5props->field_units[i] = "1 if AGN in logNH 22-23 bin, else 0";
+    h5props->field_h_conv[i] = "None";
+    h5props->field_types[i++] = H5T_NATIVE_FLOAT;
+
+    h5props->dst_offsets[i] = HOFFSET(galaxy_output_t, NHfrac3);
+    h5props->dst_field_sizes[i] = sizeof(galout.NHfrac3);
+    h5props->field_names[i] = "NHfrac3";
+    h5props->field_units[i] = "1 if AGN in logNH 23-24 bin, else 0";
+    h5props->field_h_conv[i] = "None";
+    h5props->field_types[i++] = H5T_NATIVE_FLOAT;
+
+    h5props->dst_offsets[i] = HOFFSET(galaxy_output_t, NHfrac4);
+    h5props->dst_field_sizes[i] = sizeof(galout.NHfrac4);
+    h5props->field_names[i] = "NHfrac4";
+    h5props->field_units[i] = "1 if AGN in logNH 24-26 CTK bin, else 0";
     h5props->field_h_conv[i] = "None";
     h5props->field_types[i++] = H5T_NATIVE_FLOAT;
 
@@ -1098,7 +1177,26 @@ void create_master_file()
       sprintf(source_ds, "Snap%03d/XrayLF_obs", run_globals.ListOutputSnaps[i_out]);
       H5Lcreate_external(relative_source_file, source_ds, snap_group_id, "XrayLF_obs", H5P_DEFAULT, H5P_DEFAULT);
     }
-    
+    if (run_globals.params.Flag_OutputXrayLF) {
+      const char* nh_lf_links[]    = {"XrayLF_obs0","XrayLF_obs1","XrayLF_obs2","XrayLF_obs3","XrayLF_obs4"};
+      const char* nh_frac_links[]  = {"NHfrac0","NHfrac1","NHfrac2","NHfrac3","NHfrac4"};
+      const char* nh_trans_links[] = {"NHTrans0","NHTrans1","NHTrans2","NHTrans3","NHTrans4"};
+      for (int ib = 0; ib < 5; ib++) {
+        if (H5LTfind_dataset(source_group_id, nh_lf_links[ib])) {
+          sprintf(source_ds, "Snap%03d/%s", run_globals.ListOutputSnaps[i_out], nh_lf_links[ib]);
+          H5Lcreate_external(relative_source_file, source_ds, snap_group_id, nh_lf_links[ib], H5P_DEFAULT, H5P_DEFAULT);
+        }
+        if (H5LTfind_dataset(source_group_id, nh_frac_links[ib])) {
+          sprintf(source_ds, "Snap%03d/%s", run_globals.ListOutputSnaps[i_out], nh_frac_links[ib]);
+          H5Lcreate_external(relative_source_file, source_ds, snap_group_id, nh_frac_links[ib], H5P_DEFAULT, H5P_DEFAULT);
+        }
+        if (H5LTfind_dataset(source_group_id, nh_trans_links[ib])) {
+          sprintf(source_ds, "Snap%03d/%s", run_globals.ListOutputSnaps[i_out], nh_trans_links[ib]);
+          H5Lcreate_external(relative_source_file, source_ds, snap_group_id, nh_trans_links[ib], H5P_DEFAULT, H5P_DEFAULT);
+        }
+      }
+    }
+
     H5Gclose(source_group_id);
     H5Fclose(source_file_id);
 
@@ -1241,6 +1339,7 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
   distribution_function_t oiiilf;
   distribution_function_t xraylf;
   distribution_function_t xraylf_obs;
+  distribution_function_t xraylf_obs0, xraylf_obs1, xraylf_obs2, xraylf_obs3, xraylf_obs4;
 #ifdef CALC_MAGS
   distribution_function_t uvlf, dustylf;
 #endif
@@ -1415,6 +1514,26 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
             run_globals.params.XrayLF_BinsPerDex,
             "X-ray Luminosity Function (2-10 keV, observed after obscuration)");
     xraylf_obs.volume = df_volume;
+
+    /* Per-NH-bin observed LFs (stochastic draw: only the drawn bin is non-zero per galaxy) */
+    const char *nh_bin_labels[5] = {
+      "XrayLF obs NH bin 0 (logNH 20-21)",
+      "XrayLF obs NH bin 1 (logNH 21-22)",
+      "XrayLF obs NH bin 2 (logNH 22-23)",
+      "XrayLF obs NH bin 3 (logNH 23-24)",
+      "XrayLF obs NH bin 4 (logNH 24-26 CTK)"
+    };
+    distribution_function_t *xraylf_obs_bins[5] = {
+      &xraylf_obs0, &xraylf_obs1, &xraylf_obs2, &xraylf_obs3, &xraylf_obs4
+    };
+    for (int ib = 0; ib < 5; ib++) {
+      df_init(xraylf_obs_bins[ib],
+              run_globals.params.XrayLF_MinLogL,
+              run_globals.params.XrayLF_MaxLogL,
+              run_globals.params.XrayLF_BinsPerDex,
+              nh_bin_labels[ib]);
+      xraylf_obs_bins[ib]->volume = df_volume;
+    }
   }
 
   // If the immediately preceding snapshot was also written, then save the
@@ -1529,6 +1648,8 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
   // Accumulate into distribution functions from output buffer
   double val, weight;
   int bin_idx;
+  double nhfrac_sum[5] = {0.0, 0.0, 0.0, 0.0, 0.0};
+  double nhfrac_wsum   = 0.0;
 
   int buffer_count = 0;
   while (gal != NULL) {
@@ -1628,8 +1749,47 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
             xraylf_obs.bin_variance[bin_idx] += weight * (1.0 - weight);
           }
         }
+        /* NH-bin LFs: per-bin observed LX weighted by DutyCycleAGN × NHfrac_k.
+         * With stochastic draw, NHfrac_k is 1 for the drawn bin and 0 for all others,
+         * so each galaxy contributes to exactly one bin. */
+        {
+          double lx_bins[5], nhfrac_bins[5];
+          distribution_function_t *xraylf_obs_bins_inner[5] = {
+            &xraylf_obs0, &xraylf_obs1, &xraylf_obs2, &xraylf_obs3, &xraylf_obs4
+          };
+          lx_bins[0] = (double)output_buffer[buffer_count].QuasarLX_obs0;
+          lx_bins[1] = (double)output_buffer[buffer_count].QuasarLX_obs1;
+          lx_bins[2] = (double)output_buffer[buffer_count].QuasarLX_obs2;
+          lx_bins[3] = (double)output_buffer[buffer_count].QuasarLX_obs3;
+          lx_bins[4] = (double)output_buffer[buffer_count].QuasarLX_obs4;
+          nhfrac_bins[0] = (double)output_buffer[buffer_count].NHfrac0;
+          nhfrac_bins[1] = (double)output_buffer[buffer_count].NHfrac1;
+          nhfrac_bins[2] = (double)output_buffer[buffer_count].NHfrac2;
+          nhfrac_bins[3] = (double)output_buffer[buffer_count].NHfrac3;
+          nhfrac_bins[4] = (double)output_buffer[buffer_count].NHfrac4;
+          for (int ib = 0; ib < 5; ib++) {
+            double w_bin = weight * nhfrac_bins[ib];
+            if (lx_bins[ib] > 0.0 && w_bin > 0.0) {
+              val = log10(lx_bins[ib] * 1e10 * SOLAR_LUM);
+              if (val >= xraylf_obs_bins_inner[ib]->x_min && val < xraylf_obs_bins_inner[ib]->x_max) {
+                bin_idx = (int)((val - xraylf_obs_bins_inner[ib]->x_min) / xraylf_obs_bins_inner[ib]->bin_width);
+                xraylf_obs_bins_inner[ib]->bin_counts[bin_idx]   += w_bin;
+                xraylf_obs_bins_inner[ib]->bin_variance[bin_idx] += w_bin * (1.0 - w_bin);
+              }
+            }
+          }
+        }
+        /* Snapshot-level mean NHfrac: duty-cycle-weighted deterministic fractions from NH model */
+        if (weight > 0.0) {
+          double lx_gal = (double)output_buffer[buffer_count].QuasarLX;
+          double z_snap  = run_globals.ZZ[run_globals.ListOutputSnaps[i_out]];
+          double f_det[5];
+          get_nh_fracs(lx_gal, z_snap, f_det);
+          for (int ib = 0; ib < 5; ib++) nhfrac_sum[ib] += weight * f_det[ib];
+          nhfrac_wsum += weight;
+        }
       }
-      
+
       buffer_count++;;
     }
     if (buffer_count == (int)chunk_size) {
@@ -1742,6 +1902,56 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
     }
     df_free(&xraylf);
     df_free(&xraylf_obs);
+
+    /* Per-NH-bin observed LFs */
+    const char *nh_ds_names[5] = {
+      "XrayLF_obs0", "XrayLF_obs1", "XrayLF_obs2", "XrayLF_obs3", "XrayLF_obs4"
+    };
+    distribution_function_t *xraylf_obs_bins_out[5] = {
+      &xraylf_obs0, &xraylf_obs1, &xraylf_obs2, &xraylf_obs3, &xraylf_obs4
+    };
+    for (int ib = 0; ib < 5; ib++) {
+      df_mpi_reduce(xraylf_obs_bins_out[ib], run_globals.mpi_rank, run_globals.mpi_size);
+      if (run_globals.mpi_rank == 0)
+        df_write_hdf5(file_id, target_group, xraylf_obs_bins_out[ib], nh_ds_names[ib], "per Mpc^3 per dex");
+      df_free(xraylf_obs_bins_out[ib]);
+    }
+
+    /* Snapshot-level mean NHfrac (deterministic, duty-cycle weighted) and NHTrans */
+    {
+      double nhfrac_sum_g[5];
+      double nhfrac_wsum_g;
+      if (run_globals.mpi_size > 1) {
+        if (run_globals.mpi_rank == 0) {
+          MPI_Reduce(MPI_IN_PLACE, nhfrac_sum,   5, MPI_DOUBLE, MPI_SUM, 0, run_globals.mpi_comm);
+          MPI_Reduce(MPI_IN_PLACE, &nhfrac_wsum, 1, MPI_DOUBLE, MPI_SUM, 0, run_globals.mpi_comm);
+          for (int ib = 0; ib < 5; ib++) nhfrac_sum_g[ib] = nhfrac_sum[ib];
+          nhfrac_wsum_g = nhfrac_wsum;
+        } else {
+          MPI_Reduce(nhfrac_sum,   NULL, 5, MPI_DOUBLE, MPI_SUM, 0, run_globals.mpi_comm);
+          MPI_Reduce(&nhfrac_wsum, NULL, 1, MPI_DOUBLE, MPI_SUM, 0, run_globals.mpi_comm);
+        }
+      } else {
+        for (int ib = 0; ib < 5; ib++) nhfrac_sum_g[ib] = nhfrac_sum[ib];
+        nhfrac_wsum_g = nhfrac_wsum;
+      }
+      if (run_globals.mpi_rank == 0) {
+        hid_t grp = H5Gopen(file_id, target_group, H5P_DEFAULT);
+        hsize_t one = 1;
+        const char* nhfrac_names[5] = {"NHfrac0","NHfrac1","NHfrac2","NHfrac3","NHfrac4"};
+        for (int ib = 0; ib < 5; ib++) {
+          double mean_val = (nhfrac_wsum_g > 0.0) ? nhfrac_sum_g[ib] / nhfrac_wsum_g : 0.0;
+          H5LTmake_dataset_double(grp, nhfrac_names[ib], 1, &one, &mean_val);
+        }
+        /* NHTrans0-4: band-averaged photoelectric transmission per NH bin (constants) */
+        double s_T_vals[5];
+        get_nh_transmission(s_T_vals);
+        const char* nhtrans_names[5] = {"NHTrans0","NHTrans1","NHTrans2","NHTrans3","NHTrans4"};
+        for (int ib = 0; ib < 5; ib++)
+          H5LTmake_dataset_double(grp, nhtrans_names[ib], 1, &one, &s_T_vals[ib]);
+        H5Gclose(grp);
+      }
+    }
   }
 
   // Close the group.

@@ -163,7 +163,8 @@ typedef struct physics_params_t
   double NuXrayMax;
 
   double LXrayAGN;
-  int Flag_includeAGN;    /* 0=no AGN, 1=soft+hard, 2=hard only, 3=soft only */
+  int Flag_includeAGN;      /* 0=no AGN, 1=soft+hard, 2=hard only, 3=soft only */
+  int Flag_IncludeAGNXray;  /* 0=off, 1=soft+hard BPL, 2=hard only, 3=soft only */
   double SpecIndexXrayAGNSoft;
   double SpecIndexXrayAGNHard;
 
@@ -503,9 +504,13 @@ typedef struct reion_grids_t
 #endif
 
   double* SMOOTHED_SFR_GAL;
+  double* SMOOTHED_AGN;  //!< per-cell AGN X-ray luminosity density per shell [erg/s/cm^3]
 #if USE_MINI_HALOS
   double* SMOOTHED_SFR_III;
 #endif
+
+  float* BHXrayEmissivity;   //!< Per-cell AGN X-ray emissivity grid (current snapshot) [slab_n_complex*2]
+  float* bh_xray_histories;  //!< Ring-buffer of NstoreSnapshots_SFR past BHXrayEmissivity snapshots
 
   // Grids necessary for LW background and future disentangling between MC/AC Pop3/Pop2 stuff
 
@@ -665,9 +670,20 @@ typedef struct galaxy_t
   double FescBH;
   double BHemissivity;
   double QuasarLuv;         //!< UV luminosity LUV of quasar (1e10 Lsun, summable for mergers)
-  double QuasarLX;          //!< Intrinsic hard X-ray log10(LX / L_sun); -99 if inactive
-  double QuasarLX_obs;      //!< Observed hard X-ray log10(LX / L_sun) after obscuration; -99 if inactive
-  double BHXrayEmissivity;  //!< Observed X-ray emissivity [1e60 erg], after obscuration × duty-cycle weighting
+  double QuasarLX;               //!< Intrinsic hard X-ray luminosity [1e10 Lsun]; 0 if inactive
+  double QuasarLX_obs;           //!< Observed hard X-ray luminosity [1e10 Lsun] after obscuration; 0 if inactive
+  double QuasarLX_obs0;          //!< Observed LX in NH bin 0 (logNH 20-21) [1e10 Lsun]
+  double QuasarLX_obs1;          //!< Observed LX in NH bin 1 (logNH 21-22) [1e10 Lsun]
+  double QuasarLX_obs2;          //!< Observed LX in NH bin 2 (logNH 22-23) [1e10 Lsun]
+  double QuasarLX_obs3;          //!< Observed LX in NH bin 3 (logNH 23-24) [1e10 Lsun]
+  double QuasarLX_obs4;          //!< Observed LX in NH bin 4 (logNH 24-26, CTK) [1e10 Lsun]
+  double NHfrac0;                //!< 1 if AGN drawn into NH bin 0, else 0
+  double NHfrac1;                //!< 1 if AGN drawn into NH bin 1, else 0
+  double NHfrac2;                //!< 1 if AGN drawn into NH bin 2, else 0
+  double NHfrac3;                //!< 1 if AGN drawn into NH bin 3, else 0
+  double NHfrac4;                //!< 1 if AGN drawn into NH bin 4 (CTK), else 0
+  double BHXrayEmissivity;       //!< Observed hard X-ray emissivity [1e60 erg], obscuration-weighted
+  double BHXrayEmissivity_soft;  //!< Observed soft X-ray emissivity [1e60 erg], obscuration-weighted
   double EffectiveBHM;
   double EffectiveBHAR;
   double DutyCycleAGN;
