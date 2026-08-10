@@ -60,16 +60,8 @@ typedef struct galaxy_output_t
   float QuasarMag;
   float QuasarLX;        //!< Intrinsic hard X-ray luminosity [1e10 L_sun, 2-10 keV]; 0 if inactive
   float QuasarLX_obs;    //!< Observed  hard X-ray luminosity [1e10 L_sun, 2-10 keV]; 0 if inactive
-  float QuasarLX_obs0;   //!< Observed LX in NH bin 0 (logNH 20-21) [1e10 L_sun]
-  float QuasarLX_obs1;   //!< Observed LX in NH bin 1 (logNH 21-22) [1e10 L_sun]
-  float QuasarLX_obs2;   //!< Observed LX in NH bin 2 (logNH 22-23) [1e10 L_sun]
-  float QuasarLX_obs3;   //!< Observed LX in NH bin 3 (logNH 23-24) [1e10 L_sun]
-  float QuasarLX_obs4;   //!< Observed LX in NH bin 4 (logNH 24-26, CTK) [1e10 L_sun]
-  float NHfrac0;         //!< 1 if AGN drawn into NH bin 0, else 0
-  float NHfrac1;         //!< 1 if AGN drawn into NH bin 1, else 0
-  float NHfrac2;         //!< 1 if AGN drawn into NH bin 2, else 0
-  float NHfrac3;         //!< 1 if AGN drawn into NH bin 3, else 0
-  float NHfrac4;         //!< 1 if AGN drawn into NH bin 4 (CTK), else 0
+  int   NHbin;           //!< Which of the 5 NH bins this snapshot's draw landed in (0-4), or
+                          //!< -1 if no AGN activity — see meraxes.h galaxy_t.NHbin for detail.
   float BHXrayEmissivity; //!< Observed hard X-ray emissivity [1e60 erg], obscuration-weighted
   float EffectiveBHM;
   float BlackHoleAccretedHotMass;
@@ -123,6 +115,7 @@ extern "C"
   void prepare_galaxy_for_output(struct galaxy_t gal, galaxy_output_t* galout, int i_snap);
   void calc_hdf5_props(void);
   void prep_hdf5_file(void);
+  void close_hdf5_file(void);
   void create_master_file(void);
   void write_snapshot(int n_write, int i_out, int* last_n_write);
 
