@@ -78,16 +78,7 @@ void prepare_galaxy_for_output(galaxy_t gal, galaxy_output_t* galout, int i_snap
   galout->QuasarMag = (gal.QuasarLuv > 0.0) ? (float)(-19.826 - 2.5 * log10(gal.QuasarLuv)) : 999.9f;
   galout->QuasarLX     = (float)gal.QuasarLX;
   galout->QuasarLX_obs = (float)gal.QuasarLX_obs;
-  galout->QuasarLX_obs0 = (float)gal.QuasarLX_obs0;
-  galout->QuasarLX_obs1 = (float)gal.QuasarLX_obs1;
-  galout->QuasarLX_obs2 = (float)gal.QuasarLX_obs2;
-  galout->QuasarLX_obs3 = (float)gal.QuasarLX_obs3;
-  galout->QuasarLX_obs4 = (float)gal.QuasarLX_obs4;
-  galout->NHfrac0 = (float)gal.NHfrac0;
-  galout->NHfrac1 = (float)gal.NHfrac1;
-  galout->NHfrac2 = (float)gal.NHfrac2;
-  galout->NHfrac3 = (float)gal.NHfrac3;
-  galout->NHfrac4 = (float)gal.NHfrac4;
+  galout->NHbin = gal.NHbin;
   galout->BHXrayEmissivity = (float)gal.BHXrayEmissivity;
   galout->DutyCycleAGN = (float)(gal.DutyCycleAGN);
   galout->EffectiveBHM = (float)(gal.EffectiveBHM);
@@ -159,7 +150,7 @@ void calc_hdf5_props()
     galaxy_output_t galout;
     int i; // dummy
 
-    h5props->n_props = 68; /* 58 base + 10: NHfrac0-4, QuasarLX_obs0-4 */
+    h5props->n_props = 59; /* 58 base + 1: NHbin */
 #if USE_MINI_HALOS
     h5props->n_props += 15; // Double check later
 #endif
@@ -702,75 +693,18 @@ void calc_hdf5_props()
     h5props->field_h_conv[i] = "None";
     h5props->field_types[i++] = H5T_NATIVE_FLOAT;
 
-    h5props->dst_offsets[i] = HOFFSET(galaxy_output_t, QuasarLX_obs0);
-    h5props->dst_field_sizes[i] = sizeof(galout.QuasarLX_obs0);
-    h5props->field_names[i] = "QuasarLX_obs0";
-    h5props->field_units[i] = "LX [1e10 L_sun, 2-10 keV, logNH 20-21]";
+    /* Which of the 5 NH bins this snapshot's stochastic draw landed in
+     * (0-4), or -1 if no AGN activity. Replaces the old QuasarLX_obs0-4/
+     * NHfrac0-4 (10 mostly-zero floats per galaxy, since only one bin is
+     * ever nonzero per draw) — QuasarLX_obs above already carries that
+     * bin's observed luminosity, so (NHbin, QuasarLX_obs) is sufficient
+     * to reconstruct a per-bin XLF. */
+    h5props->dst_offsets[i] = HOFFSET(galaxy_output_t, NHbin);
+    h5props->dst_field_sizes[i] = sizeof(galout.NHbin);
+    h5props->field_names[i] = "NHbin";
+    h5props->field_units[i] = "0-4 = drawn logNH bin (20-21/21-22/22-23/23-24/24-26 CTK); -1 = no AGN";
     h5props->field_h_conv[i] = "None";
-    h5props->field_types[i++] = H5T_NATIVE_FLOAT;
-
-    h5props->dst_offsets[i] = HOFFSET(galaxy_output_t, QuasarLX_obs1);
-    h5props->dst_field_sizes[i] = sizeof(galout.QuasarLX_obs1);
-    h5props->field_names[i] = "QuasarLX_obs1";
-    h5props->field_units[i] = "LX [1e10 L_sun, 2-10 keV, logNH 21-22]";
-    h5props->field_h_conv[i] = "None";
-    h5props->field_types[i++] = H5T_NATIVE_FLOAT;
-
-    h5props->dst_offsets[i] = HOFFSET(galaxy_output_t, QuasarLX_obs2);
-    h5props->dst_field_sizes[i] = sizeof(galout.QuasarLX_obs2);
-    h5props->field_names[i] = "QuasarLX_obs2";
-    h5props->field_units[i] = "LX [1e10 L_sun, 2-10 keV, logNH 22-23]";
-    h5props->field_h_conv[i] = "None";
-    h5props->field_types[i++] = H5T_NATIVE_FLOAT;
-
-    h5props->dst_offsets[i] = HOFFSET(galaxy_output_t, QuasarLX_obs3);
-    h5props->dst_field_sizes[i] = sizeof(galout.QuasarLX_obs3);
-    h5props->field_names[i] = "QuasarLX_obs3";
-    h5props->field_units[i] = "LX [1e10 L_sun, 2-10 keV, logNH 23-24]";
-    h5props->field_h_conv[i] = "None";
-    h5props->field_types[i++] = H5T_NATIVE_FLOAT;
-
-    h5props->dst_offsets[i] = HOFFSET(galaxy_output_t, QuasarLX_obs4);
-    h5props->dst_field_sizes[i] = sizeof(galout.QuasarLX_obs4);
-    h5props->field_names[i] = "QuasarLX_obs4";
-    h5props->field_units[i] = "LX [1e10 L_sun, 2-10 keV, logNH 24-26 CTK]";
-    h5props->field_h_conv[i] = "None";
-    h5props->field_types[i++] = H5T_NATIVE_FLOAT;
-
-    h5props->dst_offsets[i] = HOFFSET(galaxy_output_t, NHfrac0);
-    h5props->dst_field_sizes[i] = sizeof(galout.NHfrac0);
-    h5props->field_names[i] = "NHfrac0";
-    h5props->field_units[i] = "1 if AGN in logNH 20-21 bin, else 0";
-    h5props->field_h_conv[i] = "None";
-    h5props->field_types[i++] = H5T_NATIVE_FLOAT;
-
-    h5props->dst_offsets[i] = HOFFSET(galaxy_output_t, NHfrac1);
-    h5props->dst_field_sizes[i] = sizeof(galout.NHfrac1);
-    h5props->field_names[i] = "NHfrac1";
-    h5props->field_units[i] = "1 if AGN in logNH 21-22 bin, else 0";
-    h5props->field_h_conv[i] = "None";
-    h5props->field_types[i++] = H5T_NATIVE_FLOAT;
-
-    h5props->dst_offsets[i] = HOFFSET(galaxy_output_t, NHfrac2);
-    h5props->dst_field_sizes[i] = sizeof(galout.NHfrac2);
-    h5props->field_names[i] = "NHfrac2";
-    h5props->field_units[i] = "1 if AGN in logNH 22-23 bin, else 0";
-    h5props->field_h_conv[i] = "None";
-    h5props->field_types[i++] = H5T_NATIVE_FLOAT;
-
-    h5props->dst_offsets[i] = HOFFSET(galaxy_output_t, NHfrac3);
-    h5props->dst_field_sizes[i] = sizeof(galout.NHfrac3);
-    h5props->field_names[i] = "NHfrac3";
-    h5props->field_units[i] = "1 if AGN in logNH 23-24 bin, else 0";
-    h5props->field_h_conv[i] = "None";
-    h5props->field_types[i++] = H5T_NATIVE_FLOAT;
-
-    h5props->dst_offsets[i] = HOFFSET(galaxy_output_t, NHfrac4);
-    h5props->dst_field_sizes[i] = sizeof(galout.NHfrac4);
-    h5props->field_names[i] = "NHfrac4";
-    h5props->field_units[i] = "1 if AGN in logNH 24-26 CTK bin, else 0";
-    h5props->field_h_conv[i] = "None";
-    h5props->field_types[i++] = H5T_NATIVE_FLOAT;
+    h5props->field_types[i++] = H5T_NATIVE_INT;
 
     h5props->dst_offsets[i] = HOFFSET(galaxy_output_t, BHXrayEmissivity);
     h5props->dst_field_sizes[i] = sizeof(galout.BHXrayEmissivity);
@@ -824,19 +758,38 @@ void calc_hdf5_props()
 
 void prep_hdf5_file()
 {
-  hid_t file_id;
-
-  // create a new file
+  /*
+   * Create the per-rank galaxy output file and write the two root attributes
+   * (iCore, NCores).  The file is stored in run_globals.output_file_id and
+   * kept open for the lifetime of the run so that HDF5 1.10.x's free-space
+   * manager never accumulates the open-close-cycle fragmentation that causes
+   * the "duplicate entry in cache" / H5Acreate2 failure when many snapshots
+   * have been written to the same file.  The caller (dracarys) must call
+   * close_hdf5_file() after the snapshot loop.
+   */
   if (access(run_globals.FNameOut, F_OK) != -1)
     remove(run_globals.FNameOut);
-  file_id = H5Fcreate(run_globals.FNameOut, H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
+  run_globals.output_file_id = H5Fcreate(run_globals.FNameOut, H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
 
   // store the file number and total number of cores
-  H5LTset_attribute_int(file_id, "/", "iCore", &(run_globals.mpi_rank), 1);
-  H5LTset_attribute_int(file_id, "/", "NCores", &(run_globals.mpi_size), 1);
+  H5LTset_attribute_int(run_globals.output_file_id, "/", "iCore", &(run_globals.mpi_rank), 1);
+  H5LTset_attribute_int(run_globals.output_file_id, "/", "NCores", &(run_globals.mpi_size), 1);
 
-  // close the file
-  H5Fclose(file_id);
+  // Do NOT close the file here; write_snapshot() will reuse output_file_id.
+}
+
+void close_hdf5_file()
+{
+  /*
+   * Flush and close the per-rank galaxy HDF5 file that was kept open since
+   * prep_hdf5_file().  Call this once at the end of the dracarys snapshot
+   * loop (or after FlagInteractive/FlagMCMC mode is done).
+   */
+  if (H5Iis_valid(run_globals.output_file_id)) {
+    H5Fflush(run_globals.output_file_id, H5F_SCOPE_GLOBAL);
+    H5Fclose(run_globals.output_file_id);
+    run_globals.output_file_id = H5I_INVALID_HID;
+  }
 }
 
 void create_master_file()
@@ -1036,12 +989,6 @@ void create_master_file()
       H5Gclose(group_id);
     }
   }
-
-#ifdef MERAXES_GITREF_STR
-  // Save the git ref and diff if requested
-  H5LTmake_dataset_string(file_id, "gitdiff", MERAXES_GITDIFF_STR);
-  H5LTset_attribute_string(file_id, "gitdiff", "gitref", MERAXES_GITREF_STR);
-#endif
 
   // save the number of cores used in this run
   H5LTset_attribute_int(file_id, "/", "NCores", &(run_globals.mpi_size), 1);
@@ -1363,8 +1310,9 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
     n_write = write_count;
   }
 
-  // Create the file.
-  file_id = H5Fopen(run_globals.FNameOut, H5F_ACC_RDWR, H5P_DEFAULT);
+  // Use the persistently-open per-rank file (avoids HDF5 1.10.x open-close
+  // fragmentation that causes "duplicate entry in cache" after ~17 snapshots).
+  file_id = run_globals.output_file_id;
 
   // Create the relevant group.
   sprintf(target_group, "Snap%03d", (run_globals.ListOutputSnaps)[i_out]);
@@ -1747,33 +1695,21 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
             xraylf_obs.bin_variance[bin_idx] += weight * (1.0 - weight);
           }
         }
-        /* NH-bin LFs: per-bin observed LX weighted by DutyCycleAGN × NHfrac_k.
-         * With stochastic draw, NHfrac_k is 1 for the drawn bin and 0 for all others,
-         * so each galaxy contributes to exactly one bin. */
+        /* NH-bin LFs: the galaxy's observed LX (QuasarLX_obs, read into
+         * lx_obs_lin above) belongs entirely to whichever single bin its
+         * stochastic draw landed in (NHbin) — there is nothing to loop
+         * over, since a one-hot draw only ever contributes to one bin. */
         {
-          double lx_bins[5], nhfrac_bins[5];
+          int nh_bin = output_buffer[buffer_count].NHbin;
           distribution_function_t *xraylf_obs_bins_inner[5] = {
             &xraylf_obs0, &xraylf_obs1, &xraylf_obs2, &xraylf_obs3, &xraylf_obs4
           };
-          lx_bins[0] = (double)output_buffer[buffer_count].QuasarLX_obs0;
-          lx_bins[1] = (double)output_buffer[buffer_count].QuasarLX_obs1;
-          lx_bins[2] = (double)output_buffer[buffer_count].QuasarLX_obs2;
-          lx_bins[3] = (double)output_buffer[buffer_count].QuasarLX_obs3;
-          lx_bins[4] = (double)output_buffer[buffer_count].QuasarLX_obs4;
-          nhfrac_bins[0] = (double)output_buffer[buffer_count].NHfrac0;
-          nhfrac_bins[1] = (double)output_buffer[buffer_count].NHfrac1;
-          nhfrac_bins[2] = (double)output_buffer[buffer_count].NHfrac2;
-          nhfrac_bins[3] = (double)output_buffer[buffer_count].NHfrac3;
-          nhfrac_bins[4] = (double)output_buffer[buffer_count].NHfrac4;
-          for (int ib = 0; ib < 5; ib++) {
-            double w_bin = weight * nhfrac_bins[ib];
-            if (lx_bins[ib] > 0.0 && w_bin > 0.0) {
-              val = log10(lx_bins[ib] * 1e10 * SOLAR_LUM);
-              if (val >= xraylf_obs_bins_inner[ib]->x_min && val < xraylf_obs_bins_inner[ib]->x_max) {
-                bin_idx = (int)((val - xraylf_obs_bins_inner[ib]->x_min) / xraylf_obs_bins_inner[ib]->bin_width);
-                xraylf_obs_bins_inner[ib]->bin_counts[bin_idx]   += w_bin;
-                xraylf_obs_bins_inner[ib]->bin_variance[bin_idx] += w_bin * (1.0 - w_bin);
-              }
+          if (nh_bin >= 0 && nh_bin < 5 && lx_obs_lin > 0.0 && weight > 0.0) {
+            val = log10(lx_obs_lin * 1e10 * SOLAR_LUM);
+            if (val >= xraylf_obs_bins_inner[nh_bin]->x_min && val < xraylf_obs_bins_inner[nh_bin]->x_max) {
+              bin_idx = (int)((val - xraylf_obs_bins_inner[nh_bin]->x_min) / xraylf_obs_bins_inner[nh_bin]->bin_width);
+              xraylf_obs_bins_inner[nh_bin]->bin_counts[bin_idx]   += weight;
+              xraylf_obs_bins_inner[nh_bin]->bin_variance[bin_idx] += weight * (1.0 - weight);
             }
           }
         }
@@ -1955,8 +1891,9 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
   // Close the group.
   H5Gclose(group_id);
 
-  // Close the file.
-  H5Fclose(file_id);
+  // Do NOT close file_id here — it is run_globals.output_file_id, which is
+  // kept open for the lifetime of the run.  close_hdf5_file() handles the
+  // final close.
 
   // Update the value of last_n_write
   *last_n_write = n_write;
