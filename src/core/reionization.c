@@ -15,6 +15,8 @@
 #include "reionization.h"
 #include "virial_properties.h"
 
+static hid_t create_reion_grid(const int snapshot, const bool parallel);
+
 void update_galaxy_fesc_vals(galaxy_t* gal, double new_stars, int snapshot)
 {
   physics_params_t* params = &(run_globals.params.physics);
@@ -258,7 +260,9 @@ void call_find_HII_bubbles(int snapshot, int nout_gals, timer_info* timer)
   //        return;
   //    }
 
-  // Logic statement to avoid gridding the density field twice
+  // Logic statement to avoid gridding the density field twice: skip grid construction and
+  // grid saving if Flag_IncludeSpinTemp is true, since these operations have already been
+  // performed by the preceding call_find_HII_bubbles
   if (!run_globals.params.Flag_IncludeSpinTemp || !run_globals.params.ReionUVBFlag) {
 
     // Construct the baryon grids
@@ -268,14 +272,17 @@ void call_find_HII_bubbles(int snapshot, int nout_gals, timer_info* timer)
     read_grid(DENSITY, snapshot, grids->deltax);
 
     // save the grids prior to doing FFTs to avoid precision loss and aliasing etc.
+    // NOTE: I dont think we are reusing them... 
     if (!run_globals.params.FlagMCMC){
       for (int i_out = 0; i_out < run_globals.NOutputSnaps; i_out++)
         if (snapshot == run_globals.ListOutputSnaps[i_out] && run_globals.params.Flag_OutputGrids){
           save_reion_input_grids(snapshot);
           flag_output = 1;
         }
-      if ((!flag_output) && (run_globals.mpi_rank == 0))
-          create_reion_input_dummy(snapshot);
+      if ((!flag_output) && (run_globals.mpi_rank == 0)) {
+        hid_t file_id = create_reion_grid(snapshot, false);
+        H5Fclose(file_id);
+      }
     }
   }
 
@@ -311,6 +318,7 @@ void call_ComputeTs(int snapshot, int nout_gals, timer_info* timer)
   // Thin wrapper round ComputeTs
 
   int total_n_out_gals = 0;
+  int flag_output = 0;
 
   reion_grids_t* grids = &(run_globals.reion_grids);
 
@@ -331,9 +339,18 @@ void call_ComputeTs(int snapshot, int nout_gals, timer_info* timer)
   }
 
   // save the grids prior to doing FFTs to avoid precision loss and aliasing etc.
-  for (int i_out = 0; i_out < run_globals.NOutputSnaps; i_out++)
-    if (snapshot == run_globals.ListOutputSnaps[i_out])
-      save_reion_input_grids(snapshot);
+  if (!run_globals.params.FlagMCMC){
+    for (int i_out = 0; i_out < run_globals.NOutputSnaps; i_out++)
+      if (snapshot == run_globals.ListOutputSnaps[i_out]) {
+        save_reion_input_grids(snapshot);
+        flag_output = 1;
+      }
+
+    if ((!flag_output) && (run_globals.mpi_rank == 0)) {
+      hid_t file_id = create_reion_grid(snapshot, false);
+      H5Fclose(file_id);
+    }
+  }
 
   mlog("...done", MLOG_CLOSE);
 
@@ -1925,6 +1942,21 @@ void gen_grids_fname(const int snapshot, char* name, const bool relative)
     sprintf(name, "%s_grids_%d.hdf5", run_globals.params.FileNameGalaxies, snapshot);
 }
 
+static hid_t create_reion_grid(const int snapshot, const bool parallel)
+{
+  char name[STRLEN];
+  gen_grids_fname(snapshot, name, false);
+
+  hid_t plist_id = H5Pcreate(H5P_FILE_ACCESS);
+  if (parallel)
+    H5Pset_fapl_mpio(plist_id, run_globals.mpi_comm, MPI_INFO_NULL);
+
+  hid_t file_id = H5Fcreate(name, H5F_ACC_TRUNC, H5P_DEFAULT, plist_id);
+  H5Pclose(plist_id);
+
+  return file_id;
+}
+
 void save_reion_input_grids(int snapshot)
 {
   reion_grids_t* grids = &(run_globals.reion_grids);
@@ -1934,15 +1966,7 @@ void save_reion_input_grids(int snapshot)
   double UnitMass_in_g = run_globals.units.UnitMass_in_g;
 
   mlog("Saving tocf input grids...", MLOG_OPEN);
-
-  char name[STRLEN];
-  gen_grids_fname(snapshot, name, false);
-
-  // create the file (in parallel)
-  hid_t plist_id = H5Pcreate(H5P_FILE_ACCESS);
-  H5Pset_fapl_mpio(plist_id, run_globals.mpi_comm, MPI_INFO_NULL);
-  hid_t file_id = H5Fcreate(name, H5F_ACC_TRUNC, H5P_DEFAULT, plist_id);
-  H5Pclose(plist_id);
+  hid_t file_id = create_reion_grid(snapshot, true);
 
   // create the filespace
   hsize_t dims[3] = { (hsize_t)ReionGridDim, (hsize_t)ReionGridDim, (hsize_t)ReionGridDim };
@@ -2046,35 +2070,6 @@ void save_reion_input_grids(int snapshot)
   H5Sclose(fspace_id);
   H5Fclose(file_id);
 
-  mlog("...done", MLOG_CLOSE);
-}
-
-void create_reion_input_dummy(int snapshot)
-{
-  mlog("Creating dummy tocf input grids for attributes...", MLOG_OPEN);
-  char name[STRLEN];
-  gen_grids_fname(snapshot, name, false);
-
-  hid_t plist_id = H5Pcreate(H5P_FILE_ACCESS);
-  hid_t file_id = H5Fcreate(name, H5F_ACC_TRUNC, H5P_DEFAULT, plist_id);
-  H5Pclose(plist_id);
-
-    // Create a scalar dataspace with 0-sized dimension (empty)
-  hsize_t dims[1] = {0};  // zero-length dataset
-  hid_t fspace_id = H5Screate_simple(1, dims, NULL);
-
-  hid_t dset_id = H5Dcreate(file_id, "effective_bhar", H5T_NATIVE_FLOAT, fspace_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-  H5Dclose(dset_id);
-  dset_id = H5Dcreate(file_id, "effective_bhar_ave", H5T_NATIVE_FLOAT, fspace_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-  H5Dclose(dset_id);
-  dset_id = H5Dcreate(file_id, "weighted_sfr", H5T_NATIVE_FLOAT, fspace_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-  H5Dclose(dset_id);
-#if USE_MINI_HALOS
-  dset_id = H5Dcreate(file_id, "weighted_sfrIII", H5T_NATIVE_FLOAT, fspace_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-  H5Dclose(dset_id);
-#endif
-  H5Sclose(fspace_id);
-  H5Fclose(file_id);
   mlog("...done", MLOG_CLOSE);
 }
 
@@ -2259,65 +2254,6 @@ void save_reion_output_grids(int snapshot)
     H5Dclose(dset_id);
   }
 
-  H5LTset_attribute_double(file_id, "xH", "volume_weighted_global_xH", &(grids->volume_weighted_global_xH), 1);
-  H5LTset_attribute_double(file_id, "xH", "mass_weighted_global_xH", &(grids->mass_weighted_global_xH), 1);
-  H5LTset_attribute_double(file_id, "r_bubble", "volume_weighted_global_r_bubble", &(grids->volume_weighted_global_r_bubble), 1);
-  H5LTset_attribute_double(file_id, "r_bubble", "mass_weighted_global_r_bubble", &(grids->mass_weighted_global_r_bubble), 1);
-  H5LTset_attribute_double(file_id, "temp_kinetic_all_gas", "volume_weighted_global_temp_kinetic_all_gas", &(grids->volume_weighted_global_temp_kinetic_all_gas), 1);
-  H5LTset_attribute_double(file_id, "temp_kinetic_all_gas", "mass_weighted_global_temp_kinetic_all_gas", &(grids->mass_weighted_global_temp_kinetic_all_gas), 1);
-
-  if (run_globals.params.Flag_IncludeRecombinations) {
-    H5LTset_attribute_double(file_id, "Gamma12", "volume_weighted_global_Gamma12", &(grids->volume_weighted_global_Gamma12), 1);
-    H5LTset_attribute_double(file_id, "Gamma12", "mass_weighted_global_Gamma12", &(grids->mass_weighted_global_Gamma12), 1);
-    H5LTset_attribute_double(file_id, "N_rec", "volume_weighted_global_N_rec", &(grids->volume_weighted_global_N_rec), 1);
-    H5LTset_attribute_double(file_id, "N_rec", "mass_weighted_global_N_rec", &(grids->mass_weighted_global_N_rec), 1);
-    H5LTset_attribute_double(file_id, "residual_xH", "volume_weighted_global_residual_xH", &(grids->volume_weighted_global_residual_xH), 1);
-    H5LTset_attribute_double(file_id, "residual_xH", "mass_weighted_global_residual_xH", &(grids->mass_weighted_global_residual_xH), 1);
-    H5LTset_attribute_double(file_id, "clumping_factor", "volume_weighted_global_clumping_factor", &(grids->volume_weighted_global_clumping_factor), 1);
-    H5LTset_attribute_double(file_id, "clumping_factor", "mass_weighted_global_clumping_factor", &(grids->mass_weighted_global_clumping_factor), 1);
-  }
-
-  H5LTset_attribute_double(file_id, "weighted_sfr", "volume_weighted_global_weighted_sfr", &(grids->volume_weighted_global_weighted_sfr), 1);
-#if USE_MINI_HALOS
-  H5LTset_attribute_double(file_id, "weighted_sfrIII", "volume_weighted_global_weighted_sfrIII", &(grids->volume_weighted_global_weighted_sfrIII), 1);
-#endif
-  H5LTset_attribute_double(file_id, "effective_bhar", "volume_weighted_global_effective_bhar", &(grids->volume_weighted_global_effective_bhar), 1);
-
-  if (run_globals.params.Flag_IncludeSpinTemp) {
-    H5LTset_attribute_double(file_id, "TS_box", "volume_ave_TS", &(grids->volume_ave_TS), 1);
-    H5LTset_attribute_double(file_id, "Tk_box", "volume_ave_TK", &(grids->volume_ave_TK), 1);
-#if USE_MINI_HALOS
-    H5LTset_attribute_double(file_id, "TS_boxII", "volume_ave_TSII", &(grids->volume_ave_TSII), 1);
-    H5LTset_attribute_double(file_id, "Tk_boxII", "volume_ave_TKII", &(grids->volume_ave_TKII), 1);
-#endif
-    H5LTset_attribute_double(file_id, "x_e_box", "volume_ave_xe", &(grids->volume_ave_xe), 1);
-
-    H5LTset_attribute_double(file_id, "TS_box", "volume_ave_J_alpha", &(grids->volume_ave_J_alpha), 1);
-    H5LTset_attribute_double(file_id, "TS_box", "volume_ave_xalpha", &(grids->volume_ave_xalpha), 1);
-    H5LTset_attribute_double(file_id, "TS_box", "volume_ave_Xheat", &(grids->volume_ave_Xheat), 1);
-    H5LTset_attribute_double(file_id, "TS_box", "volume_ave_Xion", &(grids->volume_ave_Xion), 1);
-
-#if USE_MINI_HALOS
-    H5LTset_attribute_double(file_id, "TS_boxII", "volume_ave_J_alphaII", &(grids->volume_ave_J_alphaII), 1);
-    H5LTset_attribute_double(file_id, "TS_boxII", "volume_ave_XheatII", &(grids->volume_ave_XheatII), 1);
-
-#endif
-  }
-
-#if USE_MINI_HALOS
-  if (run_globals.params.Flag_IncludeLymanWerner) {
-    H5LTset_attribute_double(file_id, "JLW_box", "volume_ave_JLW", &(grids->volume_ave_J_LW), 1);
-    H5LTset_attribute_double(file_id, "JLW_boxII", "volume_ave_JLW_II", &(grids->volume_ave_J_LWII), 1);
-  }
-#endif
-
-  if (run_globals.params.Flag_Compute21cmBrightTemp) {
-    H5LTset_attribute_double(file_id, "delta_T", "volume_ave_Tb", &(grids->volume_ave_Tb), 1);
-#if USE_MINI_HALOS
-    H5LTset_attribute_double(file_id, "delta_TII", "volume_ave_TbII", &(grids->volume_ave_TbII), 1);
-#endif
-  }
-
   if (run_globals.params.Flag_ComputePS) {
 
     // create the filespace
@@ -2402,6 +2338,9 @@ void save_reion_output_grids(int snapshot)
   H5Sclose(fspace_id);
   H5Fclose(file_id);
 
+  if (run_globals.mpi_rank == 0)
+    save_reion_output_attributes(snapshot);
+
   mlog("...done", MLOG_CLOSE); // Saving tocf grids
 }
 
@@ -2417,68 +2356,65 @@ void save_reion_output_attributes(int snapshot)
   hid_t file_id = H5Fopen(name, H5F_ACC_RDWR, plist_id);
   H5Pclose(plist_id);
 
-    // Create a scalar dataspace with 0-sized dimension (empty)
+  // Create a scalar dataspace with 0-sized dimension (empty)
   hsize_t dims[1] = {0};  // zero-length dataset
   hid_t fspace_id = H5Screate_simple(1, dims, NULL);
 
-  hid_t dset_id = H5Dcreate(file_id, "xH", H5T_NATIVE_FLOAT, fspace_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+  // Ensure datasets exist so attribute writes succeed in both code paths:
+  // (1) after full grid output, (2) when only attribute placeholders are needed.
+  #define ENSURE_DATASET(name)                                                                      \
+    do {                                                                                             \
+      if (H5Lexists(file_id, name, H5P_DEFAULT) <= 0) {                                              \
+        hid_t dset_id = H5Dcreate(file_id, name, H5T_NATIVE_FLOAT, fspace_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT); \
+        H5Dclose(dset_id);                                                                           \
+      }                                                                                              \
+    } while (0)
+
+  ENSURE_DATASET("xH");
+  ENSURE_DATASET("r_bubble");
+  ENSURE_DATASET("temp_kinetic_all_gas");
+
   H5LTset_attribute_double(file_id, "xH", "volume_weighted_global_xH", &(grids->volume_weighted_global_xH), 1);
   H5LTset_attribute_double(file_id, "xH", "mass_weighted_global_xH", &(grids->mass_weighted_global_xH), 1);
-  H5Dclose(dset_id);
-
-  dset_id = H5Dcreate(file_id, "r_bubble", H5T_NATIVE_FLOAT, fspace_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
   H5LTset_attribute_double(file_id, "r_bubble", "volume_weighted_global_r_bubble", &(grids->volume_weighted_global_r_bubble), 1);
   H5LTset_attribute_double(file_id, "r_bubble", "mass_weighted_global_r_bubble", &(grids->mass_weighted_global_r_bubble), 1);
-  H5Dclose(dset_id);
-
-  dset_id = H5Dcreate(file_id, "temp_kinetic_all_gas", H5T_NATIVE_FLOAT, fspace_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
   H5LTset_attribute_double(file_id, "temp_kinetic_all_gas", "volume_weighted_global_temp_kinetic_all_gas", &(grids->volume_weighted_global_temp_kinetic_all_gas), 1);
   H5LTset_attribute_double(file_id, "temp_kinetic_all_gas", "mass_weighted_global_temp_kinetic_all_gas", &(grids->mass_weighted_global_temp_kinetic_all_gas), 1);
-  H5Dclose(dset_id);
 
   if (run_globals.params.Flag_IncludeRecombinations) {
-    dset_id = H5Dcreate(file_id, "Gamma12", H5T_NATIVE_FLOAT, fspace_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    ENSURE_DATASET("Gamma12");
+    ENSURE_DATASET("N_rec");
+    ENSURE_DATASET("residual_xH");
+    ENSURE_DATASET("clumping_factor");
     H5LTset_attribute_double(file_id, "Gamma12", "volume_weighted_global_Gamma12", &(grids->volume_weighted_global_Gamma12), 1);
     H5LTset_attribute_double(file_id, "Gamma12", "mass_weighted_global_Gamma12", &(grids->mass_weighted_global_Gamma12), 1);
-    H5Dclose(dset_id);
-    dset_id = H5Dcreate(file_id, "N_rec", H5T_NATIVE_FLOAT, fspace_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
     H5LTset_attribute_double(file_id, "N_rec", "volume_weighted_global_N_rec", &(grids->volume_weighted_global_N_rec), 1);
     H5LTset_attribute_double(file_id, "N_rec", "mass_weighted_global_N_rec", &(grids->mass_weighted_global_N_rec), 1);
-    H5Dclose(dset_id);
-    dset_id = H5Dcreate(file_id, "residual_xH", H5T_NATIVE_FLOAT, fspace_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
     H5LTset_attribute_double(file_id, "residual_xH", "volume_weighted_global_residual_xH", &(grids->volume_weighted_global_residual_xH), 1);
     H5LTset_attribute_double(file_id, "residual_xH", "mass_weighted_global_residual_xH", &(grids->mass_weighted_global_residual_xH), 1);
-    H5Dclose(dset_id);
-    dset_id = H5Dcreate(file_id, "clumping_factor", H5T_NATIVE_FLOAT, fspace_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
     H5LTset_attribute_double(file_id, "clumping_factor", "volume_weighted_global_clumping_factor", &(grids->volume_weighted_global_clumping_factor), 1);
     H5LTset_attribute_double(file_id, "clumping_factor", "mass_weighted_global_clumping_factor", &(grids->mass_weighted_global_clumping_factor), 1);
-    H5Dclose(dset_id);
   }
 
+  ENSURE_DATASET("weighted_sfr");
   H5LTset_attribute_double(file_id, "weighted_sfr", "volume_weighted_global_weighted_sfr", &(grids->volume_weighted_global_weighted_sfr), 1);
 #if USE_MINI_HALOS
+  ENSURE_DATASET("weighted_sfrIII");
   H5LTset_attribute_double(file_id, "weighted_sfrIII", "volume_weighted_global_weighted_sfrIII", &(grids->volume_weighted_global_weighted_sfrIII), 1);
 #endif
-  H5LTset_attribute_double(file_id, "effective_bhar", "volume_weighted_global_effective_bhar", &(grids->volume_weighted_global_effective_bhar), 1);
+
+  if (run_globals.params.physics.Flag_BHFeedback) {
+    ENSURE_DATASET("effective_bhar");
+    H5LTset_attribute_double(file_id, "effective_bhar", "volume_weighted_global_effective_bhar", &(grids->volume_weighted_global_effective_bhar), 1);
+  }
 
   if (run_globals.params.Flag_IncludeSpinTemp) {
-    dset_id = H5Dcreate(file_id, "TS_box", H5T_NATIVE_FLOAT, fspace_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    ENSURE_DATASET("TS_box");
+    ENSURE_DATASET("Tk_box");
+    ENSURE_DATASET("x_e_box");
     H5LTset_attribute_double(file_id, "TS_box", "volume_ave_TS", &(grids->volume_ave_TS), 1);
-    H5Dclose(dset_id);
-    dset_id = H5Dcreate(file_id, "Tk_box", H5T_NATIVE_FLOAT, fspace_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
     H5LTset_attribute_double(file_id, "Tk_box", "volume_ave_TK", &(grids->volume_ave_TK), 1);
-    H5Dclose(dset_id);
-#if USE_MINI_HALOS
-    dset_id = H5Dcreate(file_id, "TS_boxII", H5T_NATIVE_FLOAT, fspace_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-    H5LTset_attribute_double(file_id, "TS_boxII", "volume_ave_TSII", &(grids->volume_ave_TSII), 1);
-    H5Dclose(dset_id);
-    dset_id = H5Dcreate(file_id, "Tk_boxII", H5T_NATIVE_FLOAT, fspace_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-    H5LTset_attribute_double(file_id, "Tk_boxII", "volume_ave_TKII", &(grids->volume_ave_TKII), 1);
-    H5Dclose(dset_id);
-#endif
-    dset_id = H5Dcreate(file_id, "x_e_box", H5T_NATIVE_FLOAT, fspace_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
     H5LTset_attribute_double(file_id, "x_e_box", "volume_ave_xe", &(grids->volume_ave_xe), 1);
-    H5Dclose(dset_id);
 
     H5LTset_attribute_double(file_id, "TS_box", "volume_ave_J_alpha", &(grids->volume_ave_J_alpha), 1);
     H5LTset_attribute_double(file_id, "TS_box", "volume_ave_xalpha", &(grids->volume_ave_xalpha), 1);
@@ -2486,33 +2422,34 @@ void save_reion_output_attributes(int snapshot)
     H5LTset_attribute_double(file_id, "TS_box", "volume_ave_Xion", &(grids->volume_ave_Xion), 1);
 
 #if USE_MINI_HALOS
+    ENSURE_DATASET("TS_boxII");
+    ENSURE_DATASET("Tk_boxII");
+    H5LTset_attribute_double(file_id, "TS_boxII", "volume_ave_TSII", &(grids->volume_ave_TSII), 1);
+    H5LTset_attribute_double(file_id, "Tk_boxII", "volume_ave_TKII", &(grids->volume_ave_TKII), 1);
     H5LTset_attribute_double(file_id, "TS_boxII", "volume_ave_J_alphaII", &(grids->volume_ave_J_alphaII), 1);
     H5LTset_attribute_double(file_id, "TS_boxII", "volume_ave_XheatII", &(grids->volume_ave_XheatII), 1);
-
 #endif
   }
 
 #if USE_MINI_HALOS
   if (run_globals.params.Flag_IncludeLymanWerner) {
-    dset_id = H5Dcreate(file_id, "JLW_box", H5T_NATIVE_FLOAT, fspace_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    ENSURE_DATASET("JLW_box");
+    ENSURE_DATASET("JLW_boxII");
     H5LTset_attribute_double(file_id, "JLW_box", "volume_ave_JLW", &(grids->volume_ave_J_LW), 1);
-    H5Dclose(dset_id);
-    dset_id = H5Dcreate(file_id, "JLW_boxII", H5T_NATIVE_FLOAT, fspace_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
     H5LTset_attribute_double(file_id, "JLW_boxII", "volume_ave_JLW_II", &(grids->volume_ave_J_LWII), 1);
-    H5Dclose(dset_id);
   }
 #endif
 
   if (run_globals.params.Flag_Compute21cmBrightTemp) {
-    dset_id = H5Dcreate(file_id, "delta_T", H5T_NATIVE_FLOAT, fspace_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    ENSURE_DATASET("delta_T");
     H5LTset_attribute_double(file_id, "delta_T", "volume_ave_Tb", &(grids->volume_ave_Tb), 1);
-    H5Dclose(dset_id);
 #if USE_MINI_HALOS
-    dset_id = H5Dcreate(file_id, "delta_TII", H5T_NATIVE_FLOAT, fspace_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    ENSURE_DATASET("delta_TII");
     H5LTset_attribute_double(file_id, "delta_TII", "volume_ave_TbII", &(grids->volume_ave_TbII), 1);
-    H5Dclose(dset_id);
 #endif
   }
+
+  #undef ENSURE_DATASET
   H5Sclose(fspace_id);
   H5Fclose(file_id);
   mlog("...done", MLOG_CLOSE); // Saving tocf grids
