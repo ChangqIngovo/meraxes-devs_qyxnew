@@ -57,11 +57,6 @@ double growth_factor_zp;
 double dgrowth_factor_dzp;
 double const_zp_prefactor_GAL;
 double const_zp_prefactor_III;
-/* Broken power-law AGN prefactors: soft band (nu_thresh -> nu_break)
- * and hard band (nu_break -> nu_hard_cut). Both are set once per
- * snapshot in ComputeTs.c and consumed in evolveInt(). */
-double const_zp_prefactor_AGN_soft;
-double const_zp_prefactor_AGN_hard;
 float x_int_XHII[x_int_NXHII];
 #else
 extern double x_e_ave;
@@ -78,8 +73,6 @@ extern double growth_factor_zp;
 extern double dgrowth_factor_dzp;
 extern double const_zp_prefactor_GAL;
 extern double const_zp_prefactor_III;
-extern double const_zp_prefactor_AGN_soft;
-extern double const_zp_prefactor_AGN_hard;
 extern float x_int_XHII[x_int_NXHII];
 #endif
 
@@ -186,54 +179,26 @@ extern "C"
   double interpolate_fcoll(double redshift, int snap_i, int flag_population);
 
 #if USE_MINI_HALOS
-  /*
-   * ============================================================
-   * THIS ADDITION IS MADE TO ADD THE X-RAY CONTRIBUTION BY AGN
-   * ============================================================
-   * The AGN arrays SFR_AGN, freq_int_heat_AGN, freq_int_ion_AGN,
-   * freq_int_lya_AGN are added to evolveInt() alongside the existing
-   * Pop II (GAL) and Pop III (III) arrays. They carry the smoothed AGN
-   * X-ray emissivity and the broken power-law frequency integrals
-   * pre-computed in ComputeTs.c, allowing the AGN contribution to IGM
-   * heating (dT_K/dz), ionisation (dx_e/dz), and Ly-alpha coupling
-   * (dJ_alpha/dz) to be correctly folded into the evolution equations.
-   * ============================================================
-   */
   void evolveInt(float zp,
                  float curr_delNL0,
                  const double SFR_GAL[],
                  const double SFR_III[],
-                 const double SFR_AGN[],
                  const double freq_int_heat_GAL[],
                  const double freq_int_ion_GAL[],
                  const double freq_int_lya_GAL[],
                  const double freq_int_heat_III[],
                  const double freq_int_ion_III[],
                  const double freq_int_lya_III[],
-                 const double freq_int_heat_AGN[],
-                 const double freq_int_ion_AGN[],
-                 const double freq_int_lya_AGN[],
                  int COMPUTE_Ts,
                  const double y[],
                  double deriv[]);
 #else
-  /*
-   * ============================================================
-   * THIS ADDITION IS MADE TO ADD THE X-RAY CONTRIBUTION BY AGN
-   * ============================================================
-   * Same as above for the non-mini-halo code path.
-   * ============================================================
-   */
   void evolveInt(float zp,
                  float curr_delNL0,
                  const double SFR_GAL[],
-                 const double SFR_AGN[],
                  const double freq_int_heat_GAL[],
                  const double freq_int_ion_GAL[],
                  const double freq_int_lya_GAL[],
-                 const double freq_int_heat_AGN[],
-                 const double freq_int_ion_AGN[],
-                 const double freq_int_lya_AGN[],
                  int COMPUTE_Ts,
                  const double y[],
                  double deriv[]);
