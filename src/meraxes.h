@@ -21,6 +21,9 @@
 #define GRAVITY 6.672e-8
 #define SOLAR_MASS 1.989e33
 #define SOLAR_LUM 3.826e33
+#define SOLAR_LUM_LOG10 33.582744965691276  /* = log10(SOLAR_LUM), precomputed so
+                                              * hot per-galaxy code paths don't
+                                              * call log10() on a constant */
 #define RAD_CONST 7.565e-15
 #define AVOGADRO 6.0222e23
 #define BOLTZMANN 1.3806e-16
@@ -162,9 +165,7 @@ typedef struct physics_params_t
   double NuXraySoftCut;
   double NuXrayMax;
 
-  double LXrayAGN;
   int Flag_includeAGN;      /* 0=no AGN, 1=soft+hard, 2=hard only, 3=soft only */
-  int Flag_IncludeAGNXray;  /* 0=off, 1=soft+hard BPL, 2=hard only, 3=soft only */
   double SpecIndexXrayAGNSoft;
   double SpecIndexXrayAGNHard;
 
@@ -504,13 +505,19 @@ typedef struct reion_grids_t
 #endif
 
   double* SMOOTHED_SFR_GAL;
-  double* SMOOTHED_AGN;  //!< per-cell AGN X-ray luminosity density per shell [erg/s/cm^3]
+  double* SMOOTHED_AGN;       //!< per-cell AGN X-ray luminosity density per shell [erg/s/cm^3] (hard band)
+  double* SMOOTHED_AGN_soft;  //!< per-cell AGN X-ray luminosity density per shell [erg/s/cm^3] (soft band)
 #if USE_MINI_HALOS
   double* SMOOTHED_SFR_III;
 #endif
 
-  float* BHXrayEmissivity;   //!< Per-cell AGN X-ray emissivity grid (current snapshot) [slab_n_complex*2]
-  float* bh_xray_histories;  //!< Ring-buffer of NstoreSnapshots_SFR past BHXrayEmissivity snapshots
+  float* BHXrayEmissivity;        //!< Per-cell AGN X-ray emissivity grid (current snapshot, hard band) [slab_n_complex*2]
+  float* bh_xray_histories;       //!< Ring-buffer of NstoreSnapshots_SFR past BHXrayEmissivity snapshots
+  float* BHXrayEmissivity_soft;   //!< Per-cell AGN X-ray emissivity grid (current snapshot, soft band) [slab_n_complex*2]
+  float* bh_xray_histories_soft;  //!< Ring-buffer of NstoreSnapshots_SFR past BHXrayEmissivity_soft snapshots
+  /* Neither the hard nor soft BHXrayEmissivity grids depend on USE_MINI_HALOS —
+   * AGN X-ray heating is independent of the Pop II/III minihalo treatment,
+   * so both stay unconditional regardless of that build flag. */
 
   // Grids necessary for LW background and future disentangling between MC/AC Pop3/Pop2 stuff
 
@@ -672,16 +679,12 @@ typedef struct galaxy_t
   double QuasarLuv;         //!< UV luminosity LUV of quasar (1e10 Lsun, summable for mergers)
   double QuasarLX;               //!< Intrinsic hard X-ray luminosity [1e10 Lsun]; 0 if inactive
   double QuasarLX_obs;           //!< Observed hard X-ray luminosity [1e10 Lsun] after obscuration; 0 if inactive
-  double QuasarLX_obs0;          //!< Observed LX in NH bin 0 (logNH 20-21) [1e10 Lsun]
-  double QuasarLX_obs1;          //!< Observed LX in NH bin 1 (logNH 21-22) [1e10 Lsun]
-  double QuasarLX_obs2;          //!< Observed LX in NH bin 2 (logNH 22-23) [1e10 Lsun]
-  double QuasarLX_obs3;          //!< Observed LX in NH bin 3 (logNH 23-24) [1e10 Lsun]
-  double QuasarLX_obs4;          //!< Observed LX in NH bin 4 (logNH 24-26, CTK) [1e10 Lsun]
-  double NHfrac0;                //!< 1 if AGN drawn into NH bin 0, else 0
-  double NHfrac1;                //!< 1 if AGN drawn into NH bin 1, else 0
-  double NHfrac2;                //!< 1 if AGN drawn into NH bin 2, else 0
-  double NHfrac3;                //!< 1 if AGN drawn into NH bin 3, else 0
-  double NHfrac4;                //!< 1 if AGN drawn into NH bin 4 (CTK), else 0
+  int    NHbin;                  //!< Which of the 5 NH bins this snapshot's stochastic draw landed in
+                                  //!< (0-4; logNH 20-21/21-22/22-23/23-24/24-26 CTK), or -1 if no AGN
+                                  //!< activity this step. QuasarLX_obs above is that bin's observed
+                                  //!< luminosity — only one bin is ever nonzero per draw, so a single
+                                  //!< (bin, luminosity) pair fully replaces the old QuasarLX_obs0-4/
+                                  //!< NHfrac0-4 fields (5 mostly-zero doubles each, every galaxy).
   double BHXrayEmissivity;       //!< Observed hard X-ray emissivity [1e60 erg], obscuration-weighted
   double BHXrayEmissivity_soft;  //!< Observed soft X-ray emissivity [1e60 erg], obscuration-weighted
   double EffectiveBHM;
@@ -861,6 +864,8 @@ typedef struct run_globals_t
 {
   struct run_params_t params;
   char FNameOut[STRLEN];
+  hid_t output_file_id; /*!< per-rank galaxy HDF5 file, kept open across all snapshots to avoid
+                             HDF5 1.10.x free-space fragmentation bug (duplicate entry in cache) */
   reion_grids_t reion_grids;
 #if USE_MINI_HALOS
   metal_grids_t metal_grids;
