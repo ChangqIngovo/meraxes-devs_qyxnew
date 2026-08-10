@@ -2,7 +2,7 @@
 #include "mlog.h"
 #include "parse_paramfile.h"
 #include <string.h>
-//test
+
 static void check_problem_params(run_params_t* run_params)
 {
   if (run_params->NSteps != 1) {
@@ -230,7 +230,7 @@ void read_parameter_file(char* fname, int mode)
 
       strcpy(params_tag[n_param], "RecombinationDir");
       params_addr[n_param] = run_params->RecombinationDir;
-      required_tag[n_param] = 0;
+      required_tag[n_param] = 1;
       params_type[n_param++] = PARAM_TYPE_STRING;
       strcpy(params_tag[n_param], "StellarFeedbackDir");
       params_addr[n_param] = run_params->StellarFeedbackDir;
@@ -401,16 +401,6 @@ void read_parameter_file(char* fname, int mode)
       strncpy(params_tag[n_param], "FlagInteractive", tag_length);
       params_addr[n_param] = &(run_params->FlagInteractive);
       required_tag[n_param] = 1;
-      params_type[n_param++] = PARAM_TYPE_INT;
-     
-      strncpy(params_tag[n_param], "Flag_includeAGN", tag_length);
-      params_addr[n_param] = &(run_params->physics.Flag_includeAGN);
-      required_tag[n_param] = 1;
-      params_type[n_param++] = PARAM_TYPE_INT;
-
-      strncpy(params_tag[n_param], "Flag_IncludeAGNXray", tag_length);
-      params_addr[n_param] = &(run_params->physics.Flag_IncludeAGNXray);
-      required_tag[n_param] = 0;
       params_type[n_param++] = PARAM_TYPE_INT;
 
       strncpy(params_tag[n_param], "FlagMCMC", tag_length);
@@ -1120,28 +1110,13 @@ void read_parameter_file(char* fname, int mode)
       required_tag[n_param] = 1;
       params_type[n_param++] = PARAM_TYPE_DOUBLE;
 
-      strcpy(params_tag[n_param], "NuXrayThreshold");
-      params_addr[n_param] = &(run_params->physics).NuXrayThreshold;
+      strcpy(params_tag[n_param], "NuXrayGalThreshold");
+      params_addr[n_param] = &(run_params->physics).NuXrayGalThreshold;
       required_tag[n_param] = 1;
       params_type[n_param++] = PARAM_TYPE_DOUBLE;
 
       strcpy(params_tag[n_param], "SpecIndexXrayGal");
       params_addr[n_param] = &(run_params->physics).SpecIndexXrayGal;
-      required_tag[n_param] = 1;
-      params_type[n_param++] = PARAM_TYPE_DOUBLE;
-
-      strcpy(params_tag[n_param], "LXrayAGN");
-      params_addr[n_param] = &(run_params->physics).LXrayAGN;
-      required_tag[n_param] = 1;
-      params_type[n_param++] = PARAM_TYPE_DOUBLE;
-
-      strcpy(params_tag[n_param], "SpecIndexXrayAGNSoft");
-      params_addr[n_param] = &(run_params->physics).SpecIndexXrayAGNSoft;
-      required_tag[n_param] = 1;
-      params_type[n_param++] = PARAM_TYPE_DOUBLE;
-
-      strcpy(params_tag[n_param], "SpecIndexXrayAGNHard");
-      params_addr[n_param] = &(run_params->physics).SpecIndexXrayAGNHard;
       required_tag[n_param] = 1;
       params_type[n_param++] = PARAM_TYPE_DOUBLE;
 
@@ -1344,26 +1319,6 @@ void read_parameter_file(char* fname, int mode)
 
       strncpy(params_tag[n_param], "OIIILF_BinsPerDex", tag_length);
       params_addr[n_param] = &(run_params->OIIILF_BinsPerDex);
-      required_tag[n_param] = 1;
-      params_type[n_param++] = PARAM_TYPE_INT;
-
-      strncpy(params_tag[n_param], "Flag_OutputXrayLF", tag_length);
-      params_addr[n_param] = &(run_params->Flag_OutputXrayLF);
-      required_tag[n_param] = 1;
-      params_type[n_param++] = PARAM_TYPE_INT;
-
-      strncpy(params_tag[n_param], "XrayLF_MinLogL", tag_length);
-      params_addr[n_param] = &(run_params->XrayLF_MinLogL);
-      required_tag[n_param] = 1;
-      params_type[n_param++] = PARAM_TYPE_DOUBLE;
-
-      strncpy(params_tag[n_param], "XrayLF_MaxLogL", tag_length);
-      params_addr[n_param] = &(run_params->XrayLF_MaxLogL);
-      required_tag[n_param] = 1;
-      params_type[n_param++] = PARAM_TYPE_DOUBLE;
-
-      strncpy(params_tag[n_param], "XrayLF_BinsPerDex", tag_length);
-      params_addr[n_param] = &(run_params->XrayLF_BinsPerDex);
       required_tag[n_param] = 1;
       params_type[n_param++] = PARAM_TYPE_INT;
 
