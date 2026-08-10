@@ -13,8 +13,15 @@ static double morrison_mccammon_sigma(double E_keV)
   double C2;
   int    i;
 
+  assert(E_keV >= 0.0);  /* a photon energy can never be negative; a negative
+                           * value here means an upstream bug, not a physical
+                           * edge case */
 
+  /* MM83 is only tabulated over 0.03-10 keV; outside that range the
+   * polynomial fit is not valid (and, since it is divided by E^3, must
+   * not be extrapolated), so treat photoelectric absorption as negligible. */
   if (E_keV > 10.0) return 0.0;
+  if (E_keV < 0.03) return 0.0;
 
  /* The photoelectric-cross-section equation, loop over different energy ranges, with its corresponding coefficients */
   for (i = 0; i < 14; i++) {
@@ -26,34 +33,28 @@ static double morrison_mccammon_sigma(double E_keV)
     }
   }
 
- 
-  return 0.0;  /* E < 0.03 keV: below photoelectric absorption threshold */
+  return 0.0;  /* unreachable given the guards above; kept as a defensive fallback */
 }
 
 
-#define OBS_EPSILON   1.7     /* ratio logNH=23-24 to logNH=22-23 quasars  */
-/* ε = 1.7 means there are 1.7× more AGN
-in the logNH=23–24 bin than the logNH=22–23 bin (the absorbed bins are not equal).*/
-#define OBS_FCTK      1.0     /* CTK fraction relative to absorbed CTN      */
-/*fCTK = 1.0 means the total CTK population equals the total absorbed CTN population.*/
-#define OBS_PSI_MIN   0.20    /* minimum absorbed fraction                  */
-#define OBS_PSI_MAX   0.84    /* maximum absorbed fraction                  */
-#define OBS_LX_REF    43.75   /* reference log10(LX/erg/s) for psi(LX,z)   */
-#define AGN_HARD_E_MIN 2.0    /* hard X-ray band lower limit [keV]          */
-#define AGN_HARD_E_MAX 10.0   /* hard X-ray band upper limit [keV]          */
+#define N_E 200  /* number of sample points for the frequency integral below;
+                  * a numerical-resolution knob private to this function, not
+                  * a physics parameter, so it stays here rather than moving
+                  * to the header. */
 
 /* xray_transmission_at_NH — band-averaged transmission at a single representative NH.
  *
  * Uses only the photoelectric absorption cross section from Morrison & McCammon (1983):
  *   σ(E) = (C0 + C1·E + C2·E²) × E^{-3} × 10^{-24} cm²  (per H atom)
- * Spectrum-weighted over the band with photon index Γ.
+ * Spectrum-weighted over [E_min_keV, E_max_keV] with photon index gamma — the
+ * soft and hard bands have different intrinsic spectral indices, so gamma
+ * must be supplied by the caller rather than assumed fixed for both.
  */
 static double xray_transmission_at_NH(double log_NH,
                                       double E_min_keV,
-                                      double E_max_keV)
+                                      double E_max_keV,
+                                      double gamma)
 {
-  const double GAMMA = 1.8;  /* photon index for the hard X-ray band in the AGN SED */
-  const int    N_E   = 200;
   double NH  = pow(10.0, log_NH);
   double dE  = (E_max_keV - E_min_keV) / N_E;
   double num = 0.0;
@@ -63,7 +64,7 @@ static double xray_transmission_at_NH(double log_NH,
 
   for (i = 0; i < N_E; i++) {
     E      = E_min_keV + (i + 0.5) * dE;
-    weight = pow(E, -GAMMA);
+    weight = pow(E, -gamma);
     sigma  = morrison_mccammon_sigma(E);
     tau    = NH * sigma;
     T      = exp(-tau);
@@ -79,16 +80,35 @@ static double xray_transmission_at_NH(double log_NH,
 
 /* log-midpoint NH for each of the 5 bins */
 static const double LOG_NH_MID[5] = {20.5, 21.5, 22.5, 23.5, 25.0};
-static double s_T[5];
+static double s_T_hard[5];
+static double s_T_soft[5];
 static int    s_T_init = 0;
 
-static void _ensure_T_init(void)
+/* Called once from init_meraxes() (init.c), not lazily from apply_xray_
+ * obscuration() — that used to run a guard-checked call on every single
+ * AGN, every snapshot, for a table that only ever needs building once. */
+void init_xray_obscuration_tables(void)
 {
   int k;
-  if (s_T_init) return;
-  /* loop over the 5 NH bins and calculate the band-averaged transmission for each bin */
-  for (k = 0; k < 5; k++) 
-    s_T[k] = xray_transmission_at_NH(LOG_NH_MID[k], AGN_HARD_E_MIN, AGN_HARD_E_MAX);
+  if (s_T_init) return;  /* idempotent safety net, not the primary guard */
+
+  /* Band edges/indices come from the run's own par file rather than being
+   * duplicated as local constants, so a re-tuned SpecIndexXrayAGNSoft/Hard
+   * or NuXray* value can never silently drift out of sync with this table. */
+  physics_params_t* physics = &(run_globals.params.physics);
+  double E_soft_min = physics->NuXrayThreshold / 1000.0; /* eV -> keV */
+  double E_soft_max = physics->NuXraySoftCut   / 1000.0; /* eV -> keV; soft/hard break */
+  double E_hard_min = E_soft_max;                        /* hard band starts at the break */
+  double E_hard_max = physics->NuXrayMax       / 1000.0; /* eV -> keV */
+
+  /* loop over the 5 NH bins and calculate the band-averaged transmission for
+   * each bin, separately for the hard and soft bands — photoelectric
+   * absorption is strongly energy dependent, so a single obscuration
+   * fraction cannot be shared between the two bands. */
+  for (k = 0; k < 5; k++) {
+    s_T_hard[k] = xray_transmission_at_NH(LOG_NH_MID[k], E_hard_min, E_hard_max, physics->SpecIndexXrayAGNHard);
+    s_T_soft[k] = xray_transmission_at_NH(LOG_NH_MID[k], E_soft_min, E_soft_max, physics->SpecIndexXrayAGNSoft);
+  }
   s_T_init = 1;
 }
 
@@ -136,23 +156,22 @@ static void _NH_distribution(double LX_log, double z, double f[5])  /* LX_log: l
 static void apply_xray_obscuration(double LX_1e10Lsun,
                                    double redshift,
                                    double *LX_obs_1e10Lsun,
-                                   double *obs_fraction,
-                                   double LX_obs_bin[5],
-                                   double f_out[5])
+                                   double *obs_fraction_hard,
+                                   double *obs_fraction_soft,
+                                   int *NH_bin)
 {
   double LX_log_ergs; /* log10(LX / erg s^-1) — log scale, used only for NH model */
   double f[5];
   int    k;
 
-  *LX_obs_1e10Lsun = 0.0;
-  *obs_fraction    = 0.0;
-  for (k = 0; k < 5; k++) { LX_obs_bin[k] = 0.0; f_out[k] = 0.0; }
+  *LX_obs_1e10Lsun   = 0.0;
+  *obs_fraction_hard = 0.0;
+  *obs_fraction_soft = 0.0;
+  *NH_bin            = -1; /* no AGN activity / not drawn */
 
   if (LX_1e10Lsun <= 0.0) return;
 
-  _ensure_T_init();
-
-  LX_log_ergs = log10(LX_1e10Lsun) + 10.0 + log10(SOLAR_LUM); /* convert linear [1e10 Lsun] → log10 [erg/s] */
+  LX_log_ergs = log10(LX_1e10Lsun) + 10.0 + SOLAR_LUM_LOG10; /* convert linear [1e10 Lsun] → log10 [erg/s] */
   _NH_distribution(LX_log_ergs, redshift, f);                  /* all other LX variables below are linear */
 
   /* Build CDF from f[k].
@@ -175,23 +194,28 @@ static void apply_xray_obscuration(double LX_1e10Lsun,
     if (u < cdf[k]) { k_random = k; break; }
   }
 
-  /* Apply the transmission of the drawn bin. */
-  *obs_fraction    = s_T[k_random];
-  *LX_obs_1e10Lsun = LX_1e10Lsun * s_T[k_random];
-
-  for (k = 0; k < 5; k++) {
-    f_out[k]      = (k == k_random) ? 1.0 : 0.0;
-    LX_obs_bin[k] = (k == k_random) ? LX_1e10Lsun * s_T[k] : 0.0;
-  }
+  /* Apply the transmission of the drawn bin. LX_obs_1e10Lsun stays
+   * hard-band, matching its existing (hard-band luminosity function) use
+   * downstream; only the soft-band emissivity needs its own fraction.
+   *
+   * Only the drawn bin ever has a nonzero luminosity/fraction — the other
+   * four are always exactly zero (this is a one-hot stochastic draw, not
+   * a distribution across all five bins) — so we record which bin was
+   * drawn (k_random) instead of returning a 5-wide array of mostly zeros.
+   * The caller can fully reconstruct the old per-bin values from
+   * (NH_bin, LX_obs_1e10Lsun) alone. */
+  *obs_fraction_hard = s_T_hard[k_random];
+  *obs_fraction_soft = s_T_soft[k_random];
+  *LX_obs_1e10Lsun   = LX_1e10Lsun * s_T_hard[k_random];
+  *NH_bin            = k_random;
 }
 
 
 void get_nh_transmission(double T_out[5])
 {
   int k;
-  _ensure_T_init();
   for (k = 0; k < 5; k++)
-    T_out[k] = s_T[k];
+    T_out[k] = s_T_hard[k];
 }
 
 /* Return the deterministic NH bin fractions f[0..4] for an AGN with
@@ -205,8 +229,7 @@ void get_nh_fracs(double LX_1e10Lsun, double redshift, double f_out[5])
   double f[5];
   for (k = 0; k < 5; k++) f_out[k] = 0.0;
   if (LX_1e10Lsun <= 0.0) return;
-  _ensure_T_init();
-  LX_log_ergs = log10(LX_1e10Lsun) + 10.0 + log10(SOLAR_LUM);
+  LX_log_ergs = log10(LX_1e10Lsun) + 10.0 + SOLAR_LUM_LOG10;
   _NH_distribution(LX_log_ergs, redshift, f);
   for (k = 0; k < 5; k++) f_out[k] = f[k];
 }
@@ -222,6 +245,15 @@ void calculate_BHemissivity(double BlackHoleMass, double accreted_mass,
   double kb_soft;
   physics_params_t* physics = &(run_globals.params.physics);
 
+  /* Eddington-limited growth is exponential: M(t) = M0 * exp(t / tau), with
+   * e-folding (Salpeter) time tau = EddingtonTimescale * ETA / EddingtonRatio.
+   * accretion_time is the time this growth law would take to add accreted_mass
+   * onto BlackHoleMass, found by inverting for t:
+   *   t = tau * ln(1 + accreted_mass / BlackHoleMass) = tau * log1p(...).
+   * It is not the actual physical duration of this snapshot's accretion —
+   * it is used below to convert the accreted emissivity into a rate, and by
+   * the caller (previous_merger_driven_BH_growth) as accretion_time / dt to
+   * get the AGN duty cycle for this timestep. */
   *accretion_time = log1p(accreted_mass / BlackHoleMass)
                     * run_globals.EddingtonTimescale * ETA
                     / physics->EddingtonRatio;
@@ -229,7 +261,7 @@ void calculate_BHemissivity(double BlackHoleMass, double accreted_mass,
   Lbol = sqrt(1.0 + accreted_mass / BlackHoleMass)
          * physics->EddingtonRatio * BlackHoleMass
          / run_globals.params.Hubble_h * LUMINOSITY_CONVERTOR;
-
+  // bolometric correction from Shen et al. 2020
   kb      = 1.862 * pow(Lbol, -0.361) + 4.870 * pow(Lbol, -0.0063);
   kb_hard = 4.073 * pow(Lbol, -0.026) + 12.60 * pow(Lbol,  0.278);
   kb_soft = 5.712 * pow(Lbol, -0.026) + 17.67 * pow(Lbol,  0.278);
@@ -241,8 +273,6 @@ void calculate_BHemissivity(double BlackHoleMass, double accreted_mass,
   *emissivity = physics->quasar_fobs * *quasar_luv * LB2EMISSIVITY
                * *accretion_time * run_globals.units.UnitTime_in_s
                / run_globals.params.Hubble_h;
-
-  *xray_emissivity = *quasar_lx * 1e10 * SOLAR_LUM;
 }
 
 static double get_vvir(galaxy_t* gal) {
@@ -300,11 +330,11 @@ double radio_mode_BH_heating(galaxy_t* gal, double cooling_mass, double x)
     double metallicity;
 
 
-    /* bondi-hoyle accretion model */
+    // bondi-hoyle accretion model
     accreted_mass =
       run_globals.params.physics.RadioModeEff * run_globals.G * BONDI_HOYLE_COEFFICIENT * x * gal->BlackHoleMass * gal->dt;
 
-    /* eddington rate */
+    // eddington rate 
     eddington_mass = exp(gal->dt / run_globals.EddingtonTimescale / ETA * run_globals.params.physics.EddingtonRatio) *
                             gal->BlackHoleMass;
 
@@ -327,13 +357,9 @@ double radio_mode_BH_heating(galaxy_t* gal, double cooling_mass, double x)
 
     gal->BlackHoleAccretedHotMass = accreted_mass;
 
-    // add the accreted mass to the black hole from hotgas
+    // add the accreted mass to the black hole from hot gas
     metallicity = calc_metallicity(gal->HotGas, gal->MetalsHotGas);
 
-    // Assuming all energy from radio mode is going to heat the cooling flow
-    // So no emissivity from radio mode!
-    // TODO: we could add heating effienciency to split the energy into
-    // heating and reionization.
     gal->BlackHoleMass += accreted_mass * (1. - ETA);
     gal->HotGas -= accreted_mass;
     gal->MetalsHotGas -= accreted_mass * metallicity;
@@ -374,9 +400,9 @@ void previous_merger_driven_BH_growth(galaxy_t* gal, int snapshot)
   double BHemissivity, accretion_time, quasar_luv;
   double quasar_lx, quasar_lx_soft, xray_emissivity;
   double LX_obs_1e10Lsun;
-  double obs_fraction;
-  double LX_obs_bin[5];
-  double NHfrac[5];
+  double obs_fraction_hard;
+  double obs_fraction_soft;
+  int    NH_bin;
   double t_off, t_resp;
   
   if (dt <= 0.0) {
@@ -423,9 +449,9 @@ void previous_merger_driven_BH_growth(galaxy_t* gal, int snapshot)
     apply_xray_obscuration(quasar_lx,
                            run_globals.ZZ[snapshot],
                            &LX_obs_1e10Lsun,
-                           &obs_fraction,
-                           LX_obs_bin,
-                           NHfrac);
+                           &obs_fraction_hard,
+                           &obs_fraction_soft,
+                           &NH_bin);
 
 
     gal->DutyCycleAGN = (accretion_time > 1e-30) ? (accretion_time / dt) : 0.0;
@@ -450,18 +476,14 @@ void previous_merger_driven_BH_growth(galaxy_t* gal, int snapshot)
     gal->QuasarLuv        += quasar_luv;
     gal->QuasarLX         += quasar_lx;
     gal->QuasarLX_obs     += LX_obs_1e10Lsun;
-    gal->QuasarLX_obs0    += LX_obs_bin[0];
-    gal->QuasarLX_obs1    += LX_obs_bin[1];
-    gal->QuasarLX_obs2    += LX_obs_bin[2];
-    gal->QuasarLX_obs3    += LX_obs_bin[3];
-    gal->QuasarLX_obs4    += LX_obs_bin[4];
-    gal->NHfrac0           = NHfrac[0];
-    gal->NHfrac1           = NHfrac[1];
-    gal->NHfrac2           = NHfrac[2];
-    gal->NHfrac3           = NHfrac[3];
-    gal->NHfrac4           = NHfrac[4];
-    gal->BHXrayEmissivity      += quasar_lx      * 1e10 * SOLAR_LUM * obs_fraction;
-    gal->BHXrayEmissivity_soft += quasar_lx_soft * 1e10 * SOLAR_LUM * obs_fraction;
+    gal->NHbin              = NH_bin; /* which of the 5 bins this draw landed
+                                        * in; -1 if no AGN activity this step.
+                                        * QuasarLX_obs above already carries
+                                        * the observed luminosity — no need
+                                        * to duplicate it into 5 mostly-zero
+                                        * per-bin fields. */
+    gal->BHXrayEmissivity      += quasar_lx      * 1e10 * SOLAR_LUM * obs_fraction_hard;
+    gal->BHXrayEmissivity_soft += quasar_lx_soft * 1e10 * SOLAR_LUM * obs_fraction_soft;
     gal->EffectiveBHAR += BHemissivity;
     // quasar mode feedback
     m_reheat = run_globals.params.physics.QuasarModeEff * 2. * ETA * run_globals.Csquare * accreted_mass / Vvir / Vvir;
