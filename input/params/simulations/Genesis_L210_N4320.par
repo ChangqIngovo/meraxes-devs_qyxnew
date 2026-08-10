@@ -4,7 +4,7 @@
 SimName           : Genesis L210_N4320
 SimulationDir     : /g/data/cm25/yq5547/dragons/input_trees/Genesis_L210_N4320
 CatalogFilePrefix : VELOCIraptor.walkabletree.forestID.hdf5.0
-TreesID           : 2  # 0 -> VELOCIraptor; 1 -> gbpTrees, 2 -> VELOCIraptor augmented
+TreesID           : 0  # 0 -> VELOCIraptor; 1 -> gbpTrees, 2 -> VELOCIraptor augmented
 BoxSize           : 210.0
 VolumeFactor      : 1.0
 
