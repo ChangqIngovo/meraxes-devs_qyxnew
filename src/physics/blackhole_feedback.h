@@ -51,6 +51,17 @@ static const double mm83[14][5] = {
   { 8.331, 10.000, 701.2,     25.2,      0.0 },
 };
 
+/* NH-obscuration model (5-bin CTN/CTK distribution used by
+ * apply_xray_obscuration() / _NH_distribution() in blackhole_feedback.c). */
+#define OBS_EPSILON   1.7     /* ratio logNH=23-24 to logNH=22-23 quasars  */
+/* ε = 1.7 means there are 1.7× more AGN
+in the logNH=23–24 bin than the logNH=22–23 bin (the absorbed bins are not equal).*/
+#define OBS_FCTK      1.0     /* CTK fraction relative to absorbed CTN      */
+/*fCTK = 1.0 means the total CTK population equals the total absorbed CTN population.*/
+#define OBS_PSI_MIN   0.20    /* minimum absorbed fraction                  */
+#define OBS_PSI_MAX   0.84    /* maximum absorbed fraction                  */
+#define OBS_LX_REF    43.75   /* reference log10(LX/erg/s) for psi(LX,z)   */
+
 #ifdef __cplusplus
 extern "C"
 {
@@ -77,6 +88,10 @@ extern "C"
   void previous_merger_driven_BH_growth(struct galaxy_t* gal, int snapshot);
   void get_nh_transmission(double T_out[5]);
   void get_nh_fracs(double LX_1e10Lsun, double redshift, double f_out[5]);
+  /* Builds the s_T_hard/s_T_soft NH-transmission tables once. Must be
+   * called during startup (init_meraxes(), after params are loaded) —
+   * not lazily per-AGN, which is what this replaced. */
+  void init_xray_obscuration_tables(void);
 
 
 #ifdef __cplusplus
