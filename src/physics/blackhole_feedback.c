@@ -207,13 +207,11 @@ void calculate_BHemissivity(double BlackHoleMass, double accreted_mass,
   double kb_soft;
   physics_params_t* physics = &(run_globals.params.physics);
 
-  /* Eddington e-folding time to grow by accreted_mass; not a real duration —
-   * used below as a rate conversion, and by the caller as accretion_time/dt for the AGN duty cycle. */
-  
+  // Compute accretion_time directly in internal units using pre-computed EddingtonTimescale
   *accretion_time = log1p(accreted_mass / BlackHoleMass)
                     * run_globals.EddingtonTimescale * ETA
                     / physics->EddingtonRatio;
-
+ // Bolometric luminosity in 1e10 Lsun at the MIDDLE of accretion time
   Lbol = sqrt(1.0 + accreted_mass / BlackHoleMass)
          * physics->EddingtonRatio * BlackHoleMass
          / run_globals.params.Hubble_h * LUMINOSITY_CONVERTOR;
@@ -222,10 +220,13 @@ void calculate_BHemissivity(double BlackHoleMass, double accreted_mass,
   kb_hard = 4.073 * pow(Lbol, -0.026) + 12.60 * pow(Lbol,  0.278);
   kb_soft = 5.712 * pow(Lbol, -0.026) + 17.67 * pow(Lbol,  0.278);
 
+  // Return UV luminosity LUV = Lbol/kb in 1e10 Lsun
+  // (Can be converted to M1450 magnitude via: M1450 = -19.826 - 2.5*log10(LUV))
   *quasar_luv     = Lbol / kb;
   *quasar_lx      = Lbol / kb_hard;
   *quasar_lx_soft = Lbol / kb_soft;
-
+  
+  // Approximation using the emissivity at the MIDDLE of accretion time
   *emissivity = physics->quasar_fobs * *quasar_luv * LB2EMISSIVITY
                * *accretion_time * run_globals.units.UnitTime_in_s
                / run_globals.params.Hubble_h;
@@ -277,7 +278,7 @@ static void update_reservoirs_from_quasar_mode_bh_feedback(galaxy_t* gal, double
 double radio_mode_BH_heating(galaxy_t* gal, double cooling_mass, double x)
 {
   double heated_mass = 0.0;
-
+// if there is any hot gas
   if (gal->HotGas > 0.0) {
     double Vvir             = get_vvir(gal);
     run_units_t* units      = &(run_globals.units);
@@ -314,8 +315,13 @@ double radio_mode_BH_heating(galaxy_t* gal, double cooling_mass, double x)
     gal->BlackHoleAccretedHotMass = accreted_mass;
 
     // add the accreted mass to the black hole from hot gas
-    metallicity = calc_metallicity(gal->HotGas, gal->MetalsHotGas);
-
+    double metallicity = calc_metallicity(gal->HotGas, gal->MetalsHotGas);
+    
+    // Assuming all energy from radio mode is going to heat the cooling flow
+    // So no emissivity from radio mode!
+    // TODO: we could add heating effienciency to split the energy into
+    // heating and reionization.
+    
     gal->BlackHoleMass += accreted_mass * (1. - ETA);
     gal->HotGas -= accreted_mass;
     gal->MetalsHotGas -= accreted_mass * metallicity;
@@ -326,16 +332,21 @@ double radio_mode_BH_heating(galaxy_t* gal, double cooling_mass, double x)
 void merger_driven_BH_growth(galaxy_t* gal, double merger_ratio, int snapshot)
 {
   if (gal->ColdGas > 0) {
+    // If there is any cold gas to feed the black hole...
     double Vvir          = get_vvir(gal);
+
+    // Suggested by Bonoli et al. 2009 and Wyithe et al. 2003
     double z_scaling     = pow((1 + run_globals.ZZ[snapshot]), run_globals.params.physics.quasar_mode_scaling);
+    
     double accreting_mass = run_globals.params.physics.BlackHoleGrowthRate * merger_ratio /
                             (1.0 + pow(VELOCITY_SCALE / Vvir, 2)) * gal->ColdGas * z_scaling;
 
     // limit accretion to what is available
     if (accreting_mass > gal->ColdGas)
       accreting_mass = gal->ColdGas;
-
+    // add the accreting mass to the black hole from coldgas
     double metallicity = calc_metallicity(gal->ColdGas, gal->MetalsColdGas);
+    
     // put the mass onto the accretion disk and let the black hole accrete it in the next snapshot
     // TODO: since the merger is put in the end of galaxy evolution, this is following the
     // inconsistence consistently
@@ -347,10 +358,16 @@ void merger_driven_BH_growth(galaxy_t* gal, double merger_ratio, int snapshot)
 
 void previous_merger_driven_BH_growth(galaxy_t* gal, int snapshot)
 {
+  // If there is any cold gas to feed the black hole...
   double Vvir    = get_vvir(gal);
   run_units_t* units = &(run_globals.units);
   double factor  = EMISSIVITY_CONVERTOR * gal->FescBH / run_globals.params.physics.ReionNionPhotPerBary;
+
+  // Use snapshot cadence timestep instead of gal->dt to ensure proper accretion
+  // for ghost galaxies that have been in ghost state for multiple snapshots.
+  // snapshot is the current snapshot, snapshot+1 is the next snapshot in the past.
   double dt      = (snapshot > 0) ? (run_globals.LTTime[snapshot - 1] - run_globals.LTTime[snapshot]) : 0.0;
+  
   double m_reheat;
   double accreted_mass;
   double BHemissivity, accretion_time, quasar_luv;
@@ -361,6 +378,7 @@ void previous_merger_driven_BH_growth(galaxy_t* gal, int snapshot)
   int    NH_bin;
   double t_off, t_resp;
   
+  // Determine the accretion on-time within this snapshot
   if (dt <= 0.0) {
       return;  // No time passed, exit function
   }
@@ -397,7 +415,8 @@ void previous_merger_driven_BH_growth(galaxy_t* gal, int snapshot)
     // Reset on-time if accretion is complete
     if (gal->BlackHoleAccretingColdMass <= 0.0)
       gal->BHAccretionOnTime = -1.0;
-
+    
+    // N_gamma,q * N_bh; later 1e60*BHemissivity * PROTONMASS/1e10/SOLAR_MASS will be N_gamma,q * M_bh
     calculate_BHemissivity(gal->BlackHoleMass, accreted_mass,
                            &BHemissivity, &accretion_time,
                            &quasar_luv, &quasar_lx,
@@ -415,7 +434,8 @@ void previous_merger_driven_BH_growth(galaxy_t* gal, int snapshot)
         
     gal->BlackHoleMass += (1. - ETA) * accreted_mass;
     gal->EffectiveBHM += BHemissivity * factor;
-
+    
+    // historical reason for us to store nion rather than the emissivity in BHemissivity...
     BHemissivity *= factor / accretion_time;
 
     if (run_globals.params.physics.Flag_BHARExponentialCut) {
