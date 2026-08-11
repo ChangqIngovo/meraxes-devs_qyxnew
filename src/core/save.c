@@ -1125,14 +1125,9 @@ void create_master_file()
       H5Lcreate_external(relative_source_file, source_ds, snap_group_id, "XrayLF_obs", H5P_DEFAULT, H5P_DEFAULT);
     }
     if (run_globals.params.Flag_OutputXrayLF) {
-      const char* nh_lf_links[]    = {"XrayLF_obs0","XrayLF_obs1","XrayLF_obs2","XrayLF_obs3","XrayLF_obs4"};
       const char* nh_frac_links[]  = {"NHfrac0","NHfrac1","NHfrac2","NHfrac3","NHfrac4"};
       const char* nh_trans_links[] = {"NHTrans0","NHTrans1","NHTrans2","NHTrans3","NHTrans4"};
       for (int ib = 0; ib < 5; ib++) {
-        if (H5LTfind_dataset(source_group_id, nh_lf_links[ib])) {
-          sprintf(source_ds, "Snap%03d/%s", run_globals.ListOutputSnaps[i_out], nh_lf_links[ib]);
-          H5Lcreate_external(relative_source_file, source_ds, snap_group_id, nh_lf_links[ib], H5P_DEFAULT, H5P_DEFAULT);
-        }
         if (H5LTfind_dataset(source_group_id, nh_frac_links[ib])) {
           sprintf(source_ds, "Snap%03d/%s", run_globals.ListOutputSnaps[i_out], nh_frac_links[ib]);
           H5Lcreate_external(relative_source_file, source_ds, snap_group_id, nh_frac_links[ib], H5P_DEFAULT, H5P_DEFAULT);
@@ -1286,7 +1281,6 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
   distribution_function_t oiiilf;
   distribution_function_t xraylf;
   distribution_function_t xraylf_obs;
-  distribution_function_t xraylf_obs0, xraylf_obs1, xraylf_obs2, xraylf_obs3, xraylf_obs4;
 #ifdef CALC_MAGS
   distribution_function_t uvlf, dustylf;
 #endif
@@ -1462,26 +1456,6 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
             run_globals.params.XrayLF_BinsPerDex,
             "X-ray Luminosity Function (2-10 keV, observed after obscuration)");
     xraylf_obs.volume = df_volume;
-
-    /* Per-NH-bin observed LFs (stochastic draw: only the drawn bin is non-zero per galaxy) */
-    const char *nh_bin_labels[5] = {
-      "XrayLF obs NH bin 0 (logNH 20-21)",
-      "XrayLF obs NH bin 1 (logNH 21-22)",
-      "XrayLF obs NH bin 2 (logNH 22-23)",
-      "XrayLF obs NH bin 3 (logNH 23-24)",
-      "XrayLF obs NH bin 4 (logNH 24-26 CTK)"
-    };
-    distribution_function_t *xraylf_obs_bins[5] = {
-      &xraylf_obs0, &xraylf_obs1, &xraylf_obs2, &xraylf_obs3, &xraylf_obs4
-    };
-    for (int ib = 0; ib < 5; ib++) {
-      df_init(xraylf_obs_bins[ib],
-              run_globals.params.XrayLF_MinLogL,
-              run_globals.params.XrayLF_MaxLogL,
-              run_globals.params.XrayLF_BinsPerDex,
-              nh_bin_labels[ib]);
-      xraylf_obs_bins[ib]->volume = df_volume;
-    }
   }
 
   // If the immediately preceding snapshot was also written, then save the
@@ -1697,24 +1671,6 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
             xraylf_obs.bin_variance[bin_idx] += weight * (1.0 - weight);
           }
         }
-        /* NH-bin LFs: the galaxy's observed LX (QuasarLX_obs, read into
-         * lx_obs_lin above) belongs entirely to whichever single bin its
-         * stochastic draw landed in (NHbin) — there is nothing to loop
-         * over, since a one-hot draw only ever contributes to one bin. */
-        {
-          int nh_bin = output_buffer[buffer_count].NHbin;
-          distribution_function_t *xraylf_obs_bins_inner[5] = {
-            &xraylf_obs0, &xraylf_obs1, &xraylf_obs2, &xraylf_obs3, &xraylf_obs4
-          };
-          if (nh_bin >= 0 && nh_bin < 5 && lx_obs_lin > 0.0 && weight > 0.0) {
-            val = log10(lx_obs_lin * 1e10 * SOLAR_LUM);
-            if (val >= xraylf_obs_bins_inner[nh_bin]->x_min && val < xraylf_obs_bins_inner[nh_bin]->x_max) {
-              bin_idx = (int)((val - xraylf_obs_bins_inner[nh_bin]->x_min) / xraylf_obs_bins_inner[nh_bin]->bin_width);
-              xraylf_obs_bins_inner[nh_bin]->bin_counts[bin_idx]   += weight;
-              xraylf_obs_bins_inner[nh_bin]->bin_variance[bin_idx] += weight * (1.0 - weight);
-            }
-          }
-        }
         /* Snapshot-level mean NHfrac: duty-cycle-weighted deterministic fractions from NH model */
         if (weight > 0.0) {
           double lx_gal = (double)output_buffer[buffer_count].QuasarLX;
@@ -1838,20 +1794,6 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
     }
     df_free(&xraylf);
     df_free(&xraylf_obs);
-
-    /* Per-NH-bin observed LFs */
-    const char *nh_ds_names[5] = {
-      "XrayLF_obs0", "XrayLF_obs1", "XrayLF_obs2", "XrayLF_obs3", "XrayLF_obs4"
-    };
-    distribution_function_t *xraylf_obs_bins_out[5] = {
-      &xraylf_obs0, &xraylf_obs1, &xraylf_obs2, &xraylf_obs3, &xraylf_obs4
-    };
-    for (int ib = 0; ib < 5; ib++) {
-      df_mpi_reduce(xraylf_obs_bins_out[ib], run_globals.mpi_rank, run_globals.mpi_size);
-      if (run_globals.mpi_rank == 0)
-        df_write_hdf5(file_id, target_group, xraylf_obs_bins_out[ib], nh_ds_names[ib], "per Mpc^3 per dex");
-      df_free(xraylf_obs_bins_out[ib]);
-    }
 
     /* Snapshot-level mean NHfrac (deterministic, duty-cycle weighted) and NHTrans */
     {
