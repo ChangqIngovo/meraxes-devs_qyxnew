@@ -77,14 +77,10 @@ void init_xray_obscuration_tables(void)
   if (s_T_init) return;
 
   physics_params_t* physics = &(run_globals.params.physics);
-  double E_soft_min = physics->NuXrayThreshold / 1000.0; /* eV -> keV */
-  double E_soft_max = physics->NuXraySoftCut   / 1000.0; /* soft/hard break */
-  double E_hard_min = E_soft_max;
-  double E_hard_max = physics->NuXrayMax       / 1000.0;
 
   for (k = 0; k < 5; k++) {
-    s_T_hard[k] = xray_transmission_at_NH(LOG_NH_MID[k], E_hard_min, E_hard_max, physics->SpecIndexXrayAGNHard);
-    s_T_soft[k] = xray_transmission_at_NH(LOG_NH_MID[k], E_soft_min, E_soft_max, physics->SpecIndexXrayAGNSoft);
+    s_T_hard[k] = xray_transmission_at_NH(LOG_NH_MID[k], physics->NuXraySoftCut / 1000.0, physics->NuXrayMax / 1000.0, physics->SpecIndexXrayAGNHard);
+    s_T_soft[k] = xray_transmission_at_NH(LOG_NH_MID[k], physics->NuXrayThreshold / 1000.0, physics->NuXraySoftCut / 1000.0, physics->SpecIndexXrayAGNSoft);
   }
   s_T_init = 1;
 }
