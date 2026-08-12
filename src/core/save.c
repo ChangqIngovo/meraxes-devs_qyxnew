@@ -989,9 +989,9 @@ void create_master_file()
       H5Gclose(group_id);
     }
   }
-  
-  #ifdef MERAXES_GITREF_STR
+
   // Save the git ref and diff if requested
+  #ifdef MERAXES_GITREF_STR
   H5LTmake_dataset_string(file_id, "gitdiff", MERAXES_GITDIFF_STR);
   H5LTset_attribute_string(file_id, "gitdiff", "gitref", MERAXES_GITREF_STR);
   #endif
