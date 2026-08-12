@@ -678,13 +678,12 @@ typedef struct galaxy_t
   double BHemissivity;
   double QuasarLuv;         //!< UV luminosity LUV of quasar (1e10 Lsun, summable for mergers)
   double QuasarLX;               //!< Intrinsic hard X-ray luminosity [1e10 Lsun]; 0 if inactive
-  double QuasarLX_obs;           //!< Observed hard X-ray luminosity [1e10 Lsun] after obscuration; 0 if inactive
   int    NHbin;                  //!< Which of the 5 NH bins this snapshot's stochastic draw landed in
                                   //!< (0-4; logNH 20-21/21-22/22-23/23-24/24-26 CTK), or -1 if no AGN
-                                  //!< activity this step. QuasarLX_obs above is that bin's observed
-                                  //!< luminosity — only one bin is ever nonzero per draw, so a single
-                                  //!< (bin, luminosity) pair fully replaces the old QuasarLX_obs0-4/
-                                  //!< NHfrac0-4 fields (5 mostly-zero doubles each, every galaxy).
+                                  //!< activity this step. BHXrayEmissivity below already carries that
+                                  //!< bin's observed (obscured) luminosity, so this (bin, luminosity)
+                                  //!< pair replaces the old QuasarLX_obs0-4/NHfrac0-4 fields (5
+                                  //!< mostly-zero doubles each, every galaxy).
   double BHXrayEmissivity;       //!< Observed hard X-ray emissivity [1e60 erg], obscuration-weighted
   double BHXrayEmissivity_soft;  //!< Observed soft X-ray emissivity [1e60 erg], obscuration-weighted
   double EffectiveBHM;
