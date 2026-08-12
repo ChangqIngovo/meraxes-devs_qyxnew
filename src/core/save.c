@@ -989,7 +989,13 @@ void create_master_file()
       H5Gclose(group_id);
     }
   }
-
+  
+  #ifdef MERAXES_GITREF_STR
+  // Save the git ref and diff if requested
+  H5LTmake_dataset_string(file_id, "gitdiff", MERAXES_GITDIFF_STR);
+  H5LTset_attribute_string(file_id, "gitdiff", "gitref", MERAXES_GITREF_STR);
+  #endif
+  
   // save the number of cores used in this run
   H5LTset_attribute_int(file_id, "/", "NCores", &(run_globals.mpi_size), 1);
 
