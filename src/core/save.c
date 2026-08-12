@@ -1318,13 +1318,9 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
     n_write = write_count;
   }
 
-  // TEMPORARY TEST — reintroducing the old per-snapshot open/close pattern
-  // on purpose, to try to reproduce the "duplicate entry in cache" /
-  // H5Acreate2 failure this design was supposedly built to avoid (see the
-  // now-removed comment above). Revert to `file_id = run_globals.output_file_id;`
-  // once this test is done — do not leave this in.
-  file_id = H5Fopen(run_globals.FNameOut, H5F_ACC_RDWR, H5P_DEFAULT);
-  run_globals.output_file_id = file_id;
+  // Use the persistently-open per-rank file (avoids HDF5 1.10.x open-close
+  // fragmentation that causes "duplicate entry in cache" after ~17 snapshots).
+  file_id = run_globals.output_file_id;
 
   // Create the relevant group.
   sprintf(target_group, "Snap%03d", (run_globals.ListOutputSnaps)[i_out]);
@@ -1906,11 +1902,11 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
   // Close the group.
   H5Gclose(group_id);
 
-  // TEMPORARY TEST — closing file_id here, every snapshot, on purpose (see
-  // the matching temporary re-open at the top of this function). Revert to
-  // the flush-only version once this test is done — do not leave this in.
-  H5Fclose(run_globals.output_file_id);
-  run_globals.output_file_id = H5I_INVALID_HID;
+  // Do NOT close file_id here — it is run_globals.output_file_id, which kept open for the lifetime of the run.  
+  // close_hdf5_file() handles the final close.
+
+  // Flush (but do not close) this snapshot's data to disk now, so it survives a crash later in the run rather than being lost with everything that was never flushed.
+  H5Fflush(run_globals.output_file_id, H5F_SCOPE_GLOBAL);
 
   // Update the value of last_n_write
   *last_n_write = n_write;
