@@ -59,7 +59,6 @@ typedef struct galaxy_output_t
   float BHemissivity;
   float QuasarMag;
   float QuasarLX;        //!< Intrinsic hard X-ray luminosity [1e10 L_sun, 2-10 keV]; 0 if inactive
-  float QuasarLX_obs;    //!< Observed  hard X-ray luminosity [1e10 L_sun, 2-10 keV]; 0 if inactive
   int   NHbin;           //!< Which of the 5 NH bins this snapshot's draw landed in (0-4), or
                           //!< -1 if no AGN activity — see meraxes.h galaxy_t.NHbin for detail.
   float BHXrayEmissivity; //!< Observed hard X-ray emissivity [1e60 erg], obscuration-weighted
