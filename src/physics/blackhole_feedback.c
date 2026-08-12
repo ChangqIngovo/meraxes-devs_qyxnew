@@ -61,7 +61,7 @@ static double xray_transmission_at_NH(double log_NH,
   }
   return (den > 0.0) ? num / den : 0.0;
 }
-  
+
 
 
 /* log-midpoint NH for each of the 5 bins */
@@ -128,7 +128,6 @@ static void _NH_distribution(double LX_log, double z, double f[5])  /* LX_log: l
 
 static void apply_xray_obscuration(double LX_1e10Lsun,
                                    double redshift,
-                                   double *LX_obs_1e10Lsun,
                                    double *obs_fraction_hard,
                                    double *obs_fraction_soft,
                                    int *NH_bin)
@@ -137,7 +136,6 @@ static void apply_xray_obscuration(double LX_1e10Lsun,
   double f[5];
   int    k;
 
-  *LX_obs_1e10Lsun   = 0.0;
   *obs_fraction_hard = 0.0;
   *obs_fraction_soft = 0.0;
   *NH_bin            = -1;
@@ -164,7 +162,6 @@ static void apply_xray_obscuration(double LX_1e10Lsun,
   /* only the drawn bin is nonzero, so just record which one */
   *obs_fraction_hard = s_T_hard[k_random];
   *obs_fraction_soft = s_T_soft[k_random];
-  *LX_obs_1e10Lsun   = LX_1e10Lsun * s_T_hard[k_random];
   *NH_bin            = k_random;
 }
 
@@ -176,9 +173,8 @@ void get_nh_transmission(double T_out[5])
     T_out[k] = s_T_hard[k];
 }
 
-/* Return the deterministic NH bin fractions f[0..4] for an AGN with
- * LX_1e10Lsun (linear, units of 1e10 Lsun) at the given redshift.
- * These are the probabilities from the NH distribution model — independent
+
+ /* These are the probabilities from the NH distribution model — independent
  * of the stochastic draw made per galaxy. */
 void get_nh_fracs(double LX_1e10Lsun, double redshift, double f_out[5])
 {
@@ -280,7 +276,6 @@ double radio_mode_BH_heating(galaxy_t* gal, double cooling_mass, double x)
     run_units_t* units      = &(run_globals.units);
     double accreted_mass;
     double eddington_mass;
-    double metallicity;
 
 
     // bondi-hoyle accretion model
@@ -368,7 +363,6 @@ void previous_merger_driven_BH_growth(galaxy_t* gal, int snapshot)
   double accreted_mass;
   double BHemissivity, accretion_time, quasar_luv;
   double quasar_lx, quasar_lx_soft, xray_emissivity;
-  double LX_obs_1e10Lsun;
   double obs_fraction_hard;
   double obs_fraction_soft;
   int    NH_bin;
@@ -419,7 +413,6 @@ void previous_merger_driven_BH_growth(galaxy_t* gal, int snapshot)
                            &quasar_lx_soft, &xray_emissivity);
     apply_xray_obscuration(quasar_lx,
                            run_globals.ZZ[snapshot],
-                           &LX_obs_1e10Lsun,
                            &obs_fraction_hard,
                            &obs_fraction_soft,
                            &NH_bin);
@@ -447,7 +440,6 @@ void previous_merger_driven_BH_growth(galaxy_t* gal, int snapshot)
     gal->BHemissivity     += BHemissivity;
     gal->QuasarLuv        += quasar_luv;
     gal->QuasarLX         += quasar_lx;
-    gal->QuasarLX_obs     += LX_obs_1e10Lsun;
     gal->NHbin              = NH_bin; /* -1 if no AGN activity this step */
     gal->BHXrayEmissivity      += quasar_lx      * 1e10 * SOLAR_LUM * obs_fraction_hard;
     gal->BHXrayEmissivity_soft += quasar_lx_soft * 1e10 * SOLAR_LUM * obs_fraction_soft;
