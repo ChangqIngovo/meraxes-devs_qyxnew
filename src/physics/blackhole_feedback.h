@@ -62,23 +62,14 @@ in the logNH=23–24 bin than the logNH=22–23 bin (the absorbed bins are not e
 #define OBS_PSI_MAX   0.84    /* maximum absorbed fraction                  */
 #define OBS_LX_REF    43.75   /* reference log10(LX/erg/s) for psi(LX,z)   */
 
+
+
 #ifdef __cplusplus
 extern "C"
 {
 #endif
   double radio_mode_BH_heating(struct galaxy_t* gal, double cooling_mass, double x);
 
-  /*
-   * calculate_BHemissivity
-   * Computes UV and intrinsic hard X-ray luminosities and emissivities.
-   *
-   * Outputs:
-   *   emissivity      UV ionising photon emissivity  [1e60 photons]
-   *   accretion_time  e-folding accretion timescale  [internal units]
-   *   quasar_luv      UV luminosity                  [1e10 Lsun]
-   *   quasar_lx       intrinsic log10(LX / Lsun)     hard X-ray
-   *   xray_emissivity intrinsic X-ray emissivity     [1e60 erg]
-   */
   void calculate_BHemissivity(double BlackHoleMass, double accreted_mass,
                               double *emissivity,     double *accretion_time,
                               double *quasar_luv,     double *quasar_lx,
@@ -88,9 +79,7 @@ extern "C"
   void previous_merger_driven_BH_growth(struct galaxy_t* gal, int snapshot);
   void get_nh_transmission(double T_out[5]);
   void get_nh_fracs(double LX_1e10Lsun, double redshift, double f_out[5]);
-  /* Builds the s_T_hard/s_T_soft NH-transmission tables once. Must be
-   * called during startup (init_meraxes(), after params are loaded) —
-   * not lazily per-AGN, which is what this replaced. */
+  /* Builds the s_T_hard/s_T_soft NH-transmission tables once. Must be called during startup (init_meraxes(), after params are loaded) */
   void init_xray_obscuration_tables(void);
 
 
