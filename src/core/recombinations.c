@@ -258,6 +258,8 @@ void free_MHR()
 {
   int idx;
 
+  if (!RR_spline) return;  /* init_MHR was never called — nothing to free */
+
   free_A_MHR();
   free_C_MHR();
   free_beta_MHR();

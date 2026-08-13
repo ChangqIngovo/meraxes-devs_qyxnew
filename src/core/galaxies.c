@@ -57,6 +57,10 @@ galaxy_t* new_galaxy(int snapshot, unsigned long halo_ID)
   gal->FescBH = 1.0;
   gal->BHemissivity = 0.0;
   gal->QuasarLuv = 0.0;
+  gal->QuasarLX = 0.0;
+  gal->NHbin = -1;
+  gal->BHXrayEmissivity = 0.0;
+  gal->BHXrayEmissivity_soft = 0.0;
   gal->EffectiveBHM = 0.0;
   gal->EffectiveBHAR = 0.0;
   gal->DutyCycleAGN = 0.0;
@@ -187,6 +191,10 @@ void reset_galaxy_properties(galaxy_t* gal, int snapshot)
   gal->cumulative_ionization = 0.0;
   gal->BHemissivity = 0.0;
   gal->QuasarLuv = 0.0;
+  gal->QuasarLX = 0.0;
+  gal->NHbin = -1;
+  gal->BHXrayEmissivity = 0.0;
+  gal->BHXrayEmissivity_soft = 0.0;
   gal->BaryonFracModifier = 1.0;
   gal->FOFMvirModifier = 1.0;
   gal->EffectiveBHAR = 0.0;
@@ -372,7 +380,7 @@ void kill_galaxy(galaxy_t* gal, galaxy_t* prev_gal, int* NGal, int* kill_counter
     }
   }
 
-  // Finally deallocated the galaxy and decrement any necessary counters
+  // Finally deallocated the galaxy and decremented any necessary counters
   free(gal);
   *NGal = *NGal - 1;
   *kill_counter = *kill_counter + 1;

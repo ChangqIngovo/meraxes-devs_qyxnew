@@ -61,6 +61,10 @@ typedef struct galaxy_output_t
   float FescBH;
   float BHemissivity;
   float QuasarMag;
+  float QuasarLX;        //!< Intrinsic hard X-ray luminosity [1e10 L_sun, 2-10 keV]; 0 if inactive
+  int   NHbin;           //!< Which of the 5 NH bins this snapshot's draw landed in (0-4), or
+                          //!< -1 if no AGN activity — see meraxes.h galaxy_t.NHbin for detail.
+  float BHXrayEmissivity; //!< Observed hard X-ray emissivity [1e10 L_sun, 2-10 keV], obscuration-weighted
   float EffectiveBHM;
   float BlackHoleAccretedHotMass;
   float BlackHoleAccretedColdMass;
@@ -113,6 +117,7 @@ extern "C"
   void prepare_galaxy_for_output(struct galaxy_t gal, galaxy_output_t* galout, int i_snap);
   void calc_hdf5_props(void);
   void prep_hdf5_file(void);
+  void close_hdf5_file(void);
   void create_master_file(void);
   void write_snapshot(int n_write, int i_out, int* last_n_write);
 
