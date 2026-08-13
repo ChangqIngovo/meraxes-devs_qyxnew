@@ -501,7 +501,6 @@ void dracarys()
   if (!run_globals.params.FlagMCMC)
     close_hdf5_file();
 
-  
   // Create the master file
   MPI_Barrier(run_globals.mpi_comm);
   if (!run_globals.params.FlagMCMC)
