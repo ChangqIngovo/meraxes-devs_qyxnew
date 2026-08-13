@@ -496,6 +496,12 @@ void dracarys()
   run_globals.FirstGal = NULL;
   mlog("...done", MLOG_CLOSE);
 
+  // Close the per-rank galaxy HDF5 file (was kept open across all snapshots
+  // to avoid HDF5 1.10.x open-close fragmentation; see prep_hdf5_file()).
+  if (!run_globals.params.FlagMCMC)
+    close_hdf5_file();
+
+  
   // Create the master file
   MPI_Barrier(run_globals.mpi_comm);
   if (!run_globals.params.FlagMCMC)
