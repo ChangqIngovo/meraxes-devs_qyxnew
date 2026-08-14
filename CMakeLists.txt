@@ -90,8 +90,6 @@ endif()
 # TODO: This is bad practice, we should really list the sources explicitly
 file(GLOB SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/core/*.[ch] *.h ${CMAKE_CURRENT_SOURCE_DIR}/src/physics/*.[ch])
 list(REMOVE_ITEM SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/core/meraxes.c)
-# physics/reionization.c is a superset of core/reionization.c (adds AGN X-ray grids); exclude the core version
-list(REMOVE_ITEM SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/core/reionization.c)
     
 # THE MERAXES TARGETS
 if(BUILD_SHARED_LIBS)
