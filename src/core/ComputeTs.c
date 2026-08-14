@@ -11,7 +11,7 @@
 #include "reionization.h"
 #include "utils.h"
 
-/*
+/* All files are identical to meraxes-devs forest branch:
  * This code is a re-write of the spin temperature calculation (Ts.c) within 21cmFAST.
  * Modified for usage within Meraxes by Bradley Greig.
  *
