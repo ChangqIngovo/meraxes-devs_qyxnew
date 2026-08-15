@@ -189,9 +189,12 @@ void merge_with_target(galaxy_t* gal, int* dead_gals, int snapshot)
 #endif
   parent->GrossStellarMass += gal->GrossStellarMass;
   parent->FescWeightedGSM += gal->FescWeightedGSM;
+  // Source-only no-scatter accumulators
+  parent->SourceGrossStellarMass += gal->SourceGrossStellarMass;
+  parent->SourceFescWeightedGSM += gal->SourceFescWeightedGSM;
   parent->MetalsStellarMass += gal->MetalsStellarMass;
   parent->Sfr += gal->Sfr;
-  parent->FescWeightedSfr += gal->Sfr * gal->Fesc;
+  parent->FescWeightedSfr += gal->FescWeightedSfr;
   parent->HotGas += gal->HotGas;
   parent->MetalsHotGas += gal->MetalsHotGas;
   parent->ColdGas += gal->ColdGas;

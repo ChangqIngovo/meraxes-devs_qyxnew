@@ -18,10 +18,11 @@ static inline double u01_from_u64(uint64_t x)
     return ((x >> 11) + 0.5) * (1.0 / 9007199254740992.0);
 }
 
-double apply_lognormal_scatter_from_mean_id(double mean_esc,
-                                            double scatter_dex,
-                                            unsigned long galaxy_id,
-                                            uint64_t salt)
+double apply_lognormal_scatter_from_mean_id(
+    double mean_esc,
+    double scatter_dex,
+    unsigned long galaxy_id,
+    uint64_t salt)
 {
     double sigma_ln, zeta;
     double u, g, val;
@@ -34,12 +35,10 @@ double apply_lognormal_scatter_from_mean_id(double mean_esc,
         return mean_esc;
 
     sigma_ln = log(10.0) * scatter_dex;
-    zeta     = log(mean_esc) - 0.5 * sigma_ln * sigma_ln;
-
+    zeta = log(mean_esc);
     h = splitmix64(((uint64_t)galaxy_id) ^ salt);
     u = u01_from_u64(h);
     g = gsl_cdf_ugaussian_Pinv(u);
-
     val = exp(zeta + sigma_ln * g);
     return val;
 }

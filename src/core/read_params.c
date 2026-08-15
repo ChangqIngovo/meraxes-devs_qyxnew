@@ -172,13 +172,7 @@ void read_parameter_file(char* fname, int mode)
       required_tag[n_param] = 1;
 #endif
       params_type[n_param++] = PARAM_TYPE_STRING;
-
-      strncpy(params_tag[n_param], "SHMRTableFile", tag_length);
-      params_addr[n_param] = run_params->SHMRTableFile;
-      required_tag[n_param] = 0;
-      params_type[n_param++] = PARAM_TYPE_STRING;
-      *(run_params->SHMRTableFile) = '\0';
-
+            
       strcpy(params_tag[n_param], "TargetSnaps");
       params_addr[n_param] = run_params->TargetSnaps;
 #ifndef CALC_MAGS
@@ -490,6 +484,11 @@ void read_parameter_file(char* fname, int mode)
 #else
       required_tag[n_param] = 0;
 #endif
+      params_type[n_param++] = PARAM_TYPE_INT;
+
+      strncpy(params_tag[n_param],"Flag_SourceRecalibration",tag_length);
+      params_addr[n_param] =&(run_params->physics).Flag_SourceRecalibration;
+      required_tag[n_param] = 1;
       params_type[n_param++] = PARAM_TYPE_INT;
 
       strncpy(params_tag[n_param], "SfEfficiency", tag_length);

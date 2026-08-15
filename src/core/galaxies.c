@@ -46,6 +46,15 @@ galaxy_t* new_galaxy(int snapshot, unsigned long halo_ID)
   gal->Rcool = 0.0;
   gal->StellarMass = 0.0;
   gal->GrossStellarMass = 0.0;
+  gal->SourceGrossStellarMass = 0.0;
+  gal->SourceFescWeightedGSM = 0.0;
+  gal->DeltaFescWeightedGSMRaw = 0.0;
+  gal->DeltaFescWeightedGSMTarget = 0.0;
+  gal->DeltaFescWeightedSfrRaw = 0.0;
+  gal->DeltaFescWeightedSfrTarget = 0.0;
+#if USE_MINI_HALOS
+  gal->SourceFescIIIWeightedGSM = 0.0;
+#endif
   gal->Fesc = 1.0;
   gal->FescWeightedGSM = 0.0;
   gal->MetalsStellarMass = 0.0;
@@ -181,8 +190,6 @@ void reset_galaxy_properties(galaxy_t* gal, int snapshot)
   gal->FescWeightedSfr = 0.0;
   gal->Mcool = 0.0;
   gal->Rcool = 0.0;
-  gal->MvirCrit = 0.0;
-  gal->MvirCrit_MC = 0.0;
   gal->tau_cgm = 0.0;
   gal->cumulative_ionization = 0.0;
   gal->BHemissivity = 0.0;
@@ -194,6 +201,22 @@ void reset_galaxy_properties(galaxy_t* gal, int snapshot)
   gal->BlackHoleAccretedHotMass = 0.0;
   gal->BlackHoleAccretedColdMass = 0.0;
   gal->t_resp = 1e30;
+  /*
+ * MvirCrit is assigned from the reionization grid before the physics step
+ * and is used by gas_infall() through reionization_modifier().
+ *
+ * Therefore, do not reset it when patchy reionization feedback is active.
+ * Otherwise the assigned UVB feedback signal is erased before gas infall.
+ *
+ * In no-feedback runs, explicitly clear it so stale values cannot leak into
+ * diagnostics or later branches.
+ */
+  if (!(run_globals.params.ReionUVBFlag &&
+        run_globals.params.Flag_PatchyReion &&
+        run_globals.params.physics.Flag_ReionizationModifier != 0)) {
+    gal->MvirCrit = 0.0;
+    gal->MvirCrit_MC = 0.0;
+  }
 #if USE_MINI_HALOS
   gal->SfrIII = 0.0;
   gal->FescIIIWeightedSfr = 0.0;

@@ -74,6 +74,8 @@ extern "C"
   void filter(fftwf_complex* box, int local_ix_start, int slab_nx, int grid_dim, float R, int filter_type);
   void velocity_gradient(fftwf_complex* box, int slab_nx, int grid_dim);
 
+  void init_reion_source_tables(void);
+  void prepare_reionization_sources(int snapshot);
 #ifdef __cplusplus
 }
 #endif

@@ -16,85 +16,9 @@
 #include "read_grids.h"
 #include "reionization.h"
 #include "virial_properties.h"
+#include "no_shmr_sources.h"
+#include "fesc_recalibration.h"
 #include "lognormalscatter.h"
-
-static void load_shmr_table_bin(const char *fname)
-{
-  FILE *fp;
-  size_t n_expect, n_read;
-
-  if (fname == NULL || strlen(fname) == 0) {
-    mlog_error("Flag_RemoveSHMRScatter=1 but SHMRTableFile is empty.");
-    ABORT(EXIT_FAILURE);
-  }
-
-  fp = fopen(fname, "rb");
-  if (fp == NULL) {
-    mlog_error("Could not open SHMR table file: %s", fname);
-    ABORT(EXIT_FAILURE);
-  }
-
-  n_expect = (size_t)SHMR_NSNAPS * (size_t)SHMR_NTYPES * (size_t)SHMR_NX;
-  n_read   = fread(run_globals.SHMRs, sizeof(float), n_expect, fp);
-
-  fclose(fp);
-
-  if (n_read != n_expect) {
-    mlog_error("Failed to read SHMR table correctly from %s (read %zu, expected %zu).",
-               fname, n_read, n_expect);
-    ABORT(EXIT_FAILURE);
-  }
-
-  mlog("Loaded SHMR table from %s", MLOG_MESG, fname);
-}
-
-static double get_shmr_log10mstar(const galaxy_t *gal, int snapshot)
-{
-  double log10Mvir;
-  int t, index_left, index_right;
-  double x0, x1, y0, y1;
-
-  t = gal->Type;
-  if (t < 0 || t >= SHMR_NTYPES)
-    t = 0;
-
-  if (snapshot < 0)
-    snapshot = 0;
-  if (snapshot >= SHMR_NSNAPS)
-    snapshot = SHMR_NSNAPS - 1;
-
-  if (gal->Mvir <= 0.0)
-    return run_globals.SHMRs[snapshot][t][0];
-
-  log10Mvir = log10(gal->Mvir);
-
-  if (log10Mvir <= SHMR_XMIN)
-    return run_globals.SHMRs[snapshot][t][0];
-
-  if (log10Mvir >= SHMR_XMAX)
-    return run_globals.SHMRs[snapshot][t][SHMR_NX - 1];
-
-  index_left = (int)((log10Mvir - SHMR_XMIN) / SHMR_DX);
-
-  if (index_left < 0)
-    index_left = 0;
-  if (index_left > SHMR_NX - 2)
-    index_left = SHMR_NX - 2;
-
-  index_right = index_left + 1;
-
-  x0 = SHMR_XMIN + SHMR_DX * index_left;
-  x1 = SHMR_XMIN + SHMR_DX * index_right;
-
-  y0 = run_globals.SHMRs[snapshot][t][index_left];
-  y1 = run_globals.SHMRs[snapshot][t][index_right];
-
-  if (x1 <= x0)
-    return y0;
-
-  return y0 * (x1 - log10Mvir) / (x1 - x0)
-       + y1 * (log10Mvir - x0) / (x1 - x0);
-}
 
 void update_galaxy_fesc_vals(galaxy_t* gal, double new_stars, int snapshot)
 {
@@ -205,37 +129,39 @@ void update_galaxy_fesc_vals(galaxy_t* gal, double new_stars, int snapshot)
       mlog_error("Unrecognised EscapeFracDependency parameter value.");
   }
 
-        // apply lognormal scatter //
-if (params->EscapeFracScatterDex > 0.0) {
-    fesc = apply_lognormal_scatter_from_mean_id(
-        fesc,
-        params->EscapeFracScatterDex,
-        gal->ID,
-        0xA5A5A5A5A5A5A5A5ULL
-    );
-
-#if USE_MINI_HALOS
-    fescIII = apply_lognormal_scatter_from_mean_id(
-        fescIII,
-        params->EscapeFracScatterDex,
-        gal->ID,
-        0x5A5A5A5A5A5A5A5AULL
-    );
-#endif
-}
-
-  // CGM suppression of fesc based on pre-computed tau_cgm (optical depth formulation)
-  // Flag_FescCGMSuppression modes: 1 = instantaneous Gamma12, 2 = cumulative Gamma12, 3 = clumping factor
+  /* Apply CGM suppression before defining the no-scatter target. */
   if ((params->Flag_FescCGMSuppression > 0) && (gal->tau_cgm > 0.0)) {
-    // Suppression through optical depth: fesc_suppressed = fesc * exp(-tau_CGM)
-    // tau_cgm is computed during reionization grid processing and stored per galaxy
-    
     double suppression = exp(-gal->tau_cgm);
     fesc *= suppression;
 #if USE_MINI_HALOS
     fescIII *= suppression;
 #endif
   }
+
+  CLAMP_0_1(fesc);
+#if USE_MINI_HALOS
+  CLAMP_0_1(fescIII);
+#endif
+
+  const double fesc_target = fesc;
+#if USE_MINI_HALOS
+  const double fescIII_target = fescIII;
+#endif
+
+  fesc = fesc_recalibration_apply_scatter(
+      fesc_target,
+      gal->ID,
+      0xA5A5A5A5A5A5A5A5ULL
+  );
+
+#if USE_MINI_HALOS
+  fescIII = apply_lognormal_scatter_from_mean_id(
+      fescIII_target,
+      params->EscapeFracScatterDex,
+      gal->ID,
+      0x5A5A5A5A5A5A5A5AULL
+  );
+#endif
 
   CLAMP_0_1(fesc);
 
@@ -248,19 +174,7 @@ if (params->EscapeFracScatterDex > 0.0) {
 #if USE_MINI_HALOS
   if (gal->Galaxy_Population == 2) {
     gal->Fesc = fesc;
-
-    if (params->Flag_RemoveSHMRScatter) {
-      double log10_mstar;
-
-      log10_mstar = get_shmr_log10mstar(gal, snapshot);
-
-      gal->GrossStellarMass = pow(10.0, log10_mstar);
-      gal->FescWeightedGSM  = gal->GrossStellarMass * fesc;
-    }
-    else {
-      gal->FescWeightedGSM += new_stars * fesc;
-    }
-
+    gal->FescWeightedGSM += new_stars * fesc;
     gal->FescWeightedSfr += gal->Sfr * fesc;
   }
 
@@ -271,19 +185,7 @@ if (params->EscapeFracScatterDex > 0.0) {
   }
 #else
   gal->Fesc = fesc;
-
-  if (params->Flag_RemoveSHMRScatter) {
-    double log10_mstar;
-
-    log10_mstar = get_shmr_log10mstar(gal, snapshot);
-
-    gal->GrossStellarMass = pow(10.0, log10_mstar);
-    gal->FescWeightedGSM  = gal->GrossStellarMass * fesc;
-  }
-  else {
-    gal->FescWeightedGSM += new_stars * fesc;
-  }
-
+  gal->FescWeightedGSM += new_stars * fesc;
   gal->FescWeightedSfr += gal->Sfr * fesc;
 #endif
 
@@ -470,6 +372,8 @@ void call_ComputeTs(int snapshot, int nout_gals, timer_info* timer)
 
 void init_reion_grids()
 {
+  fesc_recalibration_init();
+
   reion_grids_t* grids = &(run_globals.reion_grids);
   int ReionGridDim = run_globals.params.ReionGridDim;
   ptrdiff_t* slab_nix = run_globals.reion_grids.slab_nix;
@@ -709,15 +613,6 @@ void malloc_reionization_grids()
       fftwf_mpi_broadcast_wisdom(run_globals.mpi_comm);
     }
   }
-
-    if (run_globals.params.physics.Flag_RemoveSHMRScatter) {
-      load_shmr_table_bin(run_globals.params.physics.SHMRTableFile);
-      mlog("Flag_RemoveSHMRScatter = 1, using SHMR table source model.", MLOG_MESG);
-    }
-    else {
-      mlog("Flag_RemoveSHMRScatter = 0, using original stochastic new_stars source model.", MLOG_MESG);
-    }
-    
   // run_globals.NStoreSnapshots is set in `initialize_halo_storage`
   run_globals.SnapshotDeltax = (float**)calloc((size_t)run_globals.NStoreSnapshots, sizeof(float*));
   run_globals.SnapshotVel = (float**)calloc((size_t)run_globals.NStoreSnapshots, sizeof(float*));
@@ -1330,6 +1225,9 @@ void free_reionization_grids()
 
   fftwf_free(grids->buffer);
 
+  fesc_recalibration_free();
+  no_shmr_sources_free();
+
   mlog(" ...done", MLOG_CLOSE);
 }
 
@@ -1756,6 +1654,8 @@ void construct_baryon_grids(int snapshot, int local_ngals)
   ptrdiff_t* slab_ix_start = run_globals.reion_grids.slab_ix_start;
   int local_n_complex = (int)(run_globals.reion_grids.slab_n_complex[run_globals.mpi_rank]);
 
+  no_shmr_sources_apply(snapshot);
+
   mlog("Constructing stellar mass and sfr grids...", MLOG_OPEN | MLOG_TIMERSTART);
 
   // init the grid
@@ -2022,6 +1922,8 @@ void construct_baryon_grids(int snapshot, int local_ngals)
          N_BlackHoleMassLimitReion,
          run_globals.params.physics.BlackHoleMassLimitReion);
   }
+
+  no_shmr_sources_restore();
 
   mlog("done", MLOG_CLOSE | MLOG_TIMERSTOP);
 }

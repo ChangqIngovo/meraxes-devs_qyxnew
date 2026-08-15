@@ -242,6 +242,7 @@ EscapeFracPropScaling      : 0.5
 EscapeFracBHNorm           : 1
 EscapeFracBHScaling        : 0
 EscapeFracScatterDex       : 0.0
+Flag_SourceRecalibration   : 0
 
 FescCGMSuppressionNorm     : 0.00008 # CGM suppression normalization
 FescCGMSuppressionScaling  : 0.2 # scaling index with column density

@@ -72,7 +72,12 @@ void cleanup()
   free(run_globals.LTTime);
   free(run_globals.ZZ);
   free(run_globals.AA);
+  free(run_globals.SHMRs);
+  free(run_globals.SFRs);
 
+  run_globals.SHMRs = NULL;
+  run_globals.SFRs = NULL;
+  run_globals.SourceTableNSnaps = 0;
   if (run_globals.gpu != NULL)
     free(run_globals.gpu);
 

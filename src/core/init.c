@@ -246,6 +246,14 @@ void init_meraxes()
   // read the input snaps list
   read_snap_list();
 
+  // Initialise runtime SHMR/SFR source tables
+  run_globals.SourceTableNSnaps =
+      run_globals.params.SnaplistLength;
+
+  run_globals.SHMRs = NULL;
+  run_globals.SFRs = NULL;
+
+  init_reion_source_tables();
   // parse the requested output snaps
   parse_output_snaps(run_globals.params.OutputSnapsString);
 
@@ -255,7 +263,6 @@ void init_meraxes()
     run_globals.LTTime[i] = time_to_present(run_globals.ZZ[i]);
     run_globals.rhocrit[i] = 3 * pow(hubble_at_snapshot(i), 2) / (8 * M_PI * run_globals.G);
   }
-
   // validation checks
   if (run_globals.params.Flag_IncludeSpinTemp) {
     if (run_globals.params.physics.ReionMaxHeatingRedshift > run_globals.ZZ[0]) {
