@@ -128,9 +128,11 @@ void update_galaxy_fesc_vals(galaxy_t* gal, double new_stars, int snapshot)
     default:
       mlog_error("Unrecognised EscapeFracDependency parameter value.");
   }
-
-  /* Apply CGM suppression before defining the no-scatter target. */
+  // CGM suppression of fesc based on pre-computed tau_cgm (optical depth formulation)
+  // Flag_FescCGMSuppression modes: 1 = instantaneous Gamma12, 2 = cumulative Gamma12, 3 = clumping factor
   if ((params->Flag_FescCGMSuppression > 0) && (gal->tau_cgm > 0.0)) {
+    // Suppression through optical depth: fesc_suppressed = fesc * exp(-tau_CGM)
+    // tau_cgm is computed during reionization grid processing and stored per galaxy
     double suppression = exp(-gal->tau_cgm);
     fesc *= suppression;
 #if USE_MINI_HALOS
