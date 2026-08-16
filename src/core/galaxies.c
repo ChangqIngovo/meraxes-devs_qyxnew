@@ -48,13 +48,8 @@ galaxy_t* new_galaxy(int snapshot, unsigned long halo_ID)
   gal->GrossStellarMass = 0.0;
   gal->SourceGrossStellarMass = 0.0;
   gal->SourceFescWeightedGSM = 0.0;
-  gal->DeltaFescWeightedGSMRaw = 0.0;
-  gal->DeltaFescWeightedGSMTarget = 0.0;
-  gal->DeltaFescWeightedSfrRaw = 0.0;
-  gal->DeltaFescWeightedSfrTarget = 0.0;
-#if USE_MINI_HALOS
-  gal->SourceFescIIIWeightedGSM = 0.0;
-#endif
+  gal->TargetFescWeightedGSM = 0.0;
+  gal->TargetFescWeightedSfr = 0.0;
   gal->Fesc = 1.0;
   gal->FescWeightedGSM = 0.0;
   gal->MetalsStellarMass = 0.0;
@@ -188,6 +183,7 @@ void reset_galaxy_properties(galaxy_t* gal, int snapshot)
   gal->LOIII = 0.0;
   gal->ionization_param = 0.0;
   gal->FescWeightedSfr = 0.0;
+  gal->TargetFescWeightedSfr = 0.0;
   gal->Mcool = 0.0;
   gal->Rcool = 0.0;
   gal->tau_cgm = 0.0;

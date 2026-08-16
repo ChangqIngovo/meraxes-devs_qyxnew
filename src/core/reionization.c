@@ -178,6 +178,12 @@ void update_galaxy_fesc_vals(galaxy_t* gal, double new_stars, int snapshot)
     gal->Fesc = fesc;
     gal->FescWeightedGSM += new_stars * fesc;
     gal->FescWeightedSfr += gal->Sfr * fesc;
+    fesc_recalibration_accumulate_popII(
+        gal,
+        new_stars,
+        gal->Sfr,
+        fesc_target
+    );
   }
 
   if (gal->Galaxy_Population == 3) {
@@ -189,6 +195,12 @@ void update_galaxy_fesc_vals(galaxy_t* gal, double new_stars, int snapshot)
   gal->Fesc = fesc;
   gal->FescWeightedGSM += new_stars * fesc;
   gal->FescWeightedSfr += gal->Sfr * fesc;
+  fesc_recalibration_accumulate_popII(
+      gal,
+      new_stars,
+      gal->Sfr,
+      fesc_target
+    );
 #endif
 
   gal->FescBH = fesc_bh;
@@ -1656,6 +1668,7 @@ void construct_baryon_grids(int snapshot, int local_ngals)
   ptrdiff_t* slab_ix_start = run_globals.reion_grids.slab_ix_start;
   int local_n_complex = (int)(run_globals.reion_grids.slab_n_complex[run_globals.mpi_rank]);
 
+  fesc_recalibration_prepare(snapshot);
   no_shmr_sources_apply(snapshot);
 
   mlog("Constructing stellar mass and sfr grids...", MLOG_OPEN | MLOG_TIMERSTART);
@@ -1762,7 +1775,8 @@ void construct_baryon_grids(int snapshot, int local_ngals)
           // They are the same just now, but may be different in the future once the model is improved.
           switch (prop) {
             case prop_stellar:
-              buffer[ind] += gal->FescWeightedGSM; // Only Pop II
+              //buffer[ind] += gal->FescWeightedGSM; // Only Pop II
+              buffer[ind] += fesc_recalibration_grid_gsm(gal); // Only Pop II
               break;
 
             case prop_effective_bhm:
@@ -1791,7 +1805,8 @@ void construct_baryon_grids(int snapshot, int local_ngals)
               break;
 #endif
             case prop_weighted_sfr:
-              buffer[ind] += gal->FescWeightedSfr;
+              //buffer[ind] += gal->FescWeightedSfr;
+              buffer[ind] += fesc_recalibration_grid_sfr(gal);
               break;
 
             case prop_effective_bhar:

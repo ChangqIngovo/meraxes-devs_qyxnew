@@ -668,10 +668,8 @@ typedef struct galaxy_t
   double Fesc;
   double FescWeightedGSM;
   double FescWeightedSfr;
-  double DeltaFescWeightedGSMRaw;
-  double DeltaFescWeightedGSMTarget;
-  double DeltaFescWeightedSfrRaw;
-  double DeltaFescWeightedSfrTarget;
+  double TargetFescWeightedGSM;
+  double TargetFescWeightedSfr;
   double MetalsStellarMass;
   double DiskScaleLength;
   double Sfr;
@@ -695,10 +693,6 @@ typedef struct galaxy_t
                          // = 2)
   double SourceGrossStellarMass;
   double SourceFescWeightedGSM;
-
-#if USE_MINI_HALOS
-  double SourceFescIIIWeightedGSM;
-#endif
 #if USE_MINI_HALOS
   // Differentiation Pop III / Pop II
   double SfrIII;
