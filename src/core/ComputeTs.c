@@ -117,6 +117,7 @@ void _ComputeTs(int snapshot)
     Luminosity_converstion_factor_GAL;
   double collapse_fraction, density_over_mean, collapse_fraction_in_cell;
   double agn_xray_hard_ave = 0.0, agn_xray_soft_ave = 0.0; /* volume-averaged emissivity density, this snapshot */
+  double hmxb_xray_ave = 0.0; /* volume-averaged HMXB (galaxy) X-ray emissivity density, this snapshot */
 
   /*
    * AGN broken power law variables.
@@ -517,6 +518,18 @@ void _ComputeTs(int snapshot)
               SMOOTHED_SFR_GAL[i_smoothedSFR] = (((float*)sfr_filtered)[i_padded] / pixel_volume) *
                                                 (units->UnitMass_in_g / units->UnitTime_in_s) *
                                                 pow(units->UnitLength_in_cm, -3.) / SOLAR_MASS;
+
+              /* HMXB (galaxy/stellar) X-ray emissivity density [erg/s/cm^3], for
+               * the epsilon_X diagnostic (see save.c). LXrayGal is calibrated as
+               * erg/s per (Msun/yr) of SFR (the standard HMXB LX-SFR relation
+               * convention), but SMOOTHED_SFR_GAL just above is a rate density
+               * in Msun/s/cm^3 (code time units, not per year) — SEC_PER_YEAR
+               * reconciles that, same as it does in Luminosity_converstion_factor_GAL's
+               * own normalization just below. Unlike AGN, HMXB has only one band
+               * here (LXrayGal/SpecIndexXrayGal, NuXrayThreshold->NuXraySoftCut),
+               * so there's no separate hard/soft split to track. */
+              hmxb_xray_ave += run_globals.params.physics.LXrayGal * SEC_PER_YEAR *
+                               SMOOTHED_SFR_GAL[i_smoothedSFR];
 #if USE_MINI_HALOS
               ((float*)sfrIII_filtered)[i_padded] = fmaxf(((float*)sfrIII_filtered)[i_padded], 0.0);
 
@@ -579,15 +592,18 @@ void _ComputeTs(int snapshot)
         MPI_Allreduce(MPI_IN_PLACE, &x_e_ave, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
         MPI_Allreduce(MPI_IN_PLACE, &agn_xray_hard_ave, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
         MPI_Allreduce(MPI_IN_PLACE, &agn_xray_soft_ave, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
+        MPI_Allreduce(MPI_IN_PLACE, &hmxb_xray_ave, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
 
         collapse_fraction = collapse_fraction / total_n_cells;
         x_e_ave = x_e_ave / total_n_cells;
         agn_xray_hard_ave = agn_xray_hard_ave / total_n_cells;
         agn_xray_soft_ave = agn_xray_soft_ave / total_n_cells;
+        hmxb_xray_ave = hmxb_xray_ave / total_n_cells;
 
         stored_fcoll[snapshot] = collapse_fraction;
         stored_XrayEmissivity_hard[snapshot] = agn_xray_hard_ave;
         stored_XrayEmissivity_soft[snapshot] = agn_xray_soft_ave;
+        stored_XrayEmissivity_HMXB[snapshot] = hmxb_xray_ave;
 
 #if USE_MINI_HALOS
         MPI_Allreduce(MPI_IN_PLACE, &collapse_fractionIII, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);

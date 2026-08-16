@@ -55,6 +55,11 @@ double stored_fcollIII[1000];
  * stored separately. */
 double stored_XrayEmissivity_hard[1000];
 double stored_XrayEmissivity_soft[1000];
+/* Volume-averaged HMXB (galaxy/stellar) X-ray emissivity density
+ * [erg/s/cm^3] per snapshot. Unlike AGN, this source has only one band
+ * (LXrayGal/SpecIndexXrayGal, integrated NuXrayThreshold->NuXraySoftCut)
+ * so there's no separate hard/soft/total split here. */
+double stored_XrayEmissivity_HMXB[1000];
 double* sum_lyn;
 double* sum_lyn_LW;
 double* sum_lyn_III;
@@ -78,6 +83,7 @@ extern double stored_fcoll[1000];
 extern double stored_fcollIII[1000];
 extern double stored_XrayEmissivity_hard[1000];
 extern double stored_XrayEmissivity_soft[1000];
+extern double stored_XrayEmissivity_HMXB[1000];
 extern double* sum_lyn;
 extern double* sum_lyn_LW;
 extern double* sum_lyn_III;

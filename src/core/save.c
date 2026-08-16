@@ -1946,15 +1946,22 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
        * density this snapshot [erg/s/cm^3], for an epsilon_X-style curve vs
        * redshift. Already fully MPI-reduced across ranks back in ComputeTs.c
        * (MPI_Allreduce), so every rank already holds the correct global
-       * value here — no further reduction needed. */
+       * value here — no further reduction needed.
+       *
+       * XrayEmissivity_HMXB: the same, for the galaxy/stellar HMXB source
+       * (LXrayGal-normalized). Kept separate from XrayEmissivity_total,
+       * which remains AGN-only (hard+soft) — HMXB is a different source
+       * population, not folded in. */
       {
         hsize_t one = 1;
         double xray_hard  = stored_XrayEmissivity_hard[run_globals.ListOutputSnaps[i_out]];
         double xray_soft  = stored_XrayEmissivity_soft[run_globals.ListOutputSnaps[i_out]];
         double xray_total = xray_hard + xray_soft;
+        double xray_hmxb  = stored_XrayEmissivity_HMXB[run_globals.ListOutputSnaps[i_out]];
         H5LTmake_dataset_double(grp, "XrayEmissivity_hard",  1, &one, &xray_hard);
         H5LTmake_dataset_double(grp, "XrayEmissivity_soft",  1, &one, &xray_soft);
         H5LTmake_dataset_double(grp, "XrayEmissivity_total", 1, &one, &xray_total);
+        H5LTmake_dataset_double(grp, "XrayEmissivity_HMXB",  1, &one, &xray_hmxb);
       }
 
       H5Gclose(grp);
