@@ -11,7 +11,7 @@
 #include "reionization.h"
 #include "utils.h"
 
-/* All files are identical to meraxes-devs forest branch:
+/*
  * This code is a re-write of the spin temperature calculation (Ts.c) within 21cmFAST.
  * Modified for usage within Meraxes by Bradley Greig.
  *
@@ -28,6 +28,20 @@
  * we are still considering for the UV ionizing feedback from Pop III (xHI, and xe are computed using both PopII and Pop
  * III)
  */
+
+/* 26 Apr. 2026 - F.Shaban
+ * AGN broken power law prefactors — file-scope globals, analogous to
+ * const_zp_prefactor_GAL which is declared as a global in XRayHeatingFunctions.h.
+ *
+ * YOU MUST ALSO ADD these two lines to XRayHeatingFunctions.h alongside the
+ * existing "double const_zp_prefactor_GAL;" declaration:
+ *
+ *   double const_zp_prefactor_AGN_soft;
+ *   double const_zp_prefactor_AGN_hard;
+ *
+ * These are set once per snapshot in _ComputeTs() and used in the cell loop.
+ */
+
 
 int set_sfr_history()
 {
@@ -102,6 +116,42 @@ void _ComputeTs(int snapshot)
   double prev_zpp, prev_R, zpp, zp, lower_int_limit_GAL, filling_factor_of_HI_zp, R_factor, R, nuprime, dzp,
     Luminosity_converstion_factor_GAL;
   double collapse_fraction, density_over_mean, collapse_fraction_in_cell;
+  double agn_xray_hard_ave = 0.0, agn_xray_soft_ave = 0.0; /* volume-averaged emissivity density, this snapshot */
+
+  /*
+   * AGN broken power law variables.
+   *
+   * Physical motivation: AGN emit a broken power law SED. Hard X-rays (Gamma_hard, alpha_hard)
+   * are emitted at high z'' and redshift into the soft band by the time they reach the observer
+   * at z'. Soft X-rays (Gamma_soft, alpha_soft) are the intrinsic soft emission from the same
+   * AGN population at the observation redshift.
+   * We treat these as two separate spectral components with a break at nu_break,
+   * each with its own luminosity conversion factor, spectral index, and frequency integral tables.
+   *
+   * The break frequency nu_break separates:
+   *   soft component: nu_threshold -> nu_break   (alpha_soft, locally absorbed, heats nearby IGM)
+   *   hard component: nu_break     -> nu_hard_cut (alpha_hard, long mfp, heats IGM globally;
+   *                                                also represents hard photons from high-z AGN
+   *                                                redshifted into soft band at lower z)
+   *
+   * Parameters in run_globals.params.physics:
+   *   NuXrayThreshold      - minimum X-ray frequency for AGN (eV)
+   *   NuXraySoftCut        - soft/hard band break (eV)
+   *   NuXrayMax            - hard-band upper cutoff (eV)
+   *   SpecIndexXrayAGNSoft - spectral index alpha for soft component (nu^-alpha)
+   *   SpecIndexXrayAGNHard - spectral index alpha for hard component (nu^-alpha)
+   * Source amplitudes are independent per band (Option 2): per-cell
+   * BHXrayEmissivity (hard, erg/s) → SMOOTHED_AGN, and per-cell
+   * BHXrayEmissivity_soft (soft, erg/s) → SMOOTHED_AGN_soft [erg/s/cm^3
+   * each]. Each is obscuration-corrected in its own band already in
+   * blackhole_feedback.c — the soft amplitude is NOT derived from the
+   * hard one via any SED ratio; it has its own independent source.
+   */
+  double lower_int_limit_AGN_soft;
+  double lower_int_limit_AGN_hard;
+  double Luminosity_converstion_factor_AGN_soft;  /* soft band: nu_thresh -> nu_break   */
+  double Luminosity_converstion_factor_AGN_hard;  /* hard band: nu_break  -> nu_hard_cut */
+  double agn_emissivity_zpp;       /* AGN emissivity at shell redshift z'': integral of LF x SED */
 
 #if USE_MINI_HALOS
   double Luminosity_converstion_factor_III, collapse_fractionIII, collapse_fractionIII_in_cell;
@@ -125,6 +175,34 @@ void _ComputeTs(int snapshot)
   double freq_int_heat_tbl_GAL[x_int_NXHII][TsNumFilterSteps], freq_int_ion_tbl_GAL[x_int_NXHII][TsNumFilterSteps],
     freq_int_lya_tbl_GAL[x_int_NXHII][TsNumFilterSteps];
 
+  /* AGN broken power law: separate tables for soft and hard spectral components.
+   * soft = intrinsic soft emission + redshifted hard becoming soft
+   * hard = hard emission still in hard band at observation redshift */
+  double freq_int_heat_tbl_AGN_soft[x_int_NXHII][TsNumFilterSteps];
+  double freq_int_ion_tbl_AGN_soft[x_int_NXHII][TsNumFilterSteps];
+  double freq_int_lya_tbl_AGN_soft[x_int_NXHII][TsNumFilterSteps];
+  double freq_int_heat_tbl_AGN_hard[x_int_NXHII][TsNumFilterSteps];
+  double freq_int_ion_tbl_AGN_hard[x_int_NXHII][TsNumFilterSteps];
+  double freq_int_lya_tbl_AGN_hard[x_int_NXHII][TsNumFilterSteps];
+
+  /* Per-cell interpolated AGN integrals — kept separate for soft and hard
+   * so that Flag_includeAGN can select which components contribute:
+   *   0 = no AGN
+   *   1 = soft + hard
+   *   2 = hard only
+   *   3 = soft only                                                      */
+  double freq_int_heat_AGN_soft[TsNumFilterSteps];
+  double freq_int_ion_AGN_soft[TsNumFilterSteps];
+  double freq_int_lya_AGN_soft[TsNumFilterSteps];
+  double freq_int_heat_AGN_hard[TsNumFilterSteps];
+  double freq_int_ion_AGN_hard[TsNumFilterSteps];
+  double freq_int_lya_AGN_hard[TsNumFilterSteps];
+  /* Combined arrays passed to evolveInt — filled from soft/hard
+   * according to Flag_includeAGN before each evolveInt call.           */
+  double freq_int_heat_AGN[TsNumFilterSteps];
+  double freq_int_ion_AGN[TsNumFilterSteps];
+  double freq_int_lya_AGN[TsNumFilterSteps];
+
 #if USE_MINI_HALOS
   double freq_int_heat_tbl_III[x_int_NXHII][TsNumFilterSteps], freq_int_ion_tbl_III[x_int_NXHII][TsNumFilterSteps],
     freq_int_lya_tbl_III[x_int_NXHII][TsNumFilterSteps];
@@ -136,6 +214,10 @@ void _ComputeTs(int snapshot)
 
   double ans[2], dansdz[20], xHII_call;
   double SFR_GAL[TsNumFilterSteps];
+  /* AGN source term per shell — kept separate for soft and hard so that
+   * Flag_includeAGN can zero out either component independently.        */
+  double XAGN_soft[TsNumFilterSteps];
+  double XAGN_hard[TsNumFilterSteps];
 
 #if USE_MINI_HALOS
   double SFR_III[TsNumFilterSteps];
@@ -162,6 +244,8 @@ void _ComputeTs(int snapshot)
 #endif
 
   double* SMOOTHED_SFR_GAL = run_globals.reion_grids.SMOOTHED_SFR_GAL;
+  double* SMOOTHED_AGN      = run_globals.reion_grids.SMOOTHED_AGN;
+  double* SMOOTHED_AGN_soft = run_globals.reion_grids.SMOOTHED_AGN_soft;
 #if USE_MINI_HALOS
   double* SMOOTHED_SFR_III = run_globals.reion_grids.SMOOTHED_SFR_III;
 #endif
@@ -173,6 +257,10 @@ void _ComputeTs(int snapshot)
 
   double J_alpha_ave, xalpha_ave, Xheat_ave, Xion_ave, J_LW_ave;
   J_alpha_ave = xalpha_ave = Xheat_ave = Xion_ave = J_LW_ave = 0.0;
+
+  /* AGN diagnostic averages — kept separate to track soft/hard contributions */
+  double Xheat_ave_AGN_soft = 0.0;
+  double Xheat_ave_AGN_hard = 0.0;
 
 #if USE_MINI_HALOS
   double J_alpha_aveII, xalpha_aveII, Xheat_aveII, J_LW_aveII;
@@ -437,6 +525,25 @@ void _ComputeTs(int snapshot)
                                                 pow(units->UnitLength_in_cm, -3.) / SOLAR_MASS;
 #endif
 
+              /* Populate SMOOTHED_AGN(_soft) from the per-cell BHXrayEmissivity(_soft)
+               * (erg/s). Divide by pixel volume and convert to erg/s/cm^3 so the
+               * AGN source amplitude in the heating integral is the actual
+               * luminosity density from individual black holes, not a global
+               * constant. Hard and soft are independent amplitudes (Option 2) —
+               * each stays paired with its own band all the way to evolveInt(). */
+              if (SMOOTHED_AGN != NULL && run_globals.reion_grids.BHXrayEmissivity != NULL) {
+                float bh = fmaxf(run_globals.reion_grids.BHXrayEmissivity[i_padded], 0.0f);
+                SMOOTHED_AGN[i_smoothedSFR] = (double)bh / pixel_volume
+                                              * pow(units->UnitLength_in_cm, -3.0);
+                agn_xray_hard_ave += SMOOTHED_AGN[i_smoothedSFR];
+              }
+              if (SMOOTHED_AGN_soft != NULL && run_globals.reion_grids.BHXrayEmissivity_soft != NULL) {
+                float bh_soft = fmaxf(run_globals.reion_grids.BHXrayEmissivity_soft[i_padded], 0.0f);
+                SMOOTHED_AGN_soft[i_smoothedSFR] = (double)bh_soft / pixel_volume
+                                                   * pow(units->UnitLength_in_cm, -3.0);
+                agn_xray_soft_ave += SMOOTHED_AGN_soft[i_smoothedSFR];
+              }
+
               density_over_mean = 1.0 + run_globals.reion_grids.deltax[i_padded];
 
               collapse_fraction_in_cell =
@@ -466,11 +573,17 @@ void _ComputeTs(int snapshot)
 
         MPI_Allreduce(MPI_IN_PLACE, &collapse_fraction, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
         MPI_Allreduce(MPI_IN_PLACE, &x_e_ave, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
+        MPI_Allreduce(MPI_IN_PLACE, &agn_xray_hard_ave, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
+        MPI_Allreduce(MPI_IN_PLACE, &agn_xray_soft_ave, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
 
         collapse_fraction = collapse_fraction / total_n_cells;
         x_e_ave = x_e_ave / total_n_cells;
+        agn_xray_hard_ave = agn_xray_hard_ave / total_n_cells;
+        agn_xray_soft_ave = agn_xray_soft_ave / total_n_cells;
 
         stored_fcoll[snapshot] = collapse_fraction;
+        stored_XrayEmissivity_hard[snapshot] = agn_xray_hard_ave;
+        stored_XrayEmissivity_soft[snapshot] = agn_xray_soft_ave;
 
 #if USE_MINI_HALOS
         MPI_Allreduce(MPI_IN_PLACE, &collapse_fractionIII, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
@@ -501,6 +614,17 @@ void _ComputeTs(int snapshot)
                                                 (units->UnitMass_in_g / units->UnitTime_in_s) *
                                                 pow(units->UnitLength_in_cm, -3.) / SOLAR_MASS;
 #endif
+
+              if (SMOOTHED_AGN != NULL && run_globals.reion_grids.BHXrayEmissivity != NULL) {
+                float bh = fmaxf(run_globals.reion_grids.BHXrayEmissivity[i_padded], 0.0f);
+                SMOOTHED_AGN[i_smoothedSFR] = (double)bh / pixel_volume
+                                              * pow(units->UnitLength_in_cm, -3.0);
+              }
+              if (SMOOTHED_AGN_soft != NULL && run_globals.reion_grids.BHXrayEmissivity_soft != NULL) {
+                float bh_soft = fmaxf(run_globals.reion_grids.BHXrayEmissivity_soft[i_padded], 0.0f);
+                SMOOTHED_AGN_soft[i_smoothedSFR] = (double)bh_soft / pixel_volume
+                                                   * pow(units->UnitLength_in_cm, -3.0);
+              }
             }
       }
 
@@ -585,6 +709,93 @@ void _ComputeTs(int snapshot)
                                                                run_globals.params.physics.SpecIndexXrayIII,
                                                                2);
 #endif
+      }
+
+
+
+      if (run_globals.params.physics.Flag_includeAGN > 0) {
+      /*
+       * Frequency integral tables for AGN broken power law.
+       *
+       * Soft component: integrate from max(nu_tau_one, nu_thresh_AGN) to nu_break.
+       *   This captures locally absorbed soft photons AND hard photons from high-z
+       *   AGN that have redshifted into the soft band by the time they reach z'.
+       *   The lower limit from nu_tau_one automatically handles the optical depth
+       *   cutoff — below tau=1 the photons are absorbed in the IGM before reaching
+       *   the cell, so we exclude them.
+       *
+       * Hard component: integrate from max(nu_tau_one, nu_break) to nu_hard_cut.
+       *   These are hard photons still in the hard band at z'. They have long mean
+       *   free paths and heat the IGM more uniformly. Their lower limit starts at
+       *   nu_break to avoid double-counting with the soft component.
+       */
+
+      /* Soft band lower limit: opacity cutoff or AGN threshold, whichever is higher */
+      lower_int_limit_AGN_soft = fmax(
+        nu_tau_one(zp, zpp, x_e_ave, filling_factor_of_HI_zp, snapshot),
+        run_globals.params.physics.NuXrayThreshold * NU_over_EV);
+
+      /* Hard band lower limit: start at break frequency (no double counting) */
+      lower_int_limit_AGN_hard = fmax(
+        nu_tau_one(zp, zpp, x_e_ave, filling_factor_of_HI_zp, snapshot),
+        run_globals.params.physics.NuXrayThreshold * NU_over_EV);
+
+      /* AGN source amplitudes are per-cell, independently per band, from
+       * SMOOTHED_AGN/SMOOTHED_AGN_soft (set in the cell loop below from
+       * the BHXrayEmissivity/BHXrayEmissivity_soft ring-buffers). Zero
+       * the shell-level arrays here; they will be overwritten per cell. */
+      agn_emissivity_zpp  = 0.0;
+      XAGN_soft[R_ct]  = 0.0;
+      XAGN_hard[R_ct]  = 0.0;
+
+      for (x_e_ct = 0; x_e_ct < x_int_NXHII; x_e_ct++) {
+
+        /* Soft component integrals: alpha_soft, from lower_soft to nu_break */
+        freq_int_heat_tbl_AGN_soft[x_e_ct][R_ct] = integrate_over_nu(
+          zp, x_int_XHII[x_e_ct],
+          lower_int_limit_AGN_soft,
+          run_globals.params.physics.NuXrayThreshold,
+          run_globals.params.physics.SpecIndexXrayAGNSoft, 0);
+
+        freq_int_ion_tbl_AGN_soft[x_e_ct][R_ct] = integrate_over_nu(
+          zp, x_int_XHII[x_e_ct],
+          lower_int_limit_AGN_soft,
+          run_globals.params.physics.NuXrayThreshold,
+          run_globals.params.physics.SpecIndexXrayAGNSoft, 1);
+
+        freq_int_lya_tbl_AGN_soft[x_e_ct][R_ct] = integrate_over_nu(
+          zp, x_int_XHII[x_e_ct],
+          lower_int_limit_AGN_soft,
+          run_globals.params.physics.NuXrayThreshold,
+          run_globals.params.physics.SpecIndexXrayAGNSoft, 2);
+
+        /*
+         * Hard component integrals: alpha_hard, from lower_hard to nu_hard_cut.
+         * Note: we pass NuXrayThreshold as the "threshold" argument so that
+         * integrate_over_nu normalises the power law to the hard-band pivot,
+         * consistent with how the luminosity conversion was computed above.
+         */
+        freq_int_heat_tbl_AGN_hard[x_e_ct][R_ct] = integrate_over_nu(
+          zp, x_int_XHII[x_e_ct],
+          lower_int_limit_AGN_hard,
+          run_globals.params.physics.NuXrayThreshold,
+          run_globals.params.physics.SpecIndexXrayAGNHard, 0);
+
+        freq_int_ion_tbl_AGN_hard[x_e_ct][R_ct] = integrate_over_nu(
+          zp, x_int_XHII[x_e_ct],
+          lower_int_limit_AGN_hard,
+          run_globals.params.physics.NuXrayThreshold,
+          run_globals.params.physics.SpecIndexXrayAGNHard, 1);
+
+        freq_int_lya_tbl_AGN_hard[x_e_ct][R_ct] = integrate_over_nu(
+          zp, x_int_XHII[x_e_ct],
+          lower_int_limit_AGN_hard,
+          run_globals.params.physics.NuXrayThreshold,
+          run_globals.params.physics.SpecIndexXrayAGNHard, 2);
+      }
+      } else {
+        XAGN_soft[R_ct] = 0.0;
+        XAGN_hard[R_ct] = 0.0;
       }
 
       // and create the sum over Lya transitions from direct Lyn flux
@@ -698,6 +909,75 @@ void _ComputeTs(int snapshot)
 
     Luminosity_converstion_factor_GAL *= (SEC_PER_YEAR) / (PLANCK);
 
+    /*
+     * AGN broken power law luminosity conversion.
+     *
+     * The AGN SED is split at nu_break into two power laws:
+     *
+     *   Soft: L(nu) ~ nu^{-alpha_soft}   for nu_thresh < nu < nu_break
+     *   Hard: L(nu) ~ nu^{-alpha_hard}   for nu_break  < nu < nu_hard_cut
+     *
+     * Physical meaning of the hard component: hard X-ray photons emitted by AGN
+     * at high z'' travel through the IGM and redshift into the soft band by the
+     * time they arrive at the observation redshift z'. This means a photon emitted
+     * at energy E_emit = hnu_emit at z'' arrives at:
+     *
+     *     E_obs = E_emit * (1+z') / (1+z'')
+     *
+     * So hard photons from shells at large R (high z'') arrive as soft photons at z'.
+     * We account for this by keeping the hard component as a separate integral: its
+     * lower limit is set by nu_tau_one evaluated at the redshifted frequency, and the
+     * spectral index alpha_hard is used throughout. The sum of soft + hard components
+     * gives the full AGN contribution to IGM heating at the observation redshift z'.
+     *
+     * Normalisation: we convert the input AGN X-ray luminosity density (erg/s/Mpc^3,
+     * integrated over the broken power law LF) into photon number flux the same way
+     * the GAL conversion works. The LF integral is folded into agn_emissivity_zpp
+     * computed per shell below.
+     */
+
+    /* --- Soft component: nu_thresh to nu_break --- */
+    if (fabs(run_globals.params.physics.SpecIndexXrayAGNSoft - 1.0) < 1e-6) {
+      Luminosity_converstion_factor_AGN_soft =
+        (run_globals.params.physics.NuXrayThreshold * NU_over_EV) *
+        log(run_globals.params.physics.NuXraySoftCut /
+            run_globals.params.physics.NuXrayThreshold);
+      Luminosity_converstion_factor_AGN_soft = 1.0 / Luminosity_converstion_factor_AGN_soft;
+    } else {
+      Luminosity_converstion_factor_AGN_soft =
+        pow(run_globals.params.physics.NuXraySoftCut * NU_over_EV,
+            1.0 - run_globals.params.physics.SpecIndexXrayAGNSoft) -
+        pow(run_globals.params.physics.NuXrayThreshold * NU_over_EV,
+            1.0 - run_globals.params.physics.SpecIndexXrayAGNSoft);
+      Luminosity_converstion_factor_AGN_soft = 1.0 / Luminosity_converstion_factor_AGN_soft;
+      Luminosity_converstion_factor_AGN_soft *=
+        pow(run_globals.params.physics.NuXrayThreshold * NU_over_EV,
+            -run_globals.params.physics.SpecIndexXrayAGNSoft) *
+        (1.0 - run_globals.params.physics.SpecIndexXrayAGNSoft);
+    }
+    Luminosity_converstion_factor_AGN_soft *= (SEC_PER_YEAR) / (PLANCK);
+
+    /* --- Hard component: nu_break to nu_hard_cut --- */
+    if (fabs(run_globals.params.physics.SpecIndexXrayAGNHard - 1.0) < 1e-6) {
+      Luminosity_converstion_factor_AGN_hard =
+        (run_globals.params.physics.NuXrayThreshold * NU_over_EV) *
+        log(run_globals.params.physics.NuXraySoftCut /
+            run_globals.params.physics.NuXrayThreshold);
+      Luminosity_converstion_factor_AGN_hard = 1.0 / Luminosity_converstion_factor_AGN_hard;
+    } else {
+      Luminosity_converstion_factor_AGN_hard =
+        pow(run_globals.params.physics.NuXraySoftCut * NU_over_EV,
+            1.0 - run_globals.params.physics.SpecIndexXrayAGNHard) -
+        pow(run_globals.params.physics.NuXrayThreshold * NU_over_EV,
+            1.0 - run_globals.params.physics.SpecIndexXrayAGNHard);
+      Luminosity_converstion_factor_AGN_hard = 1.0 / Luminosity_converstion_factor_AGN_hard;
+      Luminosity_converstion_factor_AGN_hard *=
+        pow(run_globals.params.physics.NuXrayThreshold * NU_over_EV,
+            -run_globals.params.physics.SpecIndexXrayAGNHard) *
+        (1.0 - run_globals.params.physics.SpecIndexXrayAGNHard);
+    }
+    Luminosity_converstion_factor_AGN_hard *= (SEC_PER_YEAR) / (PLANCK);
+
     // Do the same for Pop III.
 
 #if USE_MINI_HALOS
@@ -732,6 +1012,39 @@ void _ComputeTs(int snapshot)
                              (run_globals.params.physics.NuXrayThreshold * NU_over_EV) * SPEED_OF_LIGHT *
                              pow(1 + zp, run_globals.params.physics.SpecIndexXrayIII + 3);
 #endif
+
+    /*
+     * AGN prefactors: analogous to const_zp_prefactor_GAL but for each spectral
+     * component of the broken power law. These are global prefactors that depend
+     * only on zp (the observation redshift), not on the shell redshift z''.
+     * The shell-dependent AGN emissivity is folded into XAGN_soft[R_ct] /
+     * XAGN_hard[R_ct] — each band uses only its own independent amplitude.
+     *
+     * Soft:  const_zp_prefactor_AGN_soft = Lconv_soft / (nu_thresh * eV) * c * (1+zp)^(alpha_soft+3)
+     * Hard:  const_zp_prefactor_AGN_hard = Lconv_hard / (nu_break  * eV) * c * (1+zp)^(alpha_hard+3)
+     *
+     * Note: (1+zp)^(alpha+3) comes from the combination of the photon energy
+     * redshift factor (1+z'')/(1+z') and the comoving volume element — this is
+     * the same factor present in const_zp_prefactor_GAL.
+     */
+    /* SMOOTHED_AGN is already in erg/s/cm^3 (actual X-ray luminosity density
+     * from individual black holes). LXrayAGN is therefore NOT included here —
+     * it was only needed when the source was a global constant (accretion rate
+     * × efficiency). The spectral normalization (Lconv) and cosmological
+     * factors are still applied exactly as for the stellar case.           */
+    const_zp_prefactor_AGN_soft =
+      Luminosity_converstion_factor_AGN_soft /
+      (run_globals.params.physics.NuXrayThreshold * NU_over_EV) * SPEED_OF_LIGHT *
+      pow(1.0 + zp, run_globals.params.physics.SpecIndexXrayAGNSoft + 3.0);
+    if (!isfinite(const_zp_prefactor_AGN_soft))
+      const_zp_prefactor_AGN_soft = 0.0;
+
+    const_zp_prefactor_AGN_hard =
+      Luminosity_converstion_factor_AGN_hard /
+      (run_globals.params.physics.NuXrayThreshold * NU_over_EV) * SPEED_OF_LIGHT *
+      pow(1.0 + zp, run_globals.params.physics.SpecIndexXrayAGNHard + 3.0);
+    if (!isfinite(const_zp_prefactor_AGN_hard))
+      const_zp_prefactor_AGN_hard = 0.0;
     // Note the factor of 0.59 appears to be required to match 21cmFAST
 
     // I believe it arises from differing definitions of a stellar baryon mass
@@ -745,6 +1058,11 @@ void _ComputeTs(int snapshot)
     // this same factor higher than 21cmFAST, but at least it is understood why and trivially accounted for.
 
     // interpolate to correct nu integral value based on the cell's ionization state
+    /* Flag_includeAGN is a single run-wide setting — read it once here
+     * rather than re-reading it from run_globals every (ix,iy,iz,R_ct)
+     * combination below (millions to billions of redundant reads/re-
+     * declarations over a full grid otherwise). */
+    int flag_agn = run_globals.params.physics.Flag_includeAGN;
     for (int ix = 0; ix < local_nix; ix++)
       for (int iy = 0; iy < ReionGridDim; iy++)
         for (int iz = 0; iz < ReionGridDim; iz++) {
@@ -761,6 +1079,26 @@ void _ComputeTs(int snapshot)
             i_smoothedSFR = grid_index_smoothedSFR(R_ct, ix, iy, iz, TsNumFilterSteps, ReionGridDim);
 
             SFR_GAL[R_ct] = SMOOTHED_SFR_GAL[i_smoothedSFR];
+
+            /* Per-cell AGN source: spatially resolved luminosity density
+             * [erg/s/cm^3], independently for each band, from
+             * BHXrayEmissivity(_soft), built per shell above. Each keeps
+             * its own amplitude all the way to evolveInt() (Option 2) —
+             * summing them into one shared amplitude before applying the
+             * per-band spectral shape would double-count photons (see the
+             * blackhole_feedback.c discussion this design followed from).
+             *
+             * Flag_includeAGN selects which band(s) actually contribute:
+             *   0 = no AGN, 1 = soft+hard, 2 = hard only, 3 = soft only.
+             * Zeroing the excluded band's amplitude here (rather than
+             * later) means evolveInt() naturally gets zero contribution
+             * from it without needing to know about the flag itself. */
+            {
+              XAGN_soft[R_ct] = (SMOOTHED_AGN_soft != NULL && (flag_agn == 1 || flag_agn == 3))
+                                   ? SMOOTHED_AGN_soft[i_smoothedSFR] : 0.0;
+              XAGN_hard[R_ct] = (SMOOTHED_AGN != NULL && (flag_agn == 1 || flag_agn == 2))
+                                   ? SMOOTHED_AGN[i_smoothedSFR] : 0.0;
+            }
 #if USE_MINI_HALOS
             SFR_III[R_ct] = SMOOTHED_SFR_III[i_smoothedSFR];
 #endif
@@ -818,21 +1156,89 @@ void _ComputeTs(int snapshot)
             freq_int_lya_III[R_ct] *= (xHII_call - x_int_XHII[m_xHII_low]);
             freq_int_lya_III[R_ct] += freq_int_lya_tbl_III[m_xHII_low][R_ct];
 #endif
+
+            if (run_globals.params.physics.Flag_includeAGN > 0) {
+            /* --- soft component --- */
+            freq_int_heat_AGN_soft[R_ct] =
+              (freq_int_heat_tbl_AGN_soft[m_xHII_high][R_ct] - freq_int_heat_tbl_AGN_soft[m_xHII_low][R_ct]) /
+              (x_int_XHII[m_xHII_high] - x_int_XHII[m_xHII_low]);
+            freq_int_heat_AGN_soft[R_ct] *= (xHII_call - x_int_XHII[m_xHII_low]);
+            freq_int_heat_AGN_soft[R_ct] += freq_int_heat_tbl_AGN_soft[m_xHII_low][R_ct];
+
+            freq_int_ion_AGN_soft[R_ct] =
+              (freq_int_ion_tbl_AGN_soft[m_xHII_high][R_ct] - freq_int_ion_tbl_AGN_soft[m_xHII_low][R_ct]) /
+              (x_int_XHII[m_xHII_high] - x_int_XHII[m_xHII_low]);
+            freq_int_ion_AGN_soft[R_ct] *= (xHII_call - x_int_XHII[m_xHII_low]);
+            freq_int_ion_AGN_soft[R_ct] += freq_int_ion_tbl_AGN_soft[m_xHII_low][R_ct];
+
+            freq_int_lya_AGN_soft[R_ct] =
+              (freq_int_lya_tbl_AGN_soft[m_xHII_high][R_ct] - freq_int_lya_tbl_AGN_soft[m_xHII_low][R_ct]) /
+              (x_int_XHII[m_xHII_high] - x_int_XHII[m_xHII_low]);
+            freq_int_lya_AGN_soft[R_ct] *= (xHII_call - x_int_XHII[m_xHII_low]);
+            freq_int_lya_AGN_soft[R_ct] += freq_int_lya_tbl_AGN_soft[m_xHII_low][R_ct];
+
+            /* --- hard component --- */
+            freq_int_heat_AGN_hard[R_ct] =
+              (freq_int_heat_tbl_AGN_hard[m_xHII_high][R_ct] - freq_int_heat_tbl_AGN_hard[m_xHII_low][R_ct]) /
+              (x_int_XHII[m_xHII_high] - x_int_XHII[m_xHII_low]);
+            freq_int_heat_AGN_hard[R_ct] *= (xHII_call - x_int_XHII[m_xHII_low]);
+            freq_int_heat_AGN_hard[R_ct] += freq_int_heat_tbl_AGN_hard[m_xHII_low][R_ct];
+
+            freq_int_ion_AGN_hard[R_ct] =
+              (freq_int_ion_tbl_AGN_hard[m_xHII_high][R_ct] - freq_int_ion_tbl_AGN_hard[m_xHII_low][R_ct]) /
+              (x_int_XHII[m_xHII_high] - x_int_XHII[m_xHII_low]);
+            freq_int_ion_AGN_hard[R_ct] *= (xHII_call - x_int_XHII[m_xHII_low]);
+            freq_int_ion_AGN_hard[R_ct] += freq_int_ion_tbl_AGN_hard[m_xHII_low][R_ct];
+
+            freq_int_lya_AGN_hard[R_ct] =
+              (freq_int_lya_tbl_AGN_hard[m_xHII_high][R_ct] - freq_int_lya_tbl_AGN_hard[m_xHII_low][R_ct]) /
+              (x_int_XHII[m_xHII_high] - x_int_XHII[m_xHII_low]);
+            freq_int_lya_AGN_hard[R_ct] *= (xHII_call - x_int_XHII[m_xHII_low]);
+            freq_int_lya_AGN_hard[R_ct] += freq_int_lya_tbl_AGN_hard[m_xHII_low][R_ct];
+            } else {
+              freq_int_heat_AGN_soft[R_ct] = 0.0;
+              freq_int_ion_AGN_soft[R_ct]  = 0.0;
+              freq_int_lya_AGN_soft[R_ct]  = 0.0;
+              freq_int_heat_AGN_hard[R_ct] = 0.0;
+              freq_int_ion_AGN_hard[R_ct]  = 0.0;
+              freq_int_lya_AGN_hard[R_ct]  = 0.0;
+            }
+
           }
 
           // Perform the calculation of the heating/ionisation integrals, updating relevant quantities etc. GET BACK AT
           // THIS FOR USE_MINI_HALOS!!
+          /*
+           * evolveInt computes the stellar (GAL + optional III) contributions to
+           * dx_e/dz, dT_K/dz, and J_alpha, AND the AGN contribution — soft and
+           * hard passed in as two independent amplitude/freq_int pairs (Option
+           * 2), summed internally only after each has been through its own
+           * prefactor. Flag_includeAGN's four settings need no special-casing
+           * here: XAGN_soft/XAGN_hard were already zeroed for excluded bands
+           * when they were built above (from SMOOTHED_AGN_soft/SMOOTHED_AGN),
+           * so a zeroed amplitude naturally contributes zero regardless of
+           * what its freq_int table looks like.
+           */
+          {
 #if USE_MINI_HALOS
           evolveInt((float)zp,
                     run_globals.reion_grids.deltax[i_padded],
                     SFR_GAL,
                     SFR_III,
+                    XAGN_soft,
+                    XAGN_hard,
                     freq_int_heat_GAL,
                     freq_int_ion_GAL,
                     freq_int_lya_GAL,
                     freq_int_heat_III,
                     freq_int_ion_III,
                     freq_int_lya_III,
+                    freq_int_heat_AGN_soft,
+                    freq_int_ion_AGN_soft,
+                    freq_int_lya_AGN_soft,
+                    freq_int_heat_AGN_hard,
+                    freq_int_ion_AGN_hard,
+                    freq_int_lya_AGN_hard,
                     NO_LIGHT,
                     ans,
                     dansdz);
@@ -840,13 +1246,40 @@ void _ComputeTs(int snapshot)
           evolveInt((float)zp,
                     run_globals.reion_grids.deltax[i_padded],
                     SFR_GAL,
+                    XAGN_soft,
+                    XAGN_hard,
                     freq_int_heat_GAL,
                     freq_int_ion_GAL,
                     freq_int_lya_GAL,
+                    freq_int_heat_AGN_soft,
+                    freq_int_ion_AGN_soft,
+                    freq_int_lya_AGN_soft,
+                    freq_int_heat_AGN_hard,
+                    freq_int_ion_AGN_hard,
+                    freq_int_lya_AGN_hard,
                     NO_LIGHT,
                     ans,
                     dansdz);
 #endif
+          /* AGN heating diagnostics — accumulate soft and hard separately.
+           * dansdz[3] holds the total (already correctly soft+hard summed)
+           * AGN dxheat/dz from evolveInt. evolveInt computes the two bands
+           * independently internally but only returns their sum, so this
+           * ratio-based split is still an approximation for logging purposes
+           * only — it does not affect the actual simulated heating, which is
+           * now computed correctly per-band inside evolveInt (Option 2).   */
+          if (flag_agn == 1) {
+            double ratio = (const_zp_prefactor_AGN_soft + const_zp_prefactor_AGN_hard > 0.0)
+                         ? const_zp_prefactor_AGN_soft / (const_zp_prefactor_AGN_soft + const_zp_prefactor_AGN_hard)
+                         : 0.5;
+            Xheat_ave_AGN_soft += dansdz[3] * ratio;
+            Xheat_ave_AGN_hard += dansdz[3] * (1.0 - ratio);
+          } else if (flag_agn == 3) {
+            Xheat_ave_AGN_soft += dansdz[3];
+          } else if (flag_agn == 2) {
+            Xheat_ave_AGN_hard += dansdz[3];
+          }
+          } /* end flag_agn block */
 
           x_e_box_prev[i_padded] += dansdz[0] * dzp; // remember dzp is negative
           if (x_e_box_prev[i_padded] > 1)            // can do this late in evolution if dzp is too large
@@ -865,13 +1298,18 @@ void _ComputeTs(int snapshot)
           }
 #endif
           if (Tk_box[i_real] <
-              0) { // spurious bahaviour of the trapazoidalintegrator. generally overcooling in underdensities
+              TK_MIN) { // spurious bahaviour of the trapazoidalintegrator. generally overcooling in underdensities.
+                        // Floored at TK_MIN (not just < 0) because 1/TK and 1/TK^2 in Salpha_tilde()/Tc_eff()
+                        // (get_Ts(), spin-temperature coupling) blow up to Inf/NaN as TK -> 0, even while still
+                        // nominally positive — most easily triggered when AGN heating (sparse) can't fill in for
+                        // suppressed HMXB heating (normally spatially-widespread) in underdense cells.
             Tk_box[i_real] = (float)(TCMB * (1 + zp));
           }
 
 #if USE_MINI_HALOS
           if (Tk_boxII[i_real] <
-              0) { // spurious bahaviour of the trapazoidalintegrator. generally overcooling in underdensities
+              TK_MIN) { // spurious bahaviour of the trapazoidalintegrator. generally overcooling in underdensities.
+                        // See TK_MIN comment above.
             Tk_boxII[i_real] = (float)(TCMB * (1 + zp));
           }
 #endif
@@ -908,6 +1346,8 @@ void _ComputeTs(int snapshot)
     MPI_Allreduce(MPI_IN_PLACE, &xalpha_ave, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
     MPI_Allreduce(MPI_IN_PLACE, &Xheat_ave, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
     MPI_Allreduce(MPI_IN_PLACE, &Xion_ave, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
+    MPI_Allreduce(MPI_IN_PLACE, &Xheat_ave_AGN_soft, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
+    MPI_Allreduce(MPI_IN_PLACE, &Xheat_ave_AGN_hard, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
 #if USE_MINI_HALOS
     MPI_Allreduce(MPI_IN_PLACE, &J_alpha_aveII, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
     MPI_Allreduce(MPI_IN_PLACE, &Xheat_aveII, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
@@ -919,6 +1359,8 @@ void _ComputeTs(int snapshot)
     xalpha_ave /= total_n_cells;
     Xheat_ave /= total_n_cells;
     Xion_ave /= total_n_cells;
+    Xheat_ave_AGN_soft /= total_n_cells;
+    Xheat_ave_AGN_hard /= total_n_cells;
 #if USE_MINI_HALOS
     J_alpha_aveII /= total_n_cells;
     Xheat_aveII /= total_n_cells;
@@ -1012,6 +1454,10 @@ void _ComputeTs(int snapshot)
        Xion_ave,
        J_LW_ave,
        J_LW_aveII);
+  /* AGN broken power law diagnostic — soft and hard tracked separately */
+  mlog("zp = %e  AGN_Xheat_soft = %e  AGN_Xheat_hard = %e  (Flag_includeAGN=%d)",
+       MLOG_MESG, zp, Xheat_ave_AGN_soft, Xheat_ave_AGN_hard,
+       run_globals.params.physics.Flag_includeAGN);
 #else
   mlog("zp = %e Ts_ave = %e Tk_ave = %e x_e_ave = %e", MLOG_MESG, zp, Ave_Ts, Ave_Tk, Ave_x_e);
   mlog("zp = %e J_alpha_ave = %e xalpha_ave = %e Xheat_ave = %e Xion_ave = %e",
@@ -1021,6 +1467,10 @@ void _ComputeTs(int snapshot)
        xalpha_ave,
        Xheat_ave,
        Xion_ave);
+  /* AGN broken power law diagnostic — soft and hard tracked separately */
+  mlog("zp = %e  AGN_Xheat_soft = %e  AGN_Xheat_hard = %e  (Flag_includeAGN=%d)",
+       MLOG_MESG, zp, Xheat_ave_AGN_soft, Xheat_ave_AGN_hard,
+       run_globals.params.physics.Flag_includeAGN);
 #endif
 }
 
