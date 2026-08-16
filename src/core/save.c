@@ -12,6 +12,7 @@
 #include "physics/blackhole_feedback.h"
 #include "reionization.h"
 #include "save.h"
+#include "XRayHeatingFunctions.h"
 #if USE_MINI_HALOS
 #include "metal_evo.h"
 #endif
@@ -731,7 +732,7 @@ void calc_hdf5_props()
     h5props->dst_offsets[i] = HOFFSET(galaxy_output_t, BHXrayEmissivity);
     h5props->dst_field_sizes[i] = sizeof(galout.BHXrayEmissivity);
     h5props->field_names[i] = "BHXrayEmissivity";
-    h5props->field_units[i] = "LX [1e10 L_sun, 2-10 keV, observed/obscured]";
+    h5props->field_units[i] = "ergs/s";
     h5props->field_h_conv[i] = "None";
     h5props->field_types[i++] = H5T_NATIVE_FLOAT;
 
@@ -1645,7 +1646,7 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
   // Accumulate into distribution functions from output buffer
   double val, weight;
   int bin_idx;
-  double lx_int_lin, lx_obs_lin;
+  double lx_int_lin, lx_obs_erg;
 
   /* NHfrac depends on Lx as well as NH (_psi() in blackhole_feedback.c
    * makes obscured fraction decrease with luminosity — the "receding
@@ -1756,17 +1757,15 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
 
       // XrayLF — intrinsic 2-10 keV X-ray luminosity function.
       // XrayLF_obs — observed (post-obscuration) 2-10 keV X-ray luminosity function,
-      // sourced from BHXrayEmissivity (hard band, obscuration-weighted via
-      // apply_xray_obscuration()'s obs_fraction_hard). Stored in 1e10 Lsun
-      // (same convention as QuasarLX), so convert to erg/s here at the
-      // point of use, same as QuasarLX/lx_int_lin below.
+      // sourced from BHXrayEmissivity (already in erg/s, hard band, obscuration-weighted
+      // via apply_xray_obscuration()'s obs_fraction_hard — no unit conversion needed).
       if (run_globals.params.Flag_OutputXrayLF) {
         lx_int_lin = (double)output_buffer[buffer_count].QuasarLX;
-        lx_obs_lin = (double)output_buffer[buffer_count].BHXrayEmissivity;
+        lx_obs_erg = (double)output_buffer[buffer_count].BHXrayEmissivity;
         weight = output_buffer[buffer_count].DutyCycleAGN;
         if (weight > 0.0) {
           if (lx_int_lin > 0.0) {
-            val = log10(lx_int_lin) + LOG_10_SOLAR_LUM + 10;
+            val = log10(lx_int_lin * 1e10 * SOLAR_LUM);
             if (val >= xraylf.x_min && val <= xraylf.x_max) {
               bin_idx = (int)((val - xraylf.x_min) / xraylf.bin_width);
               xraylf.bin_counts[bin_idx]   += weight;
@@ -1774,8 +1773,8 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
             }
           }
 
-          if (lx_obs_lin > 0.0) {
-            val = log10(lx_obs_lin) + LOG_10_SOLAR_LUM + 10;
+          if (lx_obs_erg > 0.0) {
+            val = log10(lx_obs_erg);
             if (val >= xraylf_obs.x_min && val <= xraylf_obs.x_max) {
               bin_idx = (int)((val - xraylf_obs.x_min) / xraylf_obs.bin_width);
               xraylf_obs.bin_counts[bin_idx]   += weight;
@@ -1940,6 +1939,21 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
        * NH bin — depends only on NuXraySoftCut/NuXrayMax/SpecIndexXrayAGNHard,
        * not on redshift), so per @qyx268's review it's written once in
        * create_master_file() instead of being repeated in every snapshot. */
+
+      /* XrayEmissivity_hard/soft/total: volume-averaged AGN X-ray emissivity
+       * density this snapshot [erg/s/cm^3], for an epsilon_X-style curve vs
+       * redshift. Already fully MPI-reduced across ranks back in ComputeTs.c
+       * (MPI_Allreduce), so every rank already holds the correct global
+       * value here — no further reduction needed. */
+      {
+        hsize_t one = 1;
+        double xray_hard  = stored_XrayEmissivity_hard[run_globals.ListOutputSnaps[i_out]];
+        double xray_soft  = stored_XrayEmissivity_soft[run_globals.ListOutputSnaps[i_out]];
+        double xray_total = xray_hard + xray_soft;
+        H5LTmake_dataset_double(grp, "XrayEmissivity_hard",  1, &one, &xray_hard);
+        H5LTmake_dataset_double(grp, "XrayEmissivity_soft",  1, &one, &xray_soft);
+        H5LTmake_dataset_double(grp, "XrayEmissivity_total", 1, &one, &xray_total);
+      }
 
       H5Gclose(grp);
     }
