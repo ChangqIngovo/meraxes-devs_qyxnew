@@ -741,6 +741,35 @@ void malloc_reionization_grids()
 
   grids->SMOOTHED_SFR_GAL = NULL;
 
+  /*
+   * THIS ADDITION IS MADE TO ADD THE X-RAY CONTRIBUTION BY AGN
+   * Physical motivation:
+   *   BHXrayEmissivity   — current-snapshot spatial grid of per-cell
+   *                        obscuration-corrected AGN X-ray emissivity
+   *                        [erg/s], populated each snapshot in
+   *                        construct_baryon_grids().
+   *   bh_xray_histories  — ring-buffer of NstoreSnapshots_SFR past
+   *                        snapshots of BHXrayEmissivity. Slot [k]
+   *                        = k snapshots ago. Read by
+   *                        load_reion_sfr_grids() so ComputeTs.c can
+   *                        use the correct past AGN luminosity for each
+   *                        radial shell at emission redshift z''.
+   *   SMOOTHED_AGN       — per-cell AGN X-ray luminosity density per shell
+   *                        [erg/s/cm^3], same layout as SMOOTHED_SFR_GAL.
+   *                        Populated in ComputeTs.c from BHXrayEmissivity.
+   *
+   *   The _soft variants of all three of the above are the same thing for
+   *   the independently-obscured soft-band AGN X-ray emissivity — soft and
+   *   hard photons are absorbed differently, so they need their own grid
+   *   rather than sharing the hard-band amplitude.
+   */
+  grids->BHXrayEmissivity       = NULL;
+  grids->bh_xray_histories      = NULL;
+  grids->SMOOTHED_AGN           = NULL;
+  grids->BHXrayEmissivity_soft  = NULL;
+  grids->bh_xray_histories_soft = NULL;
+  grids->SMOOTHED_AGN_soft      = NULL;
+
 #if USE_MINI_HALOS
   grids->Tk_boxII = NULL;
   grids->TS_boxII = NULL;
@@ -978,6 +1007,54 @@ void malloc_reionization_grids()
                                                                    run_globals.mpi_comm,
                                                                    plan_flags);
 
+      /*
+       * THIS ADDITION IS MADE TO ADD THE X-RAY CONTRIBUTION BY AGN
+       * Physical motivation:
+       *   BHXrayEmissivity — real-space padded grid [slab_n_complex*2
+       *     floats], same layout as grids->sfr. Holds the sum of
+       *     gal->BHXrayEmissivity for all AGN in each cell for the
+       *     current snapshot. Populated by prop_bh_xray_emissivity in
+       *     construct_baryon_grids() and reloaded for past snapshots by
+       *     load_reion_sfr_grids() from bh_xray_histories.
+       *
+       *   bh_xray_histories — ring-buffer of NstoreSnapshots_SFR past
+       *     snapshots [slab_n_complex*2*NstoreSnapshots_SFR floats].
+       *     Slot [k] holds the AGN emissivity from k snapshots ago.
+       *     Shifted by one slot at the start of each snapshot (same
+       *     pattern as sfr_histories). Read by load_reion_sfr_grids()
+       *     so ComputeTs.c uses the physically correct past luminosity
+       *     for each radial shell at emission redshift z''.
+       *
+       *   SMOOTHED_AGN — array of doubles with the same size as
+       *     SMOOTHED_SFR_GAL. Holds the FFT-smoothed AGN emissivity per
+       *     (radial shell, cell). Written by ComputeTs.c during the
+       *     FFT convolution loop and read by evolveInt() to compute the
+       *     AGN contribution to IGM heating, ionisation, and Lya flux.
+       *
+       *   BHXrayEmissivity_soft / bh_xray_histories_soft / SMOOTHED_AGN_soft
+       *     are the same three things for the independently-obscured
+       *     soft-band AGN X-ray emissivity (gal->BHXrayEmissivity_soft) —
+       *     soft and hard photons are absorbed differently, so the soft
+       *     band needs its own amplitude rather than reusing the hard one.
+       *
+       *   Only allocated when BH feedback is active, so the memory
+       *   footprint is zero when AGN are not being modelled.
+       */
+      if (run_globals.params.physics.Flag_BHFeedback) {
+        grids->BHXrayEmissivity  = fftwf_alloc_real((size_t)slab_n_complex * 2);
+        grids->bh_xray_histories = fftwf_alloc_real((size_t)slab_n_complex * 2 * run_globals.NstoreSnapshots_SFR);
+        grids->BHXrayEmissivity_soft  = fftwf_alloc_real((size_t)slab_n_complex * 2);
+        grids->bh_xray_histories_soft = fftwf_alloc_real((size_t)slab_n_complex * 2 * run_globals.NstoreSnapshots_SFR);
+        for (size_t ii = 0; ii < (size_t)slab_n_complex * 2; ii++) {
+          grids->BHXrayEmissivity[ii]      = 0.0f;
+          grids->BHXrayEmissivity_soft[ii] = 0.0f;
+        }
+        for (size_t ii = 0; ii < (size_t)slab_n_complex * 2 * run_globals.NstoreSnapshots_SFR; ii++) {
+          grids->bh_xray_histories[ii]      = 0.0f;
+          grids->bh_xray_histories_soft[ii] = 0.0f;
+        }
+      }
+
       grids->x_e_box = fftwf_alloc_real((size_t)slab_n_complex * 2);
       grids->x_e_unfiltered = fftwf_alloc_complex((size_t)slab_n_complex);
       grids->x_e_filtered = fftwf_alloc_complex((size_t)slab_n_complex);
@@ -1024,6 +1101,14 @@ void malloc_reionization_grids()
       grids->TS_box = fftwf_alloc_real((size_t)slab_n_real);
 
       grids->SMOOTHED_SFR_GAL = calloc((size_t)slab_n_real_smoothedSFR, sizeof(double));
+
+      /*
+       * THIS ADDITION IS MADE TO ADD THE X-RAY CONTRIBUTION BY AGN
+       * Same size as SMOOTHED_SFR_GAL. calloc ensures zeroed on allocation.
+       * _soft is the equivalent buffer for the soft-band AGN emissivity.
+       */
+      grids->SMOOTHED_AGN      = calloc((size_t)slab_n_real_smoothedSFR, sizeof(double));
+      grids->SMOOTHED_AGN_soft = calloc((size_t)slab_n_real_smoothedSFR, sizeof(double));
 #if USE_MINI_HALOS
       grids->Tk_boxII = fftwf_alloc_real((size_t)slab_n_real);
       grids->TS_boxII = fftwf_alloc_real((size_t)slab_n_real);
@@ -1203,6 +1288,22 @@ void free_reionization_grids()
 
   if (run_globals.params.Flag_IncludeSpinTemp) {
     free(grids->SMOOTHED_SFR_GAL);
+
+    /*
+     * THIS ADDITION IS MADE TO ADD THE X-RAY CONTRIBUTION BY AGN
+     * Free the AGN smoothed-emissivity arrays (hard and soft) and the raw
+     * grid/history buffers, matching the allocation guards in
+     * malloc_reionization_grids.
+     */
+    free(grids->SMOOTHED_AGN);
+    free(grids->SMOOTHED_AGN_soft);
+    if (run_globals.params.physics.Flag_BHFeedback) {
+      fftwf_free(grids->BHXrayEmissivity);
+      fftwf_free(grids->bh_xray_histories);
+      fftwf_free(grids->BHXrayEmissivity_soft);
+      fftwf_free(grids->bh_xray_histories_soft);
+    }
+
 #if USE_MINI_HALOS
     free(grids->SMOOTHED_SFR_III);
 #endif
@@ -1720,6 +1821,23 @@ void construct_baryon_grids(int snapshot, int local_ngals)
   float* weighted_sfrIII_grid = run_globals.reion_grids.weighted_sfrIII;
 #endif
 
+  /*
+   * THIS ADDITION IS MADE TO ADD THE X-RAY CONTRIBUTION BY AGN
+   * Physical motivation:
+   *   bh_xray_grid      — points to grids->BHXrayEmissivity (the
+   *                        current-snapshot cell-by-cell AGN emissivity,
+   *                        hard band).
+   *   bh_xray_hist_grid — points to grids->bh_xray_histories (the
+   *                        ring-buffer of past snapshots). Slot [0] is
+   *                        always the most recent snapshot's value.
+   *   *_soft            — the same two things for the independently
+   *                        obscured soft-band AGN emissivity.
+   */
+  float* bh_xray_grid      = run_globals.reion_grids.BHXrayEmissivity;
+  float* bh_xray_hist_grid = run_globals.reion_grids.bh_xray_histories;
+  float* bh_xray_grid_soft      = run_globals.reion_grids.BHXrayEmissivity_soft;
+  float* bh_xray_hist_grid_soft = run_globals.reion_grids.bh_xray_histories_soft;
+
   gal_to_slab_t* galaxy_to_slab_map = run_globals.reion_grids.galaxy_to_slab_map;
   ptrdiff_t* slab_ix_start = run_globals.reion_grids.slab_ix_start;
   int local_n_complex = (int)(run_globals.reion_grids.slab_n_complex[run_globals.mpi_rank]);
@@ -1746,6 +1864,35 @@ void construct_baryon_grids(int snapshot, int local_ngals)
       for (int snap = run_globals.NstoreSnapshots_SFR - 2; snap >= 0; snap--)
           sfrIII_histories_grid[(snap+1)*local_n_complex * 2+ii] = sfrIII_histories_grid[snap*local_n_complex * 2+ii];
 #endif
+      /*
+       * THIS ADDITION IS MADE TO ADD THE X-RAY CONTRIBUTION BY AGN
+       * Physical motivation:
+       *   At the start of each snapshot we zero the current AGN grid and
+       *   shift the history ring-buffer by one slot before the new values
+       *   are filled in. This is identical to what is done for sfr_grid /
+       *   sfr_histories_grid for stellar SFR.
+       *
+       *   After the shift, slot [0] is ready to receive the new snapshot's
+       *   AGN emissivity (deposited via prop_bh_xray_emissivity below).
+       *   Slot [k] then correctly holds the emissivity from k snapshots ago,
+       *   which load_reion_sfr_grids() will retrieve when ComputeTs.c asks
+       *   for the AGN luminosity at emission redshift z''.
+       *
+       *   Guard: only do this if BH feedback is active and the grid is
+       *   allocated. Avoids a null-pointer dereference when AGN are off.
+       */
+      if (run_globals.params.physics.Flag_BHFeedback && bh_xray_grid != NULL) {
+        bh_xray_grid[ii] = 0.0f;
+        for (int snap = run_globals.NstoreSnapshots_SFR - 2; snap >= 0; snap--)
+          bh_xray_hist_grid[(snap+1)*local_n_complex * 2 + ii] =
+              bh_xray_hist_grid[snap*local_n_complex * 2 + ii];
+      }
+      if (run_globals.params.physics.Flag_BHFeedback && bh_xray_grid_soft != NULL) {
+        bh_xray_grid_soft[ii] = 0.0f;
+        for (int snap = run_globals.NstoreSnapshots_SFR - 2; snap >= 0; snap--)
+          bh_xray_hist_grid_soft[(snap+1)*local_n_complex * 2 + ii] =
+              bh_xray_hist_grid_soft[snap*local_n_complex * 2 + ii];
+      }
     }
   }
 
@@ -1768,9 +1915,31 @@ void construct_baryon_grids(int snapshot, int local_ngals)
     prop_weighted_sfrIII,
     prop_sfrIII,
 #endif
-    prop_sfr
+    prop_sfr,
+    /*
+     * THIS ADDITION IS MADE TO ADD THE X-RAY CONTRIBUTION BY AGN
+     * Physical motivation:
+     *   prop_bh_xray_emissivity / prop_bh_xray_emissivity_soft deposit
+     *   gal->BHXrayEmissivity / gal->BHXrayEmissivity_soft (the
+     *   obscuration-corrected AGN X-ray energy emitted per galaxy per
+     *   snapshot, computed in blackhole_feedback.c) onto their own
+     *   spatial grids using the same MPI slab-reduction as all other
+     *   properties. These are the AGN analogue of prop_sfr for stellar
+     *   X-ray sources — kept as two independent properties (not summed)
+     *   because soft and hard photons are obscured differently and must
+     *   stay paired with their own amplitude all the way through to
+     *   evolveInt(); see the Option 2 discussion for why.
+     *
+     *   NOTE: if the loop bound below were `prop <= prop_sfr`,
+     *   prop_bh_xray_emissivity would never be reached — that would
+     *   silently make all AGN X-ray heating a no-op regardless of
+     *   Flag_includeAGN/Flag_BHFeedback. Loop bound below includes both
+     *   new AGN properties.
+     */
+    prop_bh_xray_emissivity,
+    prop_bh_xray_emissivity_soft
   };
-  for (int prop = prop_stellar; prop <= prop_sfr; prop++) {
+  for (int prop = prop_stellar; prop <= prop_bh_xray_emissivity_soft; prop++) {
 
     // no need for sfr or sfrIII grid is not using SpinTemp
 #if USE_MINI_HALOS
@@ -1780,6 +1949,18 @@ void construct_baryon_grids(int snapshot, int local_ngals)
 
     if ((!run_globals.params.Flag_IncludeSpinTemp) && (prop == prop_sfr))
       continue;
+
+    /*
+     * THIS ADDITION IS MADE TO ADD THE X-RAY CONTRIBUTION BY AGN
+     * Skip the AGN emissivity properties if SpinTemp is off (no heating
+     * calculation) or if BH feedback is disabled (no AGN accretion).
+     */
+    if (prop == prop_bh_xray_emissivity || prop == prop_bh_xray_emissivity_soft) {
+      if (!run_globals.params.Flag_IncludeSpinTemp) continue;
+      if (!run_globals.params.physics.Flag_BHFeedback) continue;
+      if (prop == prop_bh_xray_emissivity      && bh_xray_grid      == NULL) continue;
+      if (prop == prop_bh_xray_emissivity_soft && bh_xray_grid_soft == NULL) continue;
+    }
 
     // no need to bh grids if not using BHFeedback
     if ((!run_globals.params.physics.Flag_BHFeedback) && ((prop == prop_effective_bhm) || (prop == prop_effective_bhar)))
@@ -1874,6 +2055,36 @@ void construct_baryon_grids(int snapshot, int local_ngals)
               // this sfr grid is used for X-ray and Lyman, PopII.
               break;
 
+            /*
+             * THIS ADDITION IS MADE TO ADD THE X-RAY CONTRIBUTION BY AGN
+             * Physical motivation:
+             *   gal->BHXrayEmissivity / gal->BHXrayEmissivity_soft is the
+             *   hard/soft-band AGN X-ray energy emitted by this galaxy's
+             *   black hole over the current snapshot, in internal Meraxes
+             *   units [erg/s]. Each is already corrected for its own
+             *   band's obscuration (NH distribution + band-averaged
+             *   transmission) by apply_xray_obscuration() in
+             *   blackhole_feedback.c — kept as two separate properties
+             *   here (not summed) so each stays paired with its own
+             *   amplitude all the way to evolveInt() (Option 2).
+             *
+             *   We accumulate each per cell exactly as gal->Sfr is
+             *   accumulated for prop_sfr. The MPI Reduce below sums
+             *   contributions from all galaxies on all ranks.
+             *
+             *   The BlackHoleMassLimitReion guard is applied for
+             *   consistency with prop_effective_bhar.
+             */
+            case prop_bh_xray_emissivity:
+              if (gal->BlackHoleMass >= run_globals.params.physics.BlackHoleMassLimitReion)
+                buffer[ind] += gal->BHXrayEmissivity;
+              break;
+
+            case prop_bh_xray_emissivity_soft:
+              if (gal->BlackHoleMass >= run_globals.params.physics.BlackHoleMassLimitReion)
+                buffer[ind] += gal->BHXrayEmissivity_soft;
+              break;
+
             default:
               mlog_error("Unrecognised property in slab creation.");
               ABORT(EXIT_FAILURE);
@@ -1946,6 +2157,55 @@ void construct_baryon_grids(int snapshot, int local_ngals)
                   if (!run_globals.params.Flag_InstantaneousSFR) val /= sfr_timescale;
                   sfr_grid[grid_index(ix, iy, iz, ReionGridDim, INDEX_PADDED)] = (float)val;
                   sfr_histories_grid[grid_index(ix, iy, iz, ReionGridDim, INDEX_PADDED)] = (float)val;
+                }
+            break;
+
+          /*
+           * THIS ADDITION IS MADE TO ADD THE X-RAY CONTRIBUTION BY AGN
+           * Physical motivation:
+           *   After the MPI reduction, buffer[cell] holds the sum of
+           *   gal->BHXrayEmissivity for all AGN in that cell for this
+           *   snapshot. We store this raw value (units: [erg/s]) into:
+           *
+           *   bh_xray_grid[cell]       — the current-snapshot spatial
+           *     grid read directly by ComputeTs.c for the R_ct=0 shell
+           *     (no light-travel time correction needed; this shell
+           *     corresponds to the present-day AGN population at z_p).
+           *
+           *   bh_xray_hist_grid[cell]  — slot [0] of the ring-buffer.
+           *     After the ring-buffer shift above, this slot now holds
+           *     the emissivity for the current snapshot. Slot [k] holds
+           *     the emissivity from k snapshots ago. ComputeTs.c calls
+           *     load_reion_sfr_grids(k, weight, flag) to retrieve the
+           *     correct past value for each radial shell.
+           *
+           *   No sfr_timescale division: unlike stellar mass, which must
+           *   be divided by a timescale to convert to a rate,
+           *   BHXrayEmissivity is already a luminosity ([erg/s], already
+           *   a rate). ComputeTs.c converts to a luminosity density when
+           *   building SMOOTHED_AGN.
+           */
+          case prop_bh_xray_emissivity:
+            for (int ix = 0; ix < slab_nix[i_r]; ix++)
+              for (int iy = 0; iy < ReionGridDim; iy++)
+                for (int iz = 0; iz < ReionGridDim; iz++) {
+                  float val = buffer[grid_index(ix, iy, iz, ReionGridDim, INDEX_REAL)];
+                  CLAMP_NEGATIVE(val);
+                  bh_xray_grid[grid_index(ix, iy, iz, ReionGridDim, INDEX_PADDED)]      = val;
+                  bh_xray_hist_grid[grid_index(ix, iy, iz, ReionGridDim, INDEX_PADDED)] = val;
+                }
+            break;
+
+          /* Same as prop_bh_xray_emissivity above, but for the independently
+           * obscured soft-band emissivity — see the block comment there. */
+          case prop_bh_xray_emissivity_soft:
+            for (int ix = 0; ix < slab_nix[i_r]; ix++)
+              for (int iy = 0; iy < ReionGridDim; iy++)
+                for (int iz = 0; iz < ReionGridDim; iz++) {
+                  float val = buffer[grid_index(ix, iy, iz, ReionGridDim, INDEX_REAL)];
+                  CLAMP_NEGATIVE(val);
+                  bh_xray_grid_soft[grid_index(ix, iy, iz, ReionGridDim, INDEX_PADDED)]      = val;
+                  bh_xray_hist_grid_soft[grid_index(ix, iy, iz, ReionGridDim, INDEX_PADDED)] = val;
                 }
             break;
 
@@ -2172,6 +2432,34 @@ void load_reion_sfr_grids(int snapshot_counter_backwards, float weight, const in
 #if USE_MINI_HALOS
             (grids->sfrIII)[grid_index(ii, jj, kk, ReionGridDim, INDEX_PADDED)] = grids->sfrIII_histories[snapshot_counter_backwards * local_n_complex * 2+grid_index(ii, jj, kk, ReionGridDim, INDEX_REAL)]  * weight;
 #endif
+            /*
+             * THIS ADDITION IS MADE TO ADD THE X-RAY CONTRIBUTION BY AGN
+             * Physical motivation:
+             *   new_load=1 means this is a fresh load for this radial
+             *   shell: replace the current AGN emissivity grid with the
+             *   value stored in slot [snapshot_counter_backwards] of the
+             *   ring-buffer, weighted by the temporal interpolation
+             *   weight. This gives the AGN X-ray luminosity at the
+             *   emission redshift z'' corresponding to this shell,
+             *   which is physically what drives the IGM heating integral.
+             *
+             *   Index arithmetic mirrors sfr_histories exactly:
+             *   bh_xray_histories[k * local_n_complex*2 + INDEX_REAL]
+             *   = AGN emissivity from k snapshots ago for this cell.
+             */
+            if (run_globals.params.physics.Flag_BHFeedback &&
+                grids->BHXrayEmissivity != NULL &&
+                grids->bh_xray_histories != NULL)
+              (grids->BHXrayEmissivity)[grid_index(ii, jj, kk, ReionGridDim, INDEX_PADDED)] =
+                  grids->bh_xray_histories[snapshot_counter_backwards * local_n_complex * 2 +
+                                           grid_index(ii, jj, kk, ReionGridDim, INDEX_REAL)] * weight;
+            /* Same as above, independently, for the soft-band grid/history. */
+            if (run_globals.params.physics.Flag_BHFeedback &&
+                grids->BHXrayEmissivity_soft != NULL &&
+                grids->bh_xray_histories_soft != NULL)
+              (grids->BHXrayEmissivity_soft)[grid_index(ii, jj, kk, ReionGridDim, INDEX_PADDED)] =
+                  grids->bh_xray_histories_soft[snapshot_counter_backwards * local_n_complex * 2 +
+                                                grid_index(ii, jj, kk, ReionGridDim, INDEX_REAL)] * weight;
         }
   }
   else{
@@ -2182,6 +2470,28 @@ void load_reion_sfr_grids(int snapshot_counter_backwards, float weight, const in
 #if USE_MINI_HALOS
             (grids->sfrIII)[grid_index(ii, jj, kk, ReionGridDim, INDEX_PADDED)] += grids->sfrIII_histories[snapshot_counter_backwards * local_n_complex * 2+grid_index(ii, jj, kk, ReionGridDim, INDEX_REAL)]  * weight;
 #endif
+            /*
+             * THIS ADDITION IS MADE TO ADD THE X-RAY CONTRIBUTION BY AGN
+             * Physical motivation:
+             *   new_load=0 means a partial contribution from an additional
+             *   past snapshot is being added to the current shell. We
+             *   accumulate (+=) rather than replace (=), mirroring the
+             *   sfr treatment. This handles the case where one radial
+             *   shell spans more than one past snapshot interval.
+             */
+            if (run_globals.params.physics.Flag_BHFeedback &&
+                grids->BHXrayEmissivity != NULL &&
+                grids->bh_xray_histories != NULL)
+              (grids->BHXrayEmissivity)[grid_index(ii, jj, kk, ReionGridDim, INDEX_PADDED)] +=
+                  grids->bh_xray_histories[snapshot_counter_backwards * local_n_complex * 2 +
+                                           grid_index(ii, jj, kk, ReionGridDim, INDEX_REAL)] * weight;
+            /* Same as above, independently, for the soft-band grid/history. */
+            if (run_globals.params.physics.Flag_BHFeedback &&
+                grids->BHXrayEmissivity_soft != NULL &&
+                grids->bh_xray_histories_soft != NULL)
+              (grids->BHXrayEmissivity_soft)[grid_index(ii, jj, kk, ReionGridDim, INDEX_PADDED)] +=
+                  grids->bh_xray_histories_soft[snapshot_counter_backwards * local_n_complex * 2 +
+                                                grid_index(ii, jj, kk, ReionGridDim, INDEX_REAL)] * weight;
         }
   }
 }
