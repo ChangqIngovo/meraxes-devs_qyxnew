@@ -441,8 +441,14 @@ void previous_merger_driven_BH_growth(galaxy_t* gal, int snapshot)
     gal->QuasarLuv        += quasar_luv;
     gal->QuasarLX         += quasar_lx;
     gal->NHbin              = NH_bin; /* -1 if no AGN activity this step */
-    gal->BHXrayEmissivity      += quasar_lx      * 1e10 * SOLAR_LUM * obs_fraction_hard;
-    gal->BHXrayEmissivity_soft += quasar_lx_soft * 1e10 * SOLAR_LUM * obs_fraction_soft;
+    /* Kept in 1e10 Lsun (same convention as QuasarLX/QuasarLuv), not raw
+     * erg/s — a float can't hold raw erg/s luminosities for bright AGN
+     * (~1e43-1e44) without overflowing (galaxy_output_t.BHXrayEmissivity
+     * is a float). The 1e10*SOLAR_LUM conversion is applied downstream,
+     * in ComputeTs.c, at the same point SMOOTHED_SFR_GAL's unit
+     * conversion already happens for the analogous stellar quantity. */
+    gal->BHXrayEmissivity      += quasar_lx      * obs_fraction_hard;
+    gal->BHXrayEmissivity_soft += quasar_lx_soft * obs_fraction_soft;
     gal->EffectiveBHAR += BHemissivity;
     // quasar mode feedback
     m_reheat = run_globals.params.physics.QuasarModeEff * 2. * ETA * run_globals.Csquare * accreted_mass / Vvir / Vvir;

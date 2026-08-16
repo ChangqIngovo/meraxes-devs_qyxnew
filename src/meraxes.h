@@ -701,8 +701,8 @@ typedef struct galaxy_t
                                   //!< bin's observed (obscured) luminosity, so this (bin, luminosity)
                                   //!< pair replaces the old QuasarLX_obs0-4/NHfrac0-4 fields (5
                                   //!< mostly-zero doubles each, every galaxy).
-  double BHXrayEmissivity;       //!< Observed hard X-ray luminosity accumulator [erg/s], obscuration-weighted
-  double BHXrayEmissivity_soft;  //!< Observed soft X-ray luminosity accumulator [erg/s], obscuration-weighted
+  double BHXrayEmissivity;       //!< Observed hard X-ray emissivity [1e10 Lsun], obscuration-weighted
+  double BHXrayEmissivity_soft;  //!< Observed soft X-ray emissivity [1e10 Lsun], obscuration-weighted
   double EffectiveBHM;
   double EffectiveBHAR;
   double DutyCycleAGN;

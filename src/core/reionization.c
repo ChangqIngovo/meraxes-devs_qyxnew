@@ -746,8 +746,12 @@ void malloc_reionization_grids()
    * Physical motivation:
    *   BHXrayEmissivity   — current-snapshot spatial grid of per-cell
    *                        obscuration-corrected AGN X-ray emissivity
-   *                        [erg/s], populated each snapshot in
-   *                        construct_baryon_grids().
+   *                        [1e10 Lsun, matching QuasarLX/QuasarLuv's
+   *                        convention], populated each snapshot in
+   *                        construct_baryon_grids(). Converted to
+   *                        erg/s in ComputeTs.c, at the same point
+   *                        SMOOTHED_SFR_GAL's stellar unit conversion
+   *                        happens for the analogous quantity.
    *   bh_xray_histories  — ring-buffer of NstoreSnapshots_SFR past
    *                        snapshots of BHXrayEmissivity. Slot [k]
    *                        = k snapshots ago. Read by
@@ -2061,7 +2065,7 @@ void construct_baryon_grids(int snapshot, int local_ngals)
              *   gal->BHXrayEmissivity / gal->BHXrayEmissivity_soft is the
              *   hard/soft-band AGN X-ray energy emitted by this galaxy's
              *   black hole over the current snapshot, in internal Meraxes
-             *   units [erg/s]. Each is already corrected for its own
+             *   units [1e10 Lsun]. Each is already corrected for its own
              *   band's obscuration (NH distribution + band-averaged
              *   transmission) by apply_xray_obscuration() in
              *   blackhole_feedback.c — kept as two separate properties
@@ -2165,7 +2169,7 @@ void construct_baryon_grids(int snapshot, int local_ngals)
            * Physical motivation:
            *   After the MPI reduction, buffer[cell] holds the sum of
            *   gal->BHXrayEmissivity for all AGN in that cell for this
-           *   snapshot. We store this raw value (units: [erg/s]) into:
+           *   snapshot. We store this raw value (units: [1e10 Lsun]) into:
            *
            *   bh_xray_grid[cell]       — the current-snapshot spatial
            *     grid read directly by ComputeTs.c for the R_ct=0 shell
@@ -2181,8 +2185,9 @@ void construct_baryon_grids(int snapshot, int local_ngals)
            *
            *   No sfr_timescale division: unlike stellar mass, which must
            *   be divided by a timescale to convert to a rate,
-           *   BHXrayEmissivity is already a luminosity ([erg/s], already
-           *   a rate). ComputeTs.c converts to a luminosity density when
+           *   BHXrayEmissivity is already a luminosity ([1e10 Lsun],
+           *   already a rate). ComputeTs.c converts to erg/s and to a
+           *   luminosity density when
            *   building SMOOTHED_AGN.
            */
           case prop_bh_xray_emissivity:

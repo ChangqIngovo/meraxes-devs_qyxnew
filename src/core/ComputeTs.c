@@ -525,21 +525,25 @@ void _ComputeTs(int snapshot)
                                                 pow(units->UnitLength_in_cm, -3.) / SOLAR_MASS;
 #endif
 
-              /* Populate SMOOTHED_AGN(_soft) from the per-cell BHXrayEmissivity(_soft)
-               * (erg/s). Divide by pixel volume and convert to erg/s/cm^3 so the
-               * AGN source amplitude in the heating integral is the actual
-               * luminosity density from individual black holes, not a global
-               * constant. Hard and soft are independent amplitudes (Option 2) —
-               * each stays paired with its own band all the way to evolveInt(). */
+              /* Populate SMOOTHED_AGN(_soft) from the per-cell BHXrayEmissivity(_soft).
+               * The grid (like grids->sfr/sfr_filtered) carries the raw, unconverted
+               * "1e10 Lsun" convention all the way through reionization.c's FFT
+               * pipeline — matching QuasarLX/QuasarLuv and how blackhole_feedback.c
+               * accumulates it. Convert to erg/s (*1e10*SOLAR_LUM) and divide by
+               * pixel volume here, at the same point SMOOTHED_SFR_GAL's analogous
+               * stellar unit conversion happens just above, so the AGN source
+               * amplitude in the heating integral ends up in erg/s/cm^3. Hard and
+               * soft are independent amplitudes (Option 2) — each stays paired
+               * with its own band all the way to evolveInt(). */
               if (SMOOTHED_AGN != NULL && run_globals.reion_grids.BHXrayEmissivity != NULL) {
                 float bh = fmaxf(run_globals.reion_grids.BHXrayEmissivity[i_padded], 0.0f);
-                SMOOTHED_AGN[i_smoothedSFR] = (double)bh / pixel_volume
+                SMOOTHED_AGN[i_smoothedSFR] = (double)bh * 1e10 * SOLAR_LUM / pixel_volume
                                               * pow(units->UnitLength_in_cm, -3.0);
                 agn_xray_hard_ave += SMOOTHED_AGN[i_smoothedSFR];
               }
               if (SMOOTHED_AGN_soft != NULL && run_globals.reion_grids.BHXrayEmissivity_soft != NULL) {
                 float bh_soft = fmaxf(run_globals.reion_grids.BHXrayEmissivity_soft[i_padded], 0.0f);
-                SMOOTHED_AGN_soft[i_smoothedSFR] = (double)bh_soft / pixel_volume
+                SMOOTHED_AGN_soft[i_smoothedSFR] = (double)bh_soft * 1e10 * SOLAR_LUM / pixel_volume
                                                    * pow(units->UnitLength_in_cm, -3.0);
                 agn_xray_soft_ave += SMOOTHED_AGN_soft[i_smoothedSFR];
               }
@@ -617,12 +621,12 @@ void _ComputeTs(int snapshot)
 
               if (SMOOTHED_AGN != NULL && run_globals.reion_grids.BHXrayEmissivity != NULL) {
                 float bh = fmaxf(run_globals.reion_grids.BHXrayEmissivity[i_padded], 0.0f);
-                SMOOTHED_AGN[i_smoothedSFR] = (double)bh / pixel_volume
+                SMOOTHED_AGN[i_smoothedSFR] = (double)bh * 1e10 * SOLAR_LUM / pixel_volume
                                               * pow(units->UnitLength_in_cm, -3.0);
               }
               if (SMOOTHED_AGN_soft != NULL && run_globals.reion_grids.BHXrayEmissivity_soft != NULL) {
                 float bh_soft = fmaxf(run_globals.reion_grids.BHXrayEmissivity_soft[i_padded], 0.0f);
-                SMOOTHED_AGN_soft[i_smoothedSFR] = (double)bh_soft / pixel_volume
+                SMOOTHED_AGN_soft[i_smoothedSFR] = (double)bh_soft * 1e10 * SOLAR_LUM / pixel_volume
                                                    * pow(units->UnitLength_in_cm, -3.0);
               }
             }
