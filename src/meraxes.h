@@ -22,6 +22,10 @@
 #define SOLAR_MASS 1.989e33
 #define SOLAR_LUM 3.826e33
 #define LOG_10_SOLAR_LUM 33.5827449657
+/* erg/s per "1e10 Lsun" — the QuasarLX/QuasarLuv/BHXrayEmissivity convention
+ * (galaxy_t fields accumulated in units of 1e10 Lsun, converted to physical
+ * erg/s at the point of use, e.g. ComputeTs.c's SMOOTHED_AGN/_soft build). */
+#define LSUN_1E10_IN_ERG_S (1e10 * SOLAR_LUM)
 #define RAD_CONST 7.565e-15
 #define AVOGADRO 6.0222e23
 #define BOLTZMANN 1.3806e-16

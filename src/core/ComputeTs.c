@@ -29,19 +29,8 @@
  * III)
  */
 
-/* 26 Apr. 2026 - F.Shaban
- * AGN broken power law prefactors — file-scope globals, analogous to
- * const_zp_prefactor_GAL which is declared as a global in XRayHeatingFunctions.h.
- *
- * YOU MUST ALSO ADD these two lines to XRayHeatingFunctions.h alongside the
- * existing "double const_zp_prefactor_GAL;" declaration:
- *
- *   double const_zp_prefactor_AGN_soft;
- *   double const_zp_prefactor_AGN_hard;
- *
- * These are set once per snapshot in _ComputeTs() and used in the cell loop.
- */
-
+// 26 Apr. 2026 - F.Shaban
+// AGN broken power law prefactors — file-scope globals, analogous to const_zp_prefactor_GAL which is declared as a global in XRayHeatingFunctions.h.
 
 int set_sfr_history()
 {
@@ -153,6 +142,8 @@ void _ComputeTs(int snapshot)
   double Luminosity_converstion_factor_AGN_soft;  /* soft band: nu_thresh -> nu_break   */
   double Luminosity_converstion_factor_AGN_hard;  /* hard band: nu_break  -> nu_hard_cut */
   double agn_emissivity_zpp;       /* AGN emissivity at shell redshift z'': integral of LF x SED */
+  float bh, bh_soft;                /* per-cell BHXrayEmissivity(_soft), read while building SMOOTHED_AGN(_soft) */
+  double ratio;                     /* soft/hard split ratio for the Xheat_ave_AGN_soft/hard diagnostic */
 
 #if USE_MINI_HALOS
   double Luminosity_converstion_factor_III, collapse_fractionIII, collapse_fractionIII_in_cell;
@@ -542,21 +533,21 @@ void _ComputeTs(int snapshot)
                * The grid (like grids->sfr/sfr_filtered) carries the raw, unconverted
                * "1e10 Lsun" convention all the way through reionization.c's FFT
                * pipeline — matching QuasarLX/QuasarLuv and how blackhole_feedback.c
-               * accumulates it. Convert to erg/s (*1e10*SOLAR_LUM) and divide by
+               * accumulates it. Convert to erg/s (*LSUN_1E10_IN_ERG_S) and divide by
                * pixel volume here, at the same point SMOOTHED_SFR_GAL's analogous
                * stellar unit conversion happens just above, so the AGN source
                * amplitude in the heating integral ends up in erg/s/cm^3. Hard and
                * soft are independent amplitudes (Option 2) — each stays paired
                * with its own band all the way to evolveInt(). */
               if (SMOOTHED_AGN != NULL && run_globals.reion_grids.BHXrayEmissivity != NULL) {
-                float bh = fmaxf(run_globals.reion_grids.BHXrayEmissivity[i_padded], 0.0f);
-                SMOOTHED_AGN[i_smoothedSFR] = (double)bh * 1e10 * SOLAR_LUM / pixel_volume
+                bh = fmaxf(run_globals.reion_grids.BHXrayEmissivity[i_padded], 0.0f);
+                SMOOTHED_AGN[i_smoothedSFR] = (double)bh * LSUN_1E10_IN_ERG_S / pixel_volume
                                               * pow(units->UnitLength_in_cm, -3.0);
                 agn_xray_hard_ave += SMOOTHED_AGN[i_smoothedSFR];
               }
               if (SMOOTHED_AGN_soft != NULL && run_globals.reion_grids.BHXrayEmissivity_soft != NULL) {
-                float bh_soft = fmaxf(run_globals.reion_grids.BHXrayEmissivity_soft[i_padded], 0.0f);
-                SMOOTHED_AGN_soft[i_smoothedSFR] = (double)bh_soft * 1e10 * SOLAR_LUM / pixel_volume
+                bh_soft = fmaxf(run_globals.reion_grids.BHXrayEmissivity_soft[i_padded], 0.0f);
+                SMOOTHED_AGN_soft[i_smoothedSFR] = (double)bh_soft * LSUN_1E10_IN_ERG_S / pixel_volume
                                                    * pow(units->UnitLength_in_cm, -3.0);
                 agn_xray_soft_ave += SMOOTHED_AGN_soft[i_smoothedSFR];
               }
@@ -636,13 +627,13 @@ void _ComputeTs(int snapshot)
 #endif
 
               if (SMOOTHED_AGN != NULL && run_globals.reion_grids.BHXrayEmissivity != NULL) {
-                float bh = fmaxf(run_globals.reion_grids.BHXrayEmissivity[i_padded], 0.0f);
-                SMOOTHED_AGN[i_smoothedSFR] = (double)bh * 1e10 * SOLAR_LUM / pixel_volume
+                bh = fmaxf(run_globals.reion_grids.BHXrayEmissivity[i_padded], 0.0f);
+                SMOOTHED_AGN[i_smoothedSFR] = (double)bh * LSUN_1E10_IN_ERG_S / pixel_volume
                                               * pow(units->UnitLength_in_cm, -3.0);
               }
               if (SMOOTHED_AGN_soft != NULL && run_globals.reion_grids.BHXrayEmissivity_soft != NULL) {
-                float bh_soft = fmaxf(run_globals.reion_grids.BHXrayEmissivity_soft[i_padded], 0.0f);
-                SMOOTHED_AGN_soft[i_smoothedSFR] = (double)bh_soft * 1e10 * SOLAR_LUM / pixel_volume
+                bh_soft = fmaxf(run_globals.reion_grids.BHXrayEmissivity_soft[i_padded], 0.0f);
+                SMOOTHED_AGN_soft[i_smoothedSFR] = (double)bh_soft * LSUN_1E10_IN_ERG_S / pixel_volume
                                                    * pow(units->UnitLength_in_cm, -3.0);
               }
             }
@@ -1300,7 +1291,7 @@ void _ComputeTs(int snapshot)
            * only — it does not affect the actual simulated heating, which is
            * now computed correctly per-band inside evolveInt (Option 2).   */
           if (flag_agn == 1) {
-            double ratio = (const_zp_prefactor_AGN_soft + const_zp_prefactor_AGN_hard > 0.0)
+            ratio = (const_zp_prefactor_AGN_soft + const_zp_prefactor_AGN_hard > 0.0)
                          ? const_zp_prefactor_AGN_soft / (const_zp_prefactor_AGN_soft + const_zp_prefactor_AGN_hard)
                          : 0.5;
             Xheat_ave_AGN_soft += dansdz[3] * ratio;
