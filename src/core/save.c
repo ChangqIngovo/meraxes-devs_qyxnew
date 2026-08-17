@@ -1511,29 +1511,6 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
     xraylf_obs.volume = df_volume;
   }
 
-  if (run_globals.params.Flag_OutputXrayLF) {
-    if (run_globals.params.XrayLF_MaxLogL <= run_globals.params.XrayLF_MinLogL) {
-      mlog_error("XrayLF_MaxLogL must be greater than XrayLF_MinLogL.");
-      ABORT(EXIT_FAILURE);
-    }
-    if (run_globals.params.XrayLF_BinsPerDex <= 0) {
-      mlog_error("XrayLF_BinsPerDex must be > 0.");
-      ABORT(EXIT_FAILURE);
-    }
-    df_init(&xraylf,
-            run_globals.params.XrayLF_MinLogL,
-            run_globals.params.XrayLF_MaxLogL,
-            run_globals.params.XrayLF_BinsPerDex,
-            "X-ray Luminosity Function (2-10 keV, intrinsic)");
-    xraylf.volume = df_volume;
-    df_init(&xraylf_obs,
-            run_globals.params.XrayLF_MinLogL,
-            run_globals.params.XrayLF_MaxLogL,
-            run_globals.params.XrayLF_BinsPerDex,
-            "X-ray Luminosity Function (2-10 keV, observed after obscuration)");
-    xraylf_obs.volume = df_volume;
-  }
-
   // If the immediately preceding snapshot was also written, then save the
   // descendent indices (skip for FlagInteractive==2)
   prev_snapshot = run_globals.ListOutputSnaps[i_out] - 1;
@@ -1968,52 +1945,7 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
     }
   }
 
-  if (run_globals.params.Flag_OutputXrayLF) {
-    df_mpi_reduce(&xraylf, run_globals.mpi_rank, run_globals.mpi_size);
-    df_mpi_reduce(&xraylf_obs, run_globals.mpi_rank, run_globals.mpi_size);
-    if (run_globals.mpi_rank == 0) {
-      df_write_hdf5(file_id, target_group, &xraylf,     "XrayLF",     "per Mpc^3 per dex");
-      df_write_hdf5(file_id, target_group, &xraylf_obs, "XrayLF_obs", "per Mpc^3 per dex");
-    }
-    df_free(&xraylf);
-    df_free(&xraylf_obs);
-
-    /* NHfrac (binned by Lx using XrayLF's own bin scheme) and NHTrans.
-     * Replaces the old NH-only NHfrac0-4 (5 scalars) — per review, a single
-     * NH-only mean hides the luminosity dependence _psi() builds into the
-     * obscured fraction, so this needs a value per (Lx bin, NH bin) pair,
-     * not just per NH bin. get_nh_fracs() depends only on (Lx, z), not on
-     * any individual galaxy, so per @qyx268's review comment each Lx bin's
-     * fractions are evaluated once here, at the bin center, using this
-     * snapshot's z_snap — no per-galaxy accumulation or MPI reduction
-     * needed, since every rank computes the same values from
-     * run_globals.params alone. */
-    if (run_globals.mpi_rank == 0) {
-      hid_t grp = H5Gopen(file_id, target_group, H5P_DEFAULT);
-      double f_det[5];
-      double lx_log_center, lx_lin_1e10Lsun;
-      /* Single 2D dataset (n_lx_bins_nhfrac, 5) instead of one scalar dataset
-       * per (Lx bin, NH bin) pair — per @qyx268's review comment. */
-      double* nhfrac_table = malloc((size_t)n_lx_bins_nhfrac * 5 * sizeof(double));
-      for (int ilx = 0; ilx < n_lx_bins_nhfrac; ilx++) {
-        lx_log_center = run_globals.params.XrayLF_MinLogL + (ilx + 0.5) * lx_bin_width_nhfrac;
-        lx_lin_1e10Lsun = pow(10.0, lx_log_center - 10.0 - log10(SOLAR_LUM));
-        get_nh_fracs(lx_lin_1e10Lsun, z_snap, f_det);
-        for (int ib = 0; ib < 5; ib++)
-          nhfrac_table[ilx * 5 + ib] = f_det[ib];
-      }
-      hsize_t nhfrac_dims[2] = { (hsize_t)n_lx_bins_nhfrac, 5 };
-      H5LTmake_dataset_double(grp, "NHfrac", 2, nhfrac_dims, nhfrac_table);
-      free(nhfrac_table);
-
-      /* NHTrans is a run-constant (band-averaged photoelectric transmission per
-       * NH bin — depends only on NuXraySoftCut/NuXrayMax/SpecIndexXrayAGNHard,
-       * not on redshift), so per @qyx268's review it's written once in
-       * create_master_file() instead of being repeated in every snapshot. */
-
-      H5Gclose(grp);
-    }
-  }
+  
 
   // Close the group.
   H5Gclose(group_id);
