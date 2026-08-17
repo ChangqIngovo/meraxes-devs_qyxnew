@@ -900,7 +900,7 @@ void _ComputeTs(int snapshot)
 
     // Conversion of the input bolometric luminosity (new) to a ZETA_X (old) to be consistent with Ts.c from 21cmFAST
     // Conversion here means the code otherwise remains the same as the original Ts.c
-    if (fabs(run_globals.params.physics.SpecIndexXrayGal - 1.0) < 0.000001) {
+    if (fabs(run_globals.params.physics.SpecIndexXrayGal - 1.0) < SPEC_INDEX_UNITY_TOL) {
       Luminosity_converstion_factor_GAL =
         (run_globals.params.physics.NuXrayThreshold * NU_over_EV) *
         log(run_globals.params.physics.NuXraySoftCut / run_globals.params.physics.NuXrayThreshold);
@@ -948,7 +948,7 @@ void _ComputeTs(int snapshot)
      */
 
     /* --- Soft component: nu_thresh to nu_break --- */
-    if (fabs(run_globals.params.physics.SpecIndexXrayAGNSoft - 1.0) < 1e-6) {
+    if (fabs(run_globals.params.physics.SpecIndexXrayAGNSoft - 1.0) < SPEC_INDEX_UNITY_TOL) {
       Luminosity_converstion_factor_AGN_soft =
         (run_globals.params.physics.NuXrayThreshold * NU_over_EV) *
         log(run_globals.params.physics.NuXraySoftCut /
@@ -979,7 +979,7 @@ void _ComputeTs(int snapshot)
     Luminosity_converstion_factor_AGN_soft /= (PLANCK);
 
     /* --- Hard component: nu_break to nu_hard_cut --- */
-    if (fabs(run_globals.params.physics.SpecIndexXrayAGNHard - 1.0) < 1e-6) {
+    if (fabs(run_globals.params.physics.SpecIndexXrayAGNHard - 1.0) < SPEC_INDEX_UNITY_TOL) {
       Luminosity_converstion_factor_AGN_hard =
         (run_globals.params.physics.NuXrayThreshold * NU_over_EV) *
         log(run_globals.params.physics.NuXraySoftCut /
@@ -1003,7 +1003,7 @@ void _ComputeTs(int snapshot)
     // Do the same for Pop III.
 
 #if USE_MINI_HALOS
-    if (fabs(run_globals.params.physics.SpecIndexXrayIII - 1.0) < 0.000001) {
+    if (fabs(run_globals.params.physics.SpecIndexXrayIII - 1.0) < SPEC_INDEX_UNITY_TOL) {
       Luminosity_converstion_factor_III =
         (run_globals.params.physics.NuXrayThreshold * NU_over_EV) *
         log(run_globals.params.physics.NuXraySoftCut / run_globals.params.physics.NuXrayThreshold);
