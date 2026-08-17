@@ -975,7 +975,17 @@ void _ComputeTs(int snapshot)
             -run_globals.params.physics.SpecIndexXrayAGNSoft) *
         (1.0 - run_globals.params.physics.SpecIndexXrayAGNSoft);
     }
-    Luminosity_converstion_factor_AGN_soft *= (SEC_PER_YEAR) / (PLANCK);
+    /* Unlike Luminosity_converstion_factor_GAL above, no SEC_PER_YEAR here:
+     * LXrayGal is calibrated per (Msun/yr) of SFR, so the stellar formula
+     * needs SEC_PER_YEAR to cancel that "per year" against SFR_GAL's
+     * per-second rate. SMOOTHED_AGN is already a luminosity density in
+     * erg/s/cm^3 (from gal->BHXrayEmissivity, an actual X-ray luminosity,
+     * not a per-year rate) - there is no "per year" left to cancel here.
+     * Including SEC_PER_YEAR (~3.16e7) was a spurious ~3.16e7x
+     * amplification of AGN heating, copied blindly from the stellar
+     * formula above without adjusting for the different units - this is
+     * the historically-documented "premature reionization" bug. */
+    Luminosity_converstion_factor_AGN_soft /= (PLANCK);
 
     /* --- Hard component: nu_break to nu_hard_cut --- */
     if (fabs(run_globals.params.physics.SpecIndexXrayAGNHard - 1.0) < 1e-6) {
@@ -996,7 +1006,8 @@ void _ComputeTs(int snapshot)
             -run_globals.params.physics.SpecIndexXrayAGNHard) *
         (1.0 - run_globals.params.physics.SpecIndexXrayAGNHard);
     }
-    Luminosity_converstion_factor_AGN_hard *= (SEC_PER_YEAR) / (PLANCK);
+    /* Same as the soft-band comment above: no SEC_PER_YEAR needed. */
+    Luminosity_converstion_factor_AGN_hard /= (PLANCK);
 
     // Do the same for Pop III.
 
