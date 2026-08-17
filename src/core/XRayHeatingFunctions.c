@@ -781,15 +781,6 @@ double integrate_over_nu(double zp,
   double rel_tol = 0.01; //<- relative tolerance
   gsl_function F;
 
-  /* nu_tau_one() (the usual source of lower_int_limit) searches for a root
-   * up to 1e6 * NU_over_EV — far above NuXrayMax — so at very high redshift,
-   * where the IGM is highly optically thick even to hard X-rays, it can
-   * legitimately return a frequency above NuXrayMax * NU_over_EV, the fixed
-   * upper bound below. That would hand gsl_integration_qag() a reversed
-   * (lower > upper) range, which aborts the whole run rather than failing
-   * gracefully. Physically, lower_int_limit >= upper here means "even the
-   * top of this band is fully absorbed before it arrives" — i.e. zero
-   * photons get through — so return 0 directly instead of integrating. */
   double upper_int_limit = run_globals.params.physics.NuXrayMax * NU_over_EV;
   if (lower_int_limit >= upper_int_limit)
     return 0.0;
@@ -823,12 +814,6 @@ double integrate_over_nu(double zp,
                                    &result,
                                    &error);
   gsl_integration_workspace_free(w);
-
-  /* Unlike tauX() above, a non-convergent result here isn't "very high
-   * optical depth" — it's a heating/ionisation/lya contribution integral,
-   * so the safe fallback on failure is "no contribution" (0), not a large
-   * value; injecting a spurious large heating/ionisation rate from a
-   * numerical failure would be worse than slightly undercounting it. */
   if (status != GSL_SUCCESS)
     return 0.0;
 
@@ -1264,32 +1249,7 @@ int locate_xHII_index(float xHII_call)
 //  This function creates the d/dz' integrands
 // *********************************************************************
 #if USE_MINI_HALOS
-/*
- * ============================================================
- * THIS ADDITION IS MADE TO ADD THE X-RAY CONTRIBUTION BY AGN
- * ============================================================
- * XAGN_soft[]/XAGN_hard[]  : smoothed, independently-obscured AGN
- *                        X-ray emissivity per radial shell, one per
- *                        band [erg s^-1 Mpc^-3 / (M_sun yr^-1)] — same
- *                        normalisation convention as SFR_GAL.
- * freq_int_heat_AGN_soft[]/_hard[] : frequency integral ∫ σ_ν f_heat(ν,x_e) dν
- *                        for the AGN power-law spectrum, one per band
- *                        (soft Γ_soft segment / hard Γ_hard segment).
- * freq_int_ion_AGN_soft[]/_hard[]  : analogous for ionisations.
- * freq_int_lya_AGN_soft[]/_hard[]  : analogous for Ly-alpha photons.
- *
- * All arrays are pre-computed per radial shell R_ct in ComputeTs.c and
- * interpolated to the local cell ionisation state before being passed
- * here. Soft and hard are kept as two independent amplitude/freq_int
- * pairs throughout this function (Option 2) — each band's own amplitude
- * is multiplied by its own frequency integral and its own redshift
- * scaling, and the two results are only added together after each has
- * been through its own prefactor. The combined AGN heating rate is then
- * added to deriv[1] (dT_K/dz), the combined AGN ionisation rate to
- * deriv[0] (dx_e/dz) and deriv[4] (dΓ_ion/dz), and the combined AGN
- * Ly-alpha coupling to deriv[2] (dJ_alpha/dz).
- * ============================================================
- */
+// THIS ADDITION IS MADE TO ADD THE X-RAY CONTRIBUTION BY AGN
 void evolveInt(float zp,
                float curr_delNL0,
                const double SFR_GAL[],
@@ -1312,15 +1272,8 @@ void evolveInt(float zp,
                const double y[],
                double deriv[])
 #else
-/*
- * ============================================================
- * THIS ADDITION IS MADE TO ADD THE X-RAY CONTRIBUTION BY AGN
- * ============================================================
- * Same as the USE_MINI_HALOS version above, but for the standard
- * (non-mini-halo) code path. The AGN arrays are appended after
- * the existing GAL arrays and before COMPUTE_Ts.
- * ============================================================
- */
+
+//THIS ADDITION IS MADE TO ADD THE X-RAY CONTRIBUTION BY AGN, normal halo 
 void evolveInt(float zp,
                float curr_delNL0,
                const double SFR_GAL[],
@@ -1364,23 +1317,8 @@ void evolveInt(float zp,
    *   coupling rates over all radial shells (zpp_ct loop below).
    *
    *   dxheat_dt_AGN   : AGN X-ray heating rate  [eV s^-1 per baryon]
-   *                     = const_zp_prefactor_AGN_soft × Σ_shells XAGN_soft
-   *                       × (1+z'')^{-Γ_soft} × freq_int_heat_AGN_soft
-   *                     + const_zp_prefactor_AGN_hard × Σ_shells XAGN_hard
-   *                       × (1+z'')^{-Γ_hard} × freq_int_heat_AGN_hard
-   *
    *   dxion_source_dt_AGN : AGN photo-ionisation source rate [s^-1]
-   *
-   *   dxlya_dt_AGN    : AGN contribution to Ly-alpha photon number
-   *                     flux [s^-1 cm^-2 Hz^-1 sr^-1]
-   *
-   *   Each of the three is accumulated once for the soft band (using
-   *   XAGN_soft/freq_int_*_AGN_soft/Γ_soft) and once for the hard band
-   *   (using XAGN_hard/freq_int_*_AGN_hard/Γ_hard) with its own
-   *   redshift scaling and its own prefactor — the two are only summed
-   *   together into dxheat_dt_AGN etc. after both have been correctly
-   *   normalised, never before (Option 2 — see blackhole_feedback.c).
-   * ============================================================
+   *   dxlya_dt_AGN    : AGN contribution to Ly-alpha photon number flux [s^-1 cm^-2 Hz^-1 sr^-1]
    */
   double dxheat_dt_AGN      = 0.0;
   double dxion_source_dt_AGN = 0.0;
@@ -1473,19 +1411,6 @@ void evolveInt(float zp,
        *     dX_AGN_hard/dt += (dt/dz'') × dz''
        *                       × XAGN_hard[zpp_ct] × (1+z'')^{-Γ_hard}
        *                       × freq_int_X_AGN_hard[zpp_ct]
-       *
-       *   where X ∈ {heat, ion, lya}. The two are combined only after
-       *   each has been through its own prefactor, below (Option 2) —
-       *   never combined before this multiplication, which would let
-       *   one band's amplitude get multiplied by the other band's
-       *   spectral shape and double-count photons.
-       *
-       *   This is the discrete-shell approximation to the redshift
-       *   integral in eq. (A1)-(A3) of Mesinger et al. (2011), applied
-       *   to an AGN source population rather than stellar halos.
-       *
-       *   AGN do NOT produce Ly-alpha photons via stellar emission
-       *   (no sum_lyn term), so dstarlya_dt_AGN is zero and omitted.
        * ============================================================
        */
       zpp_integrand_AGN = XAGN_soft[zpp_ct]
@@ -1532,33 +1457,6 @@ void evolveInt(float zp,
     }
 #endif
 
-    /*
-     * ============================================================
-     * THIS ADDITION IS MADE TO ADD THE X-RAY CONTRIBUTION BY AGN
-     * ============================================================
-     * Physical motivation — apply each band's own redshift-dependent
-     * prefactor, independently:
-     *
-     *   After each band's shell integral is accumulated, we multiply it
-     *   by its own const_zp_prefactor_AGN_soft / _hard, which encodes
-     *   that band's normalisation of the AGN X-ray luminosity density
-     *   and its own cosmological (1+z)^{Γ+3} factor. Only after both
-     *   bands have been through their own prefactor are the two summed
-     *   into the shared dxheat_dt_AGN/dxion_source_dt_AGN/dxlya_dt_AGN
-     *   accumulators that the rest of this function already consumes
-     *   (Option 2 — soft and hard never share a prefactor or amplitude).
-     *   The n_b factor converts the Ly-alpha photon rate from a
-     *   per-baryon to a volumetric rate.
-     *
-     *   Note: AGN do not contribute a stellar Ly-alpha term
-     *   (dstarlya_dt_AGN = 0) because AGN continuum photons between
-     *   Ly-alpha and the Lyman limit are not produced by stellar
-     *   recombination lines.
-     *
-     *   Guard against non-finite prefactors (degenerate band limits →
-     *   0 → Inf) which would corrupt x_e via 0 * Inf = NaN.
-     * ============================================================
-     */
     if (isfinite(const_zp_prefactor_AGN_soft)) {
       dxheat_dt_AGN       *= const_zp_prefactor_AGN_soft;
       dxion_source_dt_AGN *= const_zp_prefactor_AGN_soft;

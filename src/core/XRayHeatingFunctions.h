@@ -50,15 +50,10 @@ double* zpp_edge;
 double stored_fcoll[1000];
 double stored_fcollIII[1000];
 /* Volume-averaged AGN X-ray emissivity density [erg/s/cm^3] per snapshot,
- * one value per band — for plotting an epsilon_X-style curve vs redshift
- * (see save.c). Combined = hard + soft, computed at write time, not
- * stored separately. */
+ * one value per band — for plotting an epsilon_X-style curve vs redshift*/
 double stored_XrayEmissivity_hard[1000];
 double stored_XrayEmissivity_soft[1000];
-/* Volume-averaged HMXB (galaxy/stellar) X-ray emissivity density
- * [erg/s/cm^3] per snapshot. Unlike AGN, this source has only one band
- * (LXrayGal/SpecIndexXrayGal, integrated NuXrayThreshold->NuXraySoftCut)
- * so there's no separate hard/soft/total split here. */
+// Volume-averaged HMXB (galaxy/stellar) X-ray emissivity density [erg/s/cm^3] per snapshot.
 double stored_XrayEmissivity_HMXB[1000];
 double* sum_lyn;
 double* sum_lyn_LW;
@@ -200,26 +195,7 @@ extern "C"
   double interpolate_fcoll(double redshift, int snap_i, int flag_population);
 
 #if USE_MINI_HALOS
-  /*
-   * ============================================================
-   * THIS ADDITION IS MADE TO ADD THE X-RAY CONTRIBUTION BY AGN
-   * ============================================================
-   * The AGN arrays XAGN_soft/XAGN_hard, freq_int_heat/ion/lya_AGN_soft,
-   * and freq_int_heat/ion/lya_AGN_hard are added to evolveInt() alongside
-   * the existing Pop II (GAL) and Pop III (III) arrays. They carry the
-   * smoothed, INDEPENDENTLY-OBSCURED soft- and hard-band AGN X-ray
-   * emissivity and their own broken-power-law frequency integrals,
-   * pre-computed in ComputeTs.c, allowing the AGN contribution to IGM
-   * heating (dT_K/dz), ionisation (dx_e/dz), and Ly-alpha coupling
-   * (dJ_alpha/dz) to be correctly folded into the evolution equations.
-   *
-   * Soft and hard are passed as two independent amplitude/freq_int pairs
-   * (Option 2), not combined into one before this call — each has its
-   * own obscuration, its own spectral index, and its own frequency
-   * integral, and multiplying a shared amplitude by both bands' spectral
-   * shapes would double-count photons. See blackhole_feedback.c.
-   * ============================================================
-   */
+// THIS ADDITION IS MADE TO ADD THE X-RAY CONTRIBUTION BY AGN in the case of mini-halos
   void evolveInt(float zp,
                  float curr_delNL0,
                  const double SFR_GAL[],
@@ -242,13 +218,7 @@ extern "C"
                  const double y[],
                  double deriv[]);
 #else
-  /*
-   * ============================================================
-   * THIS ADDITION IS MADE TO ADD THE X-RAY CONTRIBUTION BY AGN
-   * ============================================================
-   * Same as above for the non-mini-halo code path.
-   * ============================================================
-   */
+  // THIS ADDITION IS MADE TO ADD THE X-RAY CONTRIBUTION BY AGN
   void evolveInt(float zp,
                  float curr_delNL0,
                  const double SFR_GAL[],

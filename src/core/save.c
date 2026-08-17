@@ -1625,14 +1625,6 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
   int bin_idx;
   double lx_int_lin, lx_obs_lin;
 
-  /* NHfrac depends on Lx as well as NH (_psi() in blackhole_feedback.c
-   * makes obscured fraction decrease with luminosity — the "receding
-   * torus" effect) — so it's binned by Lx, reusing XrayLF's exact bin
-   * scheme (same formula as df_init) so the two are directly comparable.
-   * get_nh_fracs() is a deterministic function of (Lx, z) only — every
-   * galaxy in the same bin at this redshift gets the same fractions — so
-   * per @qyx268's review comment it's evaluated once per Lx bin after the
-   * galaxy loop below, not accumulated/duty-cycle-weighted per galaxy. */
   int n_lx_bins_nhfrac = (int)((run_globals.params.XrayLF_MaxLogL - run_globals.params.XrayLF_MinLogL) *
                                run_globals.params.XrayLF_BinsPerDex);
   if (n_lx_bins_nhfrac < 1)
@@ -1732,12 +1724,6 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
       }
 #endif
 
-      // XrayLF — intrinsic 2-10 keV X-ray luminosity function.
-      // XrayLF_obs — observed (post-obscuration) 2-10 keV X-ray luminosity function,
-      // sourced from BHXrayEmissivity (hard band, obscuration-weighted via
-      // apply_xray_obscuration()'s obs_fraction_hard). Stored in 1e10 Lsun
-      // (same convention as QuasarLX), so convert to erg/s here at the
-      // point of use, same as QuasarLX/lx_int_lin below.
       if (run_globals.params.Flag_OutputXrayLF) {
         lx_int_lin = (double)output_buffer[buffer_count].QuasarLX;
         lx_obs_lin = (double)output_buffer[buffer_count].BHXrayEmissivity;
@@ -1886,16 +1872,7 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
     df_free(&xraylf);
     df_free(&xraylf_obs);
 
-    /* NHfrac (binned by Lx using XrayLF's own bin scheme) and NHTrans.
-     * Replaces the old NH-only NHfrac0-4 (5 scalars) — per review, a single
-     * NH-only mean hides the luminosity dependence _psi() builds into the
-     * obscured fraction, so this needs a value per (Lx bin, NH bin) pair,
-     * not just per NH bin. get_nh_fracs() depends only on (Lx, z), not on
-     * any individual galaxy, so per @qyx268's review comment each Lx bin's
-     * fractions are evaluated once here, at the bin center, using this
-     * snapshot's z_snap — no per-galaxy accumulation or MPI reduction
-     * needed, since every rank computes the same values from
-     * run_globals.params alone. */
+
     if (run_globals.mpi_rank == 0) {
       hid_t grp = H5Gopen(file_id, target_group, H5P_DEFAULT);
       double f_det[5];
@@ -1914,21 +1891,6 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
       H5LTmake_dataset_double(grp, "NHfrac", 2, nhfrac_dims, nhfrac_table);
       free(nhfrac_table);
 
-      /* NHTrans is a run-constant (band-averaged photoelectric transmission per
-       * NH bin — depends only on NuXraySoftCut/NuXrayMax/SpecIndexXrayAGNHard,
-       * not on redshift), so per @qyx268's review it's written once in
-       * create_master_file() instead of being repeated in every snapshot. */
-
-      /* XrayEmissivity_hard/soft/total: volume-averaged AGN X-ray emissivity
-       * density this snapshot [erg/s/cm^3], for an epsilon_X-style curve vs
-       * redshift. Already fully MPI-reduced across ranks back in ComputeTs.c
-       * (MPI_Allreduce), so every rank already holds the correct global
-       * value here — no further reduction needed.
-       *
-       * XrayEmissivity_HMXB: the same, for the galaxy/stellar HMXB source
-       * (LXrayGal-normalized). Kept separate from XrayEmissivity_total,
-       * which remains AGN-only (hard+soft) — HMXB is a different source
-       * population, not folded in. */
       {
         hsize_t one = 1;
         double xray_hard  = stored_XrayEmissivity_hard[run_globals.ListOutputSnaps[i_out]];
@@ -1950,16 +1912,7 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
   // Close the group.
   H5Gclose(group_id);
 
-  // Close the file.
-  // H5Fclose(file_id);
-
-  // Do NOT close file_id here — it is run_globals.output_file_id, which is
-  // kept open for the lifetime of the run.  close_hdf5_file() handles the
-  // final close.
-
-  // Flush (but do not close) this snapshot's data to disk now, so it
-  // survives a crash later in the run rather than being lost with
-  // everything that was never flushed.
+  // Flush (but do not close) this snapshot's data to disk now, so it survives a crash later in the run rather than being lost with everything that was never flushed.
   H5Fflush(run_globals.output_file_id, H5F_SCOPE_GLOBAL);
 
   // Update the value of last_n_write

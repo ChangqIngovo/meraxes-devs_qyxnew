@@ -29,9 +29,6 @@
  * III)
  */
 
-// 26 Apr. 2026 - F.Shaban
-// AGN broken power law prefactors — file-scope globals, analogous to const_zp_prefactor_GAL which is declared as a global in XRayHeatingFunctions.h.
-
 int set_sfr_history()
 {
   double box_size = run_globals.params.BoxSize / run_globals.params.Hubble_h; // Mpc
@@ -107,36 +104,6 @@ void _ComputeTs(int snapshot)
   double collapse_fraction, density_over_mean, collapse_fraction_in_cell;
   double agn_xray_hard_ave = 0.0, agn_xray_soft_ave = 0.0; /* volume-averaged emissivity density, this snapshot */
   double hmxb_xray_ave = 0.0; /* volume-averaged HMXB (galaxy) X-ray emissivity density, this snapshot */
-
-  /*
-   * AGN broken power law variables.
-   *
-   * Physical motivation: AGN emit a broken power law SED. Hard X-rays (Gamma_hard, alpha_hard)
-   * are emitted at high z'' and redshift into the soft band by the time they reach the observer
-   * at z'. Soft X-rays (Gamma_soft, alpha_soft) are the intrinsic soft emission from the same
-   * AGN population at the observation redshift.
-   * We treat these as two separate spectral components with a break at nu_break,
-   * each with its own luminosity conversion factor, spectral index, and frequency integral tables.
-   *
-   * The break frequency nu_break separates:
-   *   soft component: nu_threshold -> nu_break   (alpha_soft, locally absorbed, heats nearby IGM)
-   *   hard component: nu_break     -> nu_hard_cut (alpha_hard, long mfp, heats IGM globally;
-   *                                                also represents hard photons from high-z AGN
-   *                                                redshifted into soft band at lower z)
-   *
-   * Parameters in run_globals.params.physics:
-   *   NuXrayThreshold      - minimum X-ray frequency for AGN (eV)
-   *   NuXraySoftCut        - soft/hard band break (eV)
-   *   NuXrayMax            - hard-band upper cutoff (eV)
-   *   SpecIndexXrayAGNSoft - spectral index alpha for soft component (nu^-alpha)
-   *   SpecIndexXrayAGNHard - spectral index alpha for hard component (nu^-alpha)
-   * Source amplitudes are independent per band (Option 2): per-cell
-   * BHXrayEmissivity (hard, erg/s) → SMOOTHED_AGN, and per-cell
-   * BHXrayEmissivity_soft (soft, erg/s) → SMOOTHED_AGN_soft [erg/s/cm^3
-   * each]. Each is obscuration-corrected in its own band already in
-   * blackhole_feedback.c — the soft amplitude is NOT derived from the
-   * hard one via any SED ratio; it has its own independent source.
-   */
   double lower_int_limit_AGN_soft;
   double lower_int_limit_AGN_hard;
   double Luminosity_converstion_factor_AGN_soft;  /* soft band: nu_thresh -> nu_break   */
@@ -510,15 +477,6 @@ void _ComputeTs(int snapshot)
                                                 (units->UnitMass_in_g / units->UnitTime_in_s) *
                                                 pow(units->UnitLength_in_cm, -3.) / SOLAR_MASS;
 
-              /* HMXB (galaxy/stellar) X-ray emissivity density [erg/s/cm^3], for
-               * the epsilon_X diagnostic (see save.c). LXrayGal is calibrated as
-               * erg/s per (Msun/yr) of SFR (the standard HMXB LX-SFR relation
-               * convention), but SMOOTHED_SFR_GAL just above is a rate density
-               * in Msun/s/cm^3 (code time units, not per year) — SEC_PER_YEAR
-               * reconciles that, same as it does in Luminosity_converstion_factor_GAL's
-               * own normalization just below. Unlike AGN, HMXB has only one band
-               * here (LXrayGal/SpecIndexXrayGal, NuXrayThreshold->NuXraySoftCut),
-               * so there's no separate hard/soft split to track. */
               hmxb_xray_ave += run_globals.params.physics.LXrayGal * SEC_PER_YEAR *
                                SMOOTHED_SFR_GAL[i_smoothedSFR];
 #if USE_MINI_HALOS
@@ -529,16 +487,6 @@ void _ComputeTs(int snapshot)
                                                 pow(units->UnitLength_in_cm, -3.) / SOLAR_MASS;
 #endif
 
-              /* Populate SMOOTHED_AGN(_soft) from the per-cell BHXrayEmissivity(_soft).
-               * The grid (like grids->sfr/sfr_filtered) carries the raw, unconverted
-               * "1e10 Lsun" convention all the way through reionization.c's FFT
-               * pipeline — matching QuasarLX/QuasarLuv and how blackhole_feedback.c
-               * accumulates it. Convert to erg/s (*LSUN_1E10_IN_ERG_S) and divide by
-               * pixel volume here, at the same point SMOOTHED_SFR_GAL's analogous
-               * stellar unit conversion happens just above, so the AGN source
-               * amplitude in the heating integral ends up in erg/s/cm^3. Hard and
-               * soft are independent amplitudes (Option 2) — each stays paired
-               * with its own band all the way to evolveInt(). */
               if (SMOOTHED_AGN != NULL && run_globals.reion_grids.BHXrayEmissivity != NULL) {
                 bh = fmaxf(run_globals.reion_grids.BHXrayEmissivity[i_padded], 0.0f);
                 SMOOTHED_AGN[i_smoothedSFR] = (double)bh * LSUN_1E10_IN_ERG_S / pixel_volume
@@ -780,12 +728,6 @@ void _ComputeTs(int snapshot)
           run_globals.params.physics.NuXrayThreshold,
           run_globals.params.physics.SpecIndexXrayAGNSoft, 2);
 
-        /*
-         * Hard component integrals: alpha_hard, from lower_hard to nu_hard_cut.
-         * Note: we pass NuXrayThreshold as the "threshold" argument so that
-         * integrate_over_nu normalises the power law to the hard-band pivot,
-         * consistent with how the luminosity conversion was computed above.
-         */
         freq_int_heat_tbl_AGN_hard[x_e_ct][R_ct] = integrate_over_nu(
           zp, x_int_XHII[x_e_ct],
           lower_int_limit_AGN_hard,
@@ -920,33 +862,6 @@ void _ComputeTs(int snapshot)
 
     Luminosity_converstion_factor_GAL *= (SEC_PER_YEAR) / (PLANCK);
 
-    /*
-     * AGN broken power law luminosity conversion.
-     *
-     * The AGN SED is split at nu_break into two power laws:
-     *
-     *   Soft: L(nu) ~ nu^{-alpha_soft}   for nu_thresh < nu < nu_break
-     *   Hard: L(nu) ~ nu^{-alpha_hard}   for nu_break  < nu < nu_hard_cut
-     *
-     * Physical meaning of the hard component: hard X-ray photons emitted by AGN
-     * at high z'' travel through the IGM and redshift into the soft band by the
-     * time they arrive at the observation redshift z'. This means a photon emitted
-     * at energy E_emit = hnu_emit at z'' arrives at:
-     *
-     *     E_obs = E_emit * (1+z') / (1+z'')
-     *
-     * So hard photons from shells at large R (high z'') arrive as soft photons at z'.
-     * We account for this by keeping the hard component as a separate integral: its
-     * lower limit is set by nu_tau_one evaluated at the redshifted frequency, and the
-     * spectral index alpha_hard is used throughout. The sum of soft + hard components
-     * gives the full AGN contribution to IGM heating at the observation redshift z'.
-     *
-     * Normalisation: we convert the input AGN X-ray luminosity density (erg/s/Mpc^3,
-     * integrated over the broken power law LF) into photon number flux the same way
-     * the GAL conversion works. The LF integral is folded into agn_emissivity_zpp
-     * computed per shell below.
-     */
-
     /* --- Soft component: nu_thresh to nu_break --- */
     if (fabs(run_globals.params.physics.SpecIndexXrayAGNSoft - 1.0) < SPEC_INDEX_UNITY_TOL) {
       Luminosity_converstion_factor_AGN_soft =
@@ -967,15 +882,8 @@ void _ComputeTs(int snapshot)
         (1.0 - run_globals.params.physics.SpecIndexXrayAGNSoft);
     }
     /* Unlike Luminosity_converstion_factor_GAL above, no SEC_PER_YEAR here:
-     * LXrayGal is calibrated per (Msun/yr) of SFR, so the stellar formula
-     * needs SEC_PER_YEAR to cancel that "per year" against SFR_GAL's
-     * per-second rate. SMOOTHED_AGN is already a luminosity density in
-     * erg/s/cm^3 (from gal->BHXrayEmissivity, an actual X-ray luminosity,
-     * not a per-year rate) - there is no "per year" left to cancel here.
-     * Including SEC_PER_YEAR (~3.16e7) was a spurious ~3.16e7x
-     * amplification of AGN heating, copied blindly from the stellar
-     * formula above without adjusting for the different units - this is
-     * the historically-documented "premature reionization" bug. */
+     * LXrayGal is calibrated per (Msun/yr) of SFR, so the stellar formula needs SEC_PER_YEAR to cancel that "per year" against SFR_GAL's per-second rate. 
+     * SMOOTHED_AGN is already a luminosity density in erg/s/cm^3. (from gal->BHXrayEmissivity, an actual X-ray luminosity. */
     Luminosity_converstion_factor_AGN_soft /= (PLANCK);
 
     /* --- Hard component: nu_break to nu_hard_cut --- */
@@ -1035,25 +943,6 @@ void _ComputeTs(int snapshot)
                              pow(1 + zp, run_globals.params.physics.SpecIndexXrayIII + 3);
 #endif
 
-    /*
-     * AGN prefactors: analogous to const_zp_prefactor_GAL but for each spectral
-     * component of the broken power law. These are global prefactors that depend
-     * only on zp (the observation redshift), not on the shell redshift z''.
-     * The shell-dependent AGN emissivity is folded into XAGN_soft[R_ct] /
-     * XAGN_hard[R_ct] — each band uses only its own independent amplitude.
-     *
-     * Soft:  const_zp_prefactor_AGN_soft = Lconv_soft / (nu_thresh * eV) * c * (1+zp)^(alpha_soft+3)
-     * Hard:  const_zp_prefactor_AGN_hard = Lconv_hard / (nu_break  * eV) * c * (1+zp)^(alpha_hard+3)
-     *
-     * Note: (1+zp)^(alpha+3) comes from the combination of the photon energy
-     * redshift factor (1+z'')/(1+z') and the comoving volume element — this is
-     * the same factor present in const_zp_prefactor_GAL.
-     */
-    /* SMOOTHED_AGN is already in erg/s/cm^3 (actual X-ray luminosity density
-     * from individual black holes). LXrayAGN is therefore NOT included here —
-     * it was only needed when the source was a global constant (accretion rate
-     * × efficiency). The spectral normalization (Lconv) and cosmological
-     * factors are still applied exactly as for the stellar case.           */
     const_zp_prefactor_AGN_soft =
       Luminosity_converstion_factor_AGN_soft /
       (run_globals.params.physics.NuXrayThreshold * NU_over_EV) * SPEED_OF_LIGHT *
@@ -1080,10 +969,6 @@ void _ComputeTs(int snapshot)
     // this same factor higher than 21cmFAST, but at least it is understood why and trivially accounted for.
 
     // interpolate to correct nu integral value based on the cell's ionization state
-    /* Flag_includeAGN is a single run-wide setting — read it once here
-     * rather than re-reading it from run_globals every (ix,iy,iz,R_ct)
-     * combination below (millions to billions of redundant reads/re-
-     * declarations over a full grid otherwise). */
     int flag_agn = run_globals.params.physics.Flag_includeAGN;
     for (int ix = 0; ix < local_nix; ix++)
       for (int iy = 0; iy < ReionGridDim; iy++)
@@ -1102,19 +987,6 @@ void _ComputeTs(int snapshot)
 
             SFR_GAL[R_ct] = SMOOTHED_SFR_GAL[i_smoothedSFR];
 
-            /* Per-cell AGN source: spatially resolved luminosity density
-             * [erg/s/cm^3], independently for each band, from
-             * BHXrayEmissivity(_soft), built per shell above. Each keeps
-             * its own amplitude all the way to evolveInt() (Option 2) —
-             * summing them into one shared amplitude before applying the
-             * per-band spectral shape would double-count photons (see the
-             * blackhole_feedback.c discussion this design followed from).
-             *
-             * Flag_includeAGN selects which band(s) actually contribute:
-             *   0 = no AGN, 1 = soft+hard, 2 = hard only, 3 = soft only.
-             * Zeroing the excluded band's amplitude here (rather than
-             * later) means evolveInt() naturally gets zero contribution
-             * from it without needing to know about the flag itself. */
             {
               XAGN_soft[R_ct] = (SMOOTHED_AGN_soft != NULL && (flag_agn == 1 || flag_agn == 3))
                                    ? SMOOTHED_AGN_soft[i_smoothedSFR] : 0.0;
@@ -1283,13 +1155,6 @@ void _ComputeTs(int snapshot)
                     ans,
                     dansdz);
 #endif
-          /* AGN heating diagnostics — accumulate soft and hard separately.
-           * dansdz[3] holds the total (already correctly soft+hard summed)
-           * AGN dxheat/dz from evolveInt. evolveInt computes the two bands
-           * independently internally but only returns their sum, so this
-           * ratio-based split is still an approximation for logging purposes
-           * only — it does not affect the actual simulated heating, which is
-           * now computed correctly per-band inside evolveInt (Option 2).   */
           if (flag_agn == 1) {
             ratio = (const_zp_prefactor_AGN_soft + const_zp_prefactor_AGN_hard > 0.0)
                          ? const_zp_prefactor_AGN_soft / (const_zp_prefactor_AGN_soft + const_zp_prefactor_AGN_hard)
