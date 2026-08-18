@@ -46,19 +46,12 @@ static void store_params(entry_t entry[123],
   char key[STRLEN + 64];
 
   for (int i_entry = 0; i_entry < n_entries; i_entry++) {
-    // DEBUG
-    // mlog("Checking %s", MLOG_MESG, entry[i_entry].key);
-
-    // reset prefix if we have descended an indentation level
     if (entry[i_entry].level < level)
       *prefix = '\0';
 
     strncpy(key, prefix, STRLEN);
     strncat(key, entry[i_entry].key, STRLEN);
     level = entry[i_entry].level;
-
-    // DEBUG
-    // mlog("level = %d :: prefix = %s", MLOG_MESG, level, prefix);
 
     int tag_index = -1;
     for (int ii = 0; ii < n_param; ii++)

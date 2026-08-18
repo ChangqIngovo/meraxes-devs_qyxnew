@@ -229,14 +229,6 @@ void init_meraxes()
   int i;
   int snaplist_len;
 
-  /* GSL's default error handler calls abort() on any numerical failure
-   * (integration non-convergence, root-solver failure, etc.) anywhere in
-   * the program — a single stiff integrand at some extreme redshift/
-   * ionisation state would otherwise kill the whole run. Disable it here,
-   * once, so GSL functions return an error code instead; call sites that
-   * can hit genuinely hard cases (e.g. tauX(), integrate_over_nu() in
-   * XRayHeatingFunctions.c) check that status themselves and fall back to
-   * a safe value rather than trusting a possibly-nonconverged result. */
   gsl_set_error_handler_off();
 
   // initialize GPU
@@ -310,8 +302,7 @@ void init_meraxes()
   set_ReionEfficiency();
   set_quasar_fobs();
 
-  // Build the AGN NH-obscuration transmission tables once here, rather
-  // than lazily (with a guard check) on every single AGN every snapshot.
+  // Build the AGN NH-obscuration transmission tables once.
   init_xray_obscuration_tables();
 
   if (run_globals.params.Flag_IncludeSpinTemp){
