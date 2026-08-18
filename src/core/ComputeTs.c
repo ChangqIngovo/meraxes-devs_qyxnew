@@ -1185,8 +1185,8 @@ void _ComputeTs(int snapshot)
           }
 #endif
           if (Tk_box[i_real] <
-              TK_MIN) { // spurious bahaviour of the trapazoidalintegrator. generally overcooling in underdensities.
-                        // Floored at TK_MIN (not just < 0) because 1/TK and 1/TK^2 in Salpha_tilde()/Tc_eff()
+              MIN_TK) { // spurious bahaviour of the trapazoidalintegrator. generally overcooling in underdensities.
+                        // Floored at MIN_TK (not just < 0) because 1/TK and 1/TK^2 in Salpha_tilde()/Tc_eff()
                         // (get_Ts(), spin-temperature coupling) blow up to Inf/NaN as TK -> 0, even while still
                         // nominally positive — most easily triggered when AGN heating (sparse) can't fill in for
                         // suppressed HMXB heating (normally spatially-widespread) in underdense cells.
@@ -1195,8 +1195,8 @@ void _ComputeTs(int snapshot)
 
 #if USE_MINI_HALOS
           if (Tk_boxII[i_real] <
-              TK_MIN) { // spurious bahaviour of the trapazoidalintegrator. generally overcooling in underdensities.
-                        // See TK_MIN comment above.
+              MIN_TK) { // spurious bahaviour of the trapazoidalintegrator. generally overcooling in underdensities.
+                        // See MIN_TK comment above.
             Tk_boxII[i_real] = (float)(TCMB * (1 + zp));
           }
 #endif

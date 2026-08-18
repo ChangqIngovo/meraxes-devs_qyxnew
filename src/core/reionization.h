@@ -40,7 +40,7 @@
 // (spin-temperature coupling, XRayHeatingFunctions.c) — letting TK reach
 // zero (not just negative) blows those up to Inf/NaN, which get_Ts()'s
 // convergence loop then silently hands back rather than catching.
-#define TK_MIN (float)1.0
+#define MIN_TK (float)0.1
 #define L_FACTOR 0.620350491 // Factor relating cube length to filter radius = (4PI/3)^(-1/3)
 #define MAX_DVDR (float)(0.2)
 
