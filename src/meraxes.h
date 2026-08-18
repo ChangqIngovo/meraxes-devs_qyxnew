@@ -527,6 +527,17 @@ typedef struct reion_grids_t
   float* BHXrayEmissivity_soft;   //!< Per-cell AGN X-ray emissivity grid (current snapshot, soft band) [slab_n_complex*2]
   float* bh_xray_histories_soft;  //!< Ring-buffer of NstoreSnapshots_Heating past BHXrayEmissivity_soft snapshots
 
+  // Spatial (k-space, radius-R) smoothing buffers/plans for BHXrayEmissivity(_soft) —
+  // same shell-filtering pipeline as sfr/sfr_filtered, mirroring effective_bhm above.
+  fftwf_complex* BHXrayEmissivity_unfiltered;
+  fftwf_complex* BHXrayEmissivity_filtered;
+  fftwf_plan BHXrayEmissivity_forward_plan;
+  fftwf_plan BHXrayEmissivity_filtered_reverse_plan;
+  fftwf_complex* BHXrayEmissivity_soft_unfiltered;
+  fftwf_complex* BHXrayEmissivity_soft_filtered;
+  fftwf_plan BHXrayEmissivity_soft_forward_plan;
+  fftwf_plan BHXrayEmissivity_soft_filtered_reverse_plan;
+
   // Grids necessary for LW background and future disentangling between MC/AC Pop3/Pop2 stuff
 
 #if USE_MINI_HALOS

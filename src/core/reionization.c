@@ -991,15 +991,58 @@ void malloc_reionization_grids()
         grids->bh_xray_histories = fftwf_alloc_real((size_t)slab_n_complex * 2 * run_globals.NstoreSnapshots_Heating);
         grids->BHXrayEmissivity_soft  = fftwf_alloc_real((size_t)slab_n_complex * 2);
         grids->bh_xray_histories_soft = fftwf_alloc_real((size_t)slab_n_complex * 2 * run_globals.NstoreSnapshots_Heating);
+
+        /*
+         * Spatial (k-space, radius-R) smoothing buffers/plans for
+         * BHXrayEmissivity(_soft) — same shell-filtering pipeline as
+         * sfr/sfr_filtered, mirroring effective_bhm/effective_bhar above.
+         */
+        grids->BHXrayEmissivity_unfiltered = fftwf_alloc_complex((size_t)slab_n_complex);
+        grids->BHXrayEmissivity_filtered = fftwf_alloc_complex((size_t)slab_n_complex);
+        grids->BHXrayEmissivity_forward_plan = fftwf_mpi_plan_dft_r2c_3d(ReionGridDim,
+                                                                         ReionGridDim,
+                                                                         ReionGridDim,
+                                                                         grids->BHXrayEmissivity,
+                                                                         grids->BHXrayEmissivity_unfiltered,
+                                                                         run_globals.mpi_comm,
+                                                                         plan_flags);
+        grids->BHXrayEmissivity_filtered_reverse_plan = fftwf_mpi_plan_dft_c2r_3d(ReionGridDim,
+                                                                                  ReionGridDim,
+                                                                                  ReionGridDim,
+                                                                                  grids->BHXrayEmissivity_filtered,
+                                                                                  (float*)grids->BHXrayEmissivity_filtered,
+                                                                                  run_globals.mpi_comm,
+                                                                                  plan_flags);
+
+        grids->BHXrayEmissivity_soft_unfiltered = fftwf_alloc_complex((size_t)slab_n_complex);
+        grids->BHXrayEmissivity_soft_filtered = fftwf_alloc_complex((size_t)slab_n_complex);
+        grids->BHXrayEmissivity_soft_forward_plan = fftwf_mpi_plan_dft_r2c_3d(ReionGridDim,
+                                                                              ReionGridDim,
+                                                                              ReionGridDim,
+                                                                              grids->BHXrayEmissivity_soft,
+                                                                              grids->BHXrayEmissivity_soft_unfiltered,
+                                                                              run_globals.mpi_comm,
+                                                                              plan_flags);
+        grids->BHXrayEmissivity_soft_filtered_reverse_plan =
+          fftwf_mpi_plan_dft_c2r_3d(ReionGridDim,
+                                    ReionGridDim,
+                                    ReionGridDim,
+                                    grids->BHXrayEmissivity_soft_filtered,
+                                    (float*)grids->BHXrayEmissivity_soft_filtered,
+                                    run_globals.mpi_comm,
+                                    plan_flags);
+
         /*
          * Fail loudly here if allocation ever fails, rather than leaving a
          * NULL pointer for downstream code to silently work around. Nothing
          * else in this function checks its fftwf_alloc_* calls either, but
-         * these four are the only ones that are conditionally allocated, so
+         * these are the only ones that are conditionally allocated, so
          * a NULL here is the one case worth telling apart from "feature off".
          */
         if (grids->BHXrayEmissivity == NULL || grids->bh_xray_histories == NULL ||
-            grids->BHXrayEmissivity_soft == NULL || grids->bh_xray_histories_soft == NULL) {
+            grids->BHXrayEmissivity_soft == NULL || grids->bh_xray_histories_soft == NULL ||
+            grids->BHXrayEmissivity_unfiltered == NULL || grids->BHXrayEmissivity_filtered == NULL ||
+            grids->BHXrayEmissivity_soft_unfiltered == NULL || grids->BHXrayEmissivity_soft_filtered == NULL) {
           mlog_error("Failed to allocate AGN X-ray emissivity grids.");
           ABORT(EXIT_FAILURE);
         }
@@ -1257,8 +1300,17 @@ void free_reionization_grids()
     free(grids->SMOOTHED_AGN);
     free(grids->SMOOTHED_AGN_soft);
     if (run_globals.params.physics.Flag_IncludeAGNXray) {
+      fftwf_destroy_plan(grids->BHXrayEmissivity_filtered_reverse_plan);
+      fftwf_destroy_plan(grids->BHXrayEmissivity_forward_plan);
+      fftwf_free(grids->BHXrayEmissivity_filtered);
+      fftwf_free(grids->BHXrayEmissivity_unfiltered);
       fftwf_free(grids->BHXrayEmissivity);
       fftwf_free(grids->bh_xray_histories);
+
+      fftwf_destroy_plan(grids->BHXrayEmissivity_soft_filtered_reverse_plan);
+      fftwf_destroy_plan(grids->BHXrayEmissivity_soft_forward_plan);
+      fftwf_free(grids->BHXrayEmissivity_soft_filtered);
+      fftwf_free(grids->BHXrayEmissivity_soft_unfiltered);
       fftwf_free(grids->BHXrayEmissivity_soft);
       fftwf_free(grids->bh_xray_histories_soft);
     }

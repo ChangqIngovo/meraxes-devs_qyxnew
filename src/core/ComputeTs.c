@@ -209,6 +209,13 @@ void _ComputeTs(int snapshot)
   fftwf_complex* sfr_unfiltered = run_globals.reion_grids.sfr_unfiltered;
   fftwf_complex* sfr_filtered = run_globals.reion_grids.sfr_filtered;
 
+  /* NULL unless Flag_IncludeAGNXray is on — only dereferenced inside blocks
+   * gated on that flag below. */
+  fftwf_complex* BHXrayEmissivity_unfiltered = run_globals.reion_grids.BHXrayEmissivity_unfiltered;
+  fftwf_complex* BHXrayEmissivity_filtered = run_globals.reion_grids.BHXrayEmissivity_filtered;
+  fftwf_complex* BHXrayEmissivity_soft_unfiltered = run_globals.reion_grids.BHXrayEmissivity_soft_unfiltered;
+  fftwf_complex* BHXrayEmissivity_soft_filtered = run_globals.reion_grids.BHXrayEmissivity_soft_filtered;
+
 #if USE_MINI_HALOS
   fftwf_complex* sfrIII_unfiltered = run_globals.reion_grids.sfrIII_unfiltered;
   fftwf_complex* sfrIII_filtered = run_globals.reion_grids.sfrIII_filtered;
@@ -451,26 +458,51 @@ void _ComputeTs(int snapshot)
       for (int ii = 0; ii < slab_n_complex; ii++)
         sfrIII_unfiltered[ii] /= (float)total_n_cells;
   #endif
-  
+
+      /* Same shell-filtering pipeline as sfr/sfr_filtered above, applied to
+       * the (already time-weighted, via load_reion_sfr_grids) AGN emissivity
+       * grids — this is what actually smooths BHXrayEmissivity(_soft) over
+       * radius R, rather than reading the unfiltered per-cell grid. */
+      if (run_globals.params.physics.Flag_IncludeAGNXray) {
+        fftwf_execute(run_globals.reion_grids.BHXrayEmissivity_forward_plan);
+        fftwf_execute(run_globals.reion_grids.BHXrayEmissivity_soft_forward_plan);
+        for (int ii = 0; ii < slab_n_complex; ii++) {
+          BHXrayEmissivity_unfiltered[ii] /= (float)total_n_cells;
+          BHXrayEmissivity_soft_unfiltered[ii] /= (float)total_n_cells;
+        }
+      }
+
       memcpy(sfr_filtered, sfr_unfiltered, sizeof(fftwf_complex) * slab_n_complex);
   #if USE_MINI_HALOS
       memcpy(sfrIII_filtered, sfrIII_unfiltered, sizeof(fftwf_complex) * slab_n_complex);
   #endif
-  
+      if (run_globals.params.physics.Flag_IncludeAGNXray) {
+        memcpy(BHXrayEmissivity_filtered, BHXrayEmissivity_unfiltered, sizeof(fftwf_complex) * slab_n_complex);
+        memcpy(BHXrayEmissivity_soft_filtered, BHXrayEmissivity_soft_unfiltered, sizeof(fftwf_complex) * slab_n_complex);
+      }
+
       if (R_ct > 0) {
         int local_ix_start = (int)(run_globals.reion_grids.slab_ix_start[run_globals.mpi_rank]);
-  
+
         filter(sfr_filtered, local_ix_start, local_nix, ReionGridDim, (float)R, run_globals.params.TsHeatingFilterType);
   #if USE_MINI_HALOS
         filter(sfrIII_filtered, local_ix_start, local_nix, ReionGridDim, (float)R, run_globals.params.TsHeatingFilterType);
   #endif
+        if (run_globals.params.physics.Flag_IncludeAGNXray) {
+          filter(BHXrayEmissivity_filtered, local_ix_start, local_nix, ReionGridDim, (float)R, run_globals.params.TsHeatingFilterType);
+          filter(BHXrayEmissivity_soft_filtered, local_ix_start, local_nix, ReionGridDim, (float)R, run_globals.params.TsHeatingFilterType);
+        }
       }
-  
+
       // inverse fourier transform back to real space
       fftwf_execute(run_globals.reion_grids.sfr_filtered_reverse_plan);
   #if USE_MINI_HALOS
       fftwf_execute(run_globals.reion_grids.sfrIII_filtered_reverse_plan);
   #endif
+      if (run_globals.params.physics.Flag_IncludeAGNXray) {
+        fftwf_execute(run_globals.reion_grids.BHXrayEmissivity_filtered_reverse_plan);
+        fftwf_execute(run_globals.reion_grids.BHXrayEmissivity_soft_filtered_reverse_plan);
+      }
   
       // Compute and store the collapse fraction and average electron fraction. Necessary for evaluating the integrals
       // back along the light-cone. Need the non-smoothed version, hence this is only done for R_ct == 0.
@@ -500,12 +532,16 @@ void _ComputeTs(int snapshot)
 #endif
 
               if (run_globals.params.physics.Flag_IncludeAGNXray > 0) {
-                bh = fmaxf(run_globals.reion_grids.BHXrayEmissivity[i_padded], 0.0f);
+                ((float*)BHXrayEmissivity_filtered)[i_padded] = fmaxf(((float*)BHXrayEmissivity_filtered)[i_padded], 0.0);
+                ((float*)BHXrayEmissivity_soft_filtered)[i_padded] =
+                  fmaxf(((float*)BHXrayEmissivity_soft_filtered)[i_padded], 0.0);
+
+                bh = ((float*)BHXrayEmissivity_filtered)[i_padded];
                 SMOOTHED_AGN[i_smoothed_heating] = (double)bh * 1e10 * SOLAR_LUM / pixel_volume
                                               * pow(units->UnitLength_in_cm, -3.0);
                 agn_xray_hard_ave += SMOOTHED_AGN[i_smoothed_heating];
 
-                bh_soft = fmaxf(run_globals.reion_grids.BHXrayEmissivity_soft[i_padded], 0.0f);
+                bh_soft = ((float*)BHXrayEmissivity_soft_filtered)[i_padded];
                 SMOOTHED_AGN_soft[i_smoothed_heating] = (double)bh_soft * 1e10 * SOLAR_LUM / pixel_volume
                                                    * pow(units->UnitLength_in_cm, -3.0);
                 agn_xray_soft_ave += SMOOTHED_AGN_soft[i_smoothed_heating];
@@ -586,11 +622,15 @@ void _ComputeTs(int snapshot)
 #endif
 
               if (run_globals.params.physics.Flag_IncludeAGNXray > 0) {
-                bh = fmaxf(run_globals.reion_grids.BHXrayEmissivity[i_padded], 0.0f);
+                ((float*)BHXrayEmissivity_filtered)[i_padded] = fmaxf(((float*)BHXrayEmissivity_filtered)[i_padded], 0.0);
+                ((float*)BHXrayEmissivity_soft_filtered)[i_padded] =
+                  fmaxf(((float*)BHXrayEmissivity_soft_filtered)[i_padded], 0.0);
+
+                bh = ((float*)BHXrayEmissivity_filtered)[i_padded];
                 SMOOTHED_AGN[i_smoothed_heating] = (double)bh * 1e10 * SOLAR_LUM / pixel_volume
                                               * pow(units->UnitLength_in_cm, -3.0);
 
-                bh_soft = fmaxf(run_globals.reion_grids.BHXrayEmissivity_soft[i_padded], 0.0f);
+                bh_soft = ((float*)BHXrayEmissivity_soft_filtered)[i_padded];
                 SMOOTHED_AGN_soft[i_smoothed_heating] = (double)bh_soft * 1e10 * SOLAR_LUM / pixel_volume
                                                    * pow(units->UnitLength_in_cm, -3.0);
               }
