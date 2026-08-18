@@ -16,9 +16,10 @@
 #include "read_grids.h"
 #include "reionization.h"
 #include "virial_properties.h"
-#include "no_shmr_sources.h"
+#if USE_SCATTERS
 #include "fesc_recalibration.h"
-#include "lognormalscatter.h"
+#include "no_shmr_sources.h"
+#endif
 
 void update_galaxy_fesc_vals(galaxy_t* gal, double new_stars, int snapshot)
 {
@@ -141,28 +142,38 @@ void update_galaxy_fesc_vals(galaxy_t* gal, double new_stars, int snapshot)
   }
 
   CLAMP_0_1(fesc);
+
 #if USE_MINI_HALOS
   CLAMP_0_1(fescIII);
 #endif
 
+#if USE_SCATTERS
   const double fesc_target = fesc;
+
 #if USE_MINI_HALOS
   const double fescIII_target = fescIII;
 #endif
 
-  fesc = fesc_recalibration_apply_scatter(
-      fesc_target,
-      gal->ID,
-      0xA5A5A5A5A5A5A5A5ULL
-  );
-
+  if (params->EscapeFracScatterDex > 0.0) {
 #if USE_MINI_HALOS
-  fescIII = apply_lognormal_scatter_from_mean_id(
-      fescIII_target,
-      params->EscapeFracScatterDex,
-      gal->ID,
-      0x5A5A5A5A5A5A5A5AULL
-  );
+    if (gal->Galaxy_Population == 2) {
+      fesc = apply_lognormal_scatter(
+          fesc_target,
+          params->EscapeFracScatterDex
+      );
+    } else if (gal->Galaxy_Population == 3) {
+      fescIII = apply_lognormal_scatter(
+          fescIII_target,
+          params->EscapeFracScatterDex
+      );
+    }
+#else
+    fesc = apply_lognormal_scatter(
+        fesc_target,
+        params->EscapeFracScatterDex
+    );
+#endif
+  }
 #endif
 
   CLAMP_0_1(fesc);
@@ -178,29 +189,44 @@ void update_galaxy_fesc_vals(galaxy_t* gal, double new_stars, int snapshot)
     gal->Fesc = fesc;
     gal->FescWeightedGSM += new_stars * fesc;
     gal->FescWeightedSfr += gal->Sfr * fesc;
-    fesc_recalibration_accumulate_popII(
+
+#if USE_SCATTERS
+    fesc_accumulate_target_popII(
         gal,
         new_stars,
         gal->Sfr,
         fesc_target
     );
+#endif
   }
 
   if (gal->Galaxy_Population == 3) {
     gal->FescIII = fescIII;
     gal->FescIIIWeightedGSM += new_stars * fescIII;
     gal->FescIIIWeightedSfr += gal->SfrIII * fescIII;
+
+#if USE_SCATTERS
+    fesc_accumulate_target_popIII(
+        gal,
+        new_stars,
+        gal->SfrIII,
+        fescIII_target
+    );
+#endif
   }
 #else
   gal->Fesc = fesc;
   gal->FescWeightedGSM += new_stars * fesc;
   gal->FescWeightedSfr += gal->Sfr * fesc;
-  fesc_recalibration_accumulate_popII(
+
+#if USE_SCATTERS
+  fesc_accumulate_target_popII(
       gal,
       new_stars,
       gal->Sfr,
       fesc_target
-    );
+  );
+#endif
 #endif
 
   gal->FescBH = fesc_bh;
@@ -386,7 +412,9 @@ void call_ComputeTs(int snapshot, int nout_gals, timer_info* timer)
 
 void init_reion_grids()
 {
+#if USE_SCATTERS
   fesc_recalibration_init();
+#endif
 
   reion_grids_t* grids = &(run_globals.reion_grids);
   int ReionGridDim = run_globals.params.ReionGridDim;
@@ -1238,10 +1266,6 @@ void free_reionization_grids()
 #endif
 
   fftwf_free(grids->buffer);
-
-  fesc_recalibration_free();
-  no_shmr_sources_free();
-
   mlog(" ...done", MLOG_CLOSE);
 }
 
@@ -1668,8 +1692,10 @@ void construct_baryon_grids(int snapshot, int local_ngals)
   ptrdiff_t* slab_ix_start = run_globals.reion_grids.slab_ix_start;
   int local_n_complex = (int)(run_globals.reion_grids.slab_n_complex[run_globals.mpi_rank]);
 
+#if USE_SCATTERS
   fesc_recalibration_prepare(snapshot);
-  no_shmr_sources_apply(snapshot);
+  no_shmr_sources_prepare(snapshot);
+#endif
 
   mlog("Constructing stellar mass and sfr grids...", MLOG_OPEN | MLOG_TIMERSTART);
 
@@ -1772,55 +1798,81 @@ void construct_baryon_grids(int snapshot, int local_ngals)
 
           assert((ind >= 0) && (ind < slab_nix[i_r] * ReionGridDim * ReionGridDim));
 
-          // They are the same just now, but may be different in the future once the model is improved.
-          switch (prop) {
+        switch (prop) {
             case prop_stellar:
-              //buffer[ind] += gal->FescWeightedGSM; // Only Pop II
-              buffer[ind] += fesc_recalibration_grid_gsm(gal); // Only Pop II
+#if USE_SCATTERS
+              buffer[ind] += no_shmr_sources_grid_gsm(gal);
+#else
+              buffer[ind] += gal->FescWeightedGSM;
+#endif
               break;
 
             case prop_effective_bhm:
-              if (gal->BlackHoleMass >= run_globals.params.physics.BlackHoleMassLimitReion)
+              if (gal->BlackHoleMass >=
+                  run_globals.params.physics.BlackHoleMassLimitReion) {
                 buffer[ind] += gal->EffectiveBHM;
-              else
-                N_BlackHoleMassLimitReion += 1;
+              } else {
+                N_BlackHoleMassLimitReion++;
+              }
               break;
 
 #if USE_MINI_HALOS
             case prop_stellarIII:
+#if USE_SCATTERS
+              buffer[ind] +=
+                  no_shmr_sources_grid_gsm_popIII(gal);
+#else
               buffer[ind] += gal->FescIIIWeightedGSM;
+#endif
               break;
 
             case prop_weighted_sfrIII:
+#if USE_SCATTERS
+              buffer[ind] +=
+                  no_shmr_sources_grid_sfr_popIII(gal);
+#else
               buffer[ind] += gal->FescIIIWeightedSfr;
+#endif
               break;
 
-            // still keeping this flag but only for xray 
             case prop_sfrIII:
-              if (run_globals.params.Flag_InstantaneousSFR)
-                buffer[ind] += gal->SfrIII;
-              else
-                buffer[ind] += gal->GrossStellarMassIII;
-              // this sfr grid is used for X-ray and Lyman, PopIII.
+#if USE_SCATTERS
+              buffer[ind] +=
+                  no_shmr_sources_grid_sfr_source_popIII(gal);
+#else
+              buffer[ind] +=
+                  run_globals.params.Flag_InstantaneousSFR
+                      ? gal->SfrIII
+                      : gal->GrossStellarMassIII;
+#endif
               break;
 #endif
+
             case prop_weighted_sfr:
-              //buffer[ind] += gal->FescWeightedSfr;
-              buffer[ind] += fesc_recalibration_grid_sfr(gal);
+#if USE_SCATTERS
+              buffer[ind] += no_shmr_sources_grid_sfr(gal);
+#else
+              buffer[ind] += gal->FescWeightedSfr;
+#endif
               break;
 
             case prop_effective_bhar:
-              if (gal->BlackHoleMass >= run_globals.params.physics.BlackHoleMassLimitReion) {
+              if (gal->BlackHoleMass >=
+                  run_globals.params.physics.BlackHoleMassLimitReion) {
                 buffer[ind] += gal->EffectiveBHAR;
               }
               break;
 
             case prop_sfr:
-              if (run_globals.params.Flag_InstantaneousSFR)
-                buffer[ind] += gal->Sfr;
-              else
-               buffer[ind] += gal->GrossStellarMass;
-              // this sfr grid is used for X-ray and Lyman, PopII.
+#if USE_SCATTERS
+              buffer[ind] +=
+                  no_shmr_sources_grid_sfr_source(gal);
+#else
+              buffer[ind] +=
+                  run_globals.params.Flag_InstantaneousSFR
+                      ? gal->Sfr
+                      : gal->GrossStellarMass;
+#endif
               break;
 
             default:
@@ -1939,8 +1991,6 @@ void construct_baryon_grids(int snapshot, int local_ngals)
          N_BlackHoleMassLimitReion,
          run_globals.params.physics.BlackHoleMassLimitReion);
   }
-
-  no_shmr_sources_restore();
 
   mlog("done", MLOG_CLOSE | MLOG_TIMERSTOP);
 }

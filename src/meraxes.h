@@ -55,25 +55,19 @@
 #define ABS_TOL (float)1e-8
 // ======================================================
 
-//=========================
-//Parameters for remove SHMR scatter
+#if USE_SCATTERS
+// Parameters for removing stellar-source--halo scatter.
+// Both the stellar-mass and SFR tables use this halo-mass grid.
 #define SHMR_NTYPES 3
 #define SHMR_NX     376
 #define SHMR_XMIN   (-3.50)
 #define SHMR_XMAX   (4.00)
 #define SHMR_DX     ((SHMR_XMAX - SHMR_XMIN) / ((double)(SHMR_NX - 1)))
 
-#define SFR_NTYPES 3
-#define SFR_NX     181
-#define SFR_XMIN   (-8.00)
-#define SFR_XMAX   (1.00)
-#define SFR_DX     ((SFR_XMAX - SFR_XMIN) / ((double)(SFR_NX - 1)))
-
 #define SHMR_INDEX(s,t,i) \
   ((((size_t)(s) * (size_t)SHMR_NTYPES) + (size_t)(t)) * (size_t)SHMR_NX + (size_t)(i))
+#endif
 
-#define SFR_INDEX(s,t,i) \
-  ((((size_t)(s) * (size_t)SFR_NTYPES) + (size_t)(t)) * (size_t)SFR_NX + (size_t)(i))
 // Define things used for aborting exceptions
 #ifdef __cplusplus
 extern "C"
@@ -668,8 +662,12 @@ typedef struct galaxy_t
   double Fesc;
   double FescWeightedGSM;
   double FescWeightedSfr;
+#if USE_SCATTERS
+  // These are reference budgets for fesc recalibration, or final prepared
+  // grid sources when the mutually exclusive no-SHMR prescription is active.
   double TargetFescWeightedGSM;
   double TargetFescWeightedSfr;
+#endif
   double MetalsStellarMass;
   double DiskScaleLength;
   double Sfr;
@@ -691,8 +689,13 @@ typedef struct galaxy_t
   double t_resp;                //!< Local relaxation timescale (in Myr)
   int Galaxy_Population; // You need it also if you are not disentangling PopIII/PopII (when Mini_halos is off, this is
                          // = 2)
-  double SourceGrossStellarMass;
-  double SourceFescWeightedGSM;
+#if USE_SCATTERS
+  // Alternative stellar sources with the stellar--halo scatter removed.
+  // The GSM quantities are cumulative; SfrNoScatter is snapshot-local.
+  double GrossStellarMassNoScatter;
+  double FescWeightedGSMNoScatter;
+  double SfrNoScatter;
+#endif
 #if USE_MINI_HALOS
   // Differentiation Pop III / Pop II
   double SfrIII;
@@ -702,6 +705,14 @@ typedef struct galaxy_t
   double FescIII;
   double FescIIIWeightedGSM;
   double FescIIIWeightedSfr;
+#if USE_SCATTERS
+  double GrossStellarMassIIINoScatter;
+  double FescIIIWeightedGSMNoScatter;
+  double SfrIIINoScatter;
+  // Pop III prepared/reference sources mirror the Pop II Target fields.
+  double TargetFescIIIWeightedGSM;
+  double TargetFescIIIWeightedSfr;
+#endif
 
   double Remnant_Mass; // Coming from Pop III with M between 40 and 140 and larger than 260 Msol and remnant of CCSN
                        // [8,40]Msun. Atm those are silent.
@@ -906,10 +917,18 @@ typedef struct run_globals_t
   float* Mass_Values;
   float* Time_Values;
 
+#if USE_SCATTERS
   int SourceTableNSnaps;
 
-  float *SHMRs;   /* size = SourceTableNSnaps * SHMR_NTYPES * SHMR_NX */
-  float *SFRs;    /* size = SourceTableNSnaps * SFR_NTYPES  * SFR_NX */
+  // Both source tables have size SourceTableNSnaps * SHMR_NTYPES * SHMR_NX.
+  float* SHMRs;
+  float* SFRs;
+#if USE_MINI_HALOS
+  // Independent Pop III tables with the same halo-mass layout.
+  float* SHMRsIII;
+  float* SFRsIII;
+#endif
+#endif
 #ifdef CALC_MAGS
   struct mag_params_t mag_params;
 #endif

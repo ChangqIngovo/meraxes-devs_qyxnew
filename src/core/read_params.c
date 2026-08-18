@@ -10,6 +10,18 @@ static void check_problem_params(run_params_t* run_params)
     ABORT(EXIT_FAILURE);
   }
 
+#if !USE_SCATTERS
+  if (run_params->physics.EscapeFracScatterDex != 0.0 ||
+      run_params->physics.Flag_RemoveSHMRScatter != 0 ||
+      run_params->physics.Flag_SourceRecalibration != 0) {
+    mlog_error(
+        "A scatter prescription was requested, but Meraxes was compiled "
+        "with USE_SCATTERS=OFF."
+    );
+    ABORT(EXIT_FAILURE);
+  }
+#endif
+
   if (strlen(run_globals.params.ForestIDFile) != 0) {
     mlog("*** YOU HAVE PROVIDED A REQUESTED FORESTID FILE. THIS FEATURE HAS NOT BE WELL TESTED. YMMV! ***", MLOG_MESG);
   }
@@ -487,8 +499,8 @@ void read_parameter_file(char* fname, int mode)
       params_type[n_param++] = PARAM_TYPE_INT;
 
       strncpy(params_tag[n_param],"Flag_SourceRecalibration",tag_length);
-      params_addr[n_param] =&(run_params->physics).Flag_SourceRecalibration;
-      required_tag[n_param] = 1;
+      params_addr[n_param] = &(run_params->physics).Flag_SourceRecalibration;
+      required_tag[n_param] = 0;
       params_type[n_param++] = PARAM_TYPE_INT;
 
       strncpy(params_tag[n_param], "SfEfficiency", tag_length);

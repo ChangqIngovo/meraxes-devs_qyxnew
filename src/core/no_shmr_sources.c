@@ -1,3 +1,5 @@
+#include <float.h>
+#include <limits.h>
 #include <math.h>
 #include <stddef.h>
 #include <stdlib.h>
@@ -8,30 +10,30 @@
 #include "no_shmr_sources.h"
 #include "reionization.h"
 
+#if USE_SCATTERS
+
 #define NO_SHMR_SHMR_MIN_COUNT 3
 #define NO_SHMR_SFR_MIN_COUNT 10
 #define NO_SHMR_LOG10_MSTAR_FLOOR (-10.0)
 #define NO_SHMR_LOG10_SFR_FLOOR (-30.0)
 #define NO_SHMR_RECALIBRATION_EPS 1.0e-300
 
-typedef struct no_shmr_source_record_t
+typedef enum no_shmr_population_t
 {
-  galaxy_t* gal;
-  int mvir_bin;
-  double raw_gsm;
-  double raw_sfr;
-  double det_gsm;
-  double det_sfr;
-  double grid_gsm;
-  double grid_sfr;
-} no_shmr_source_record_t;
+  NO_SHMR_POPII = 2,
+#if USE_MINI_HALOS
+  NO_SHMR_POPIII = 3,
+#endif
+} no_shmr_population_t;
 
-static no_shmr_source_record_t* no_shmr_records = NULL;
-static size_t no_shmr_record_count = 0;
+#if USE_MINI_HALOS
+#define NO_SHMR_NPOPULATIONS 2
+#else
+#define NO_SHMR_NPOPULATIONS 1
+#endif
+
 static int no_shmr_prepared_snapshot = -1;
 static int no_shmr_initialized = 0;
-static int no_shmr_owns_tables = 0;
-static int no_shmr_applied = 0;
 
 static int no_shmr_enabled(void)
 {
@@ -50,14 +52,186 @@ static void* no_shmr_calloc(size_t count, size_t size)
   return allocation;
 }
 
-static int no_shmr_source_eligible(const galaxy_t* gal)
+static size_t no_shmr_population_slot(no_shmr_population_t population)
+{
+  return (size_t)(population - NO_SHMR_POPII);
+}
+
+static int no_shmr_type_eligible(const galaxy_t* gal)
+{
+  return gal->Type >= 0 && gal->Type <= 2;
+}
+
+static no_shmr_population_t no_shmr_current_population(const galaxy_t* gal)
 {
 #if USE_MINI_HALOS
-  if (gal->Galaxy_Population != 2)
-    return 0;
+  return (no_shmr_population_t)gal->Galaxy_Population;
+#else
+  (void)gal;
+  return NO_SHMR_POPII;
+#endif
+}
+
+static float* no_shmr_shmr_table(no_shmr_population_t population)
+{
+#if USE_MINI_HALOS
+  if (population == NO_SHMR_POPIII)
+    return run_globals.SHMRsIII;
+#else
+  (void)population;
 #endif
 
-  return gal->Type >= 0 && gal->Type <= 2;
+  return run_globals.SHMRs;
+}
+
+static float* no_shmr_sfr_table(no_shmr_population_t population)
+{
+#if USE_MINI_HALOS
+  if (population == NO_SHMR_POPIII)
+    return run_globals.SFRsIII;
+#else
+  (void)population;
+#endif
+
+  return run_globals.SFRs;
+}
+
+static double no_shmr_gross_stellar_mass(const galaxy_t* gal,
+                                         no_shmr_population_t population)
+{
+#if USE_MINI_HALOS
+  if (population == NO_SHMR_POPIII)
+    return gal->GrossStellarMassIII;
+#else
+  (void)population;
+#endif
+
+  return gal->GrossStellarMass;
+}
+
+static double no_shmr_sfr(const galaxy_t* gal,
+                          no_shmr_population_t population)
+{
+#if USE_MINI_HALOS
+  if (population == NO_SHMR_POPIII)
+    return gal->SfrIII;
+#else
+  (void)population;
+#endif
+
+  return gal->Sfr;
+}
+
+static double no_shmr_raw_gsm(const galaxy_t* gal,
+                              no_shmr_population_t population)
+{
+#if USE_MINI_HALOS
+  if (population == NO_SHMR_POPIII)
+    return gal->FescIIIWeightedGSM;
+#else
+  (void)population;
+#endif
+
+  return gal->FescWeightedGSM;
+}
+
+static double no_shmr_raw_sfr(const galaxy_t* gal,
+                              no_shmr_population_t population)
+{
+#if USE_MINI_HALOS
+  if (population == NO_SHMR_POPIII)
+    return gal->FescIIIWeightedSfr;
+#else
+  (void)population;
+#endif
+
+  return gal->FescWeightedSfr;
+}
+
+static double no_shmr_gross_stellar_mass_no_scatter(
+    const galaxy_t* gal,
+    no_shmr_population_t population)
+{
+#if USE_MINI_HALOS
+  if (population == NO_SHMR_POPIII)
+    return gal->GrossStellarMassIIINoScatter;
+#else
+  (void)population;
+#endif
+
+  return gal->GrossStellarMassNoScatter;
+}
+
+static double no_shmr_weighted_gsm_no_scatter(
+    const galaxy_t* gal,
+    no_shmr_population_t population)
+{
+#if USE_MINI_HALOS
+  if (population == NO_SHMR_POPIII)
+    return gal->FescIIIWeightedGSMNoScatter;
+#else
+  (void)population;
+#endif
+
+  return gal->FescWeightedGSMNoScatter;
+}
+
+static double no_shmr_grid_gsm(const galaxy_t* gal,
+                               no_shmr_population_t population)
+{
+#if USE_MINI_HALOS
+  if (population == NO_SHMR_POPIII)
+    return gal->TargetFescIIIWeightedGSM;
+#else
+  (void)population;
+#endif
+
+  return gal->TargetFescWeightedGSM;
+}
+
+static double no_shmr_grid_sfr(const galaxy_t* gal,
+                               no_shmr_population_t population)
+{
+#if USE_MINI_HALOS
+  if (population == NO_SHMR_POPIII)
+    return gal->TargetFescIIIWeightedSfr;
+#else
+  (void)population;
+#endif
+
+  return gal->TargetFescWeightedSfr;
+}
+
+static void no_shmr_set_grid_gsm(galaxy_t* gal,
+                                 no_shmr_population_t population,
+                                 double value)
+{
+#if USE_MINI_HALOS
+  if (population == NO_SHMR_POPIII) {
+    gal->TargetFescIIIWeightedGSM = value;
+    return;
+  }
+#else
+  (void)population;
+#endif
+
+  gal->TargetFescWeightedGSM = value;
+}
+
+static void no_shmr_set_grid_sfr(galaxy_t* gal,
+                                 no_shmr_population_t population,
+                                 double value)
+{
+#if USE_MINI_HALOS
+  if (population == NO_SHMR_POPIII) {
+    gal->TargetFescIIIWeightedSfr = value;
+    return;
+  }
+#else
+  (void)population;
+#endif
+
+  gal->TargetFescWeightedSfr = value;
 }
 
 static int no_shmr_mvir_bin_clamped(const galaxy_t* gal)
@@ -65,7 +239,7 @@ static int no_shmr_mvir_bin_clamped(const galaxy_t* gal)
   double log10_mvir;
   int bin;
 
-  if (!(gal->Mvir > 0.0)) {
+  if (!(gal->Mvir > 0.0) || gal->Mvir > DBL_MAX) {
     mlog_error("Cannot bin a noSHMR source with Mvir=%g.", gal->Mvir);
     ABORT(EXIT_FAILURE);
   }
@@ -98,13 +272,13 @@ static double no_shmr_log10_sfr_to_linear(double value)
   return pow(10.0, value);
 }
 
-static int no_shmr_count_finite_entries(const double* values,
-                                        int n_values)
+static int no_shmr_count_valid_entries(const unsigned char* valid,
+                                       int n_values)
 {
   int count = 0;
 
   for (int ii = 0; ii < n_values; ii++) {
-    if (isfinite(values[ii]))
+    if (valid[ii])
       count++;
   }
 
@@ -112,6 +286,7 @@ static int no_shmr_count_finite_entries(const double* values,
 }
 
 static void no_shmr_fill_inside_only_with_floor(double* values,
+                                                const unsigned char* valid,
                                                 int n_values,
                                                 double floor_value)
 {
@@ -119,14 +294,14 @@ static void no_shmr_fill_inside_only_with_floor(double* values,
   int last = -1;
 
   for (int ii = 0; ii < n_values; ii++) {
-    if (isfinite(values[ii])) {
+    if (valid[ii]) {
       first = ii;
       break;
     }
   }
 
   for (int ii = n_values - 1; ii >= 0; ii--) {
-    if (isfinite(values[ii])) {
+    if (valid[ii]) {
       last = ii;
       break;
     }
@@ -143,7 +318,7 @@ static void no_shmr_fill_inside_only_with_floor(double* values,
   while (left < last) {
     int right = left + 1;
 
-    while (right <= last && !isfinite(values[right]))
+    while (right <= last && !valid[right])
       right++;
 
     for (int ii = left + 1; ii < right; ii++) {
@@ -159,8 +334,9 @@ static void no_shmr_fill_inside_only_with_floor(double* values,
   }
 }
 
-static double no_shmr_get_log10_mstar(const galaxy_t* gal,
-                                      int snapshot)
+static double no_shmr_get_log10_table_value(const float* table,
+                                            const galaxy_t* gal,
+                                            int snapshot)
 {
   double log10_mvir;
   double y0;
@@ -173,339 +349,603 @@ static double no_shmr_get_log10_mstar(const galaxy_t* gal,
   log10_mvir = log10(gal->Mvir);
 
   if (log10_mvir <= SHMR_XMIN)
-    return run_globals.SHMRs[
-        SHMR_INDEX(snapshot, gal->Type, 0)
-    ];
+    return table[SHMR_INDEX(snapshot, gal->Type, 0)];
 
   if (log10_mvir >= SHMR_XMAX)
-    return run_globals.SHMRs[
-        SHMR_INDEX(snapshot, gal->Type, SHMR_NX - 1)
-    ];
+    return table[SHMR_INDEX(snapshot, gal->Type, SHMR_NX - 1)];
 
   position = (log10_mvir - SHMR_XMIN) / SHMR_DX;
-  index_right = (int)ceil(position);
-  index_left = index_right - 1;
+  index_left = (int)floor(position);
+  index_right = index_left + 1;
   fraction = position - (double)index_left;
-  y0 = run_globals.SHMRs[
-      SHMR_INDEX(snapshot, gal->Type, index_left)
-  ];
-  y1 = run_globals.SHMRs[
-      SHMR_INDEX(snapshot, gal->Type, index_right)
-  ];
+
+  y0 = table[SHMR_INDEX(snapshot, gal->Type, index_left)];
+  y1 = table[SHMR_INDEX(snapshot, gal->Type, index_right)];
 
   return y0 + fraction * (y1 - y0);
 }
 
-static double no_shmr_get_sfr(double log10_mstar,
-                              int type,
-                              int snapshot)
+static double no_shmr_get_log10_mstar(const galaxy_t* gal,
+                                      int snapshot,
+                                      no_shmr_population_t population)
 {
-  double y0;
-  double y1;
-  double position;
-  double fraction;
-  int index_left;
-  int index_right;
-
-  if (log10_mstar <= SFR_XMIN) {
-    return no_shmr_log10_sfr_to_linear(
-        run_globals.SFRs[SFR_INDEX(snapshot, type, 0)]
-    );
-  }
-
-  if (log10_mstar >= SFR_XMAX) {
-    return no_shmr_log10_sfr_to_linear(
-        run_globals.SFRs[SFR_INDEX(snapshot, type, SFR_NX - 1)]
-    );
-  }
-
-  position = (log10_mstar - SFR_XMIN) / SFR_DX;
-  index_right = (int)ceil(position);
-  index_left = index_right - 1;
-  fraction = position - (double)index_left;
-  y0 = run_globals.SFRs[
-      SFR_INDEX(snapshot, type, index_left)
-  ];
-  y1 = run_globals.SFRs[
-      SFR_INDEX(snapshot, type, index_right)
-  ];
-
-  return no_shmr_log10_sfr_to_linear(
-      y0 + fraction * (y1 - y0)
+  return no_shmr_get_log10_table_value(
+      no_shmr_shmr_table(population),
+      gal,
+      snapshot
   );
 }
 
-static void no_shmr_build_shmr_table(int snapshot)
+static double no_shmr_get_sfr(const galaxy_t* gal,
+                              int snapshot,
+                              no_shmr_population_t population)
 {
-  size_t n_cells = (size_t)SHMR_NTYPES * (size_t)SHMR_NX;
-  double* local_sum_log = no_shmr_calloc(n_cells, sizeof(double));
-  double* global_sum_log = no_shmr_calloc(n_cells, sizeof(double));
-  long long* local_count = no_shmr_calloc(n_cells, sizeof(long long));
-  long long* global_count = no_shmr_calloc(n_cells, sizeof(long long));
+  return no_shmr_log10_sfr_to_linear(
+      no_shmr_get_log10_table_value(
+          no_shmr_sfr_table(population),
+          gal,
+          snapshot
+      )
+  );
+}
 
-  galaxy_t* gal = run_globals.FirstGal;
+static size_t no_shmr_sample_cell(no_shmr_population_t population,
+                                  int type,
+                                  int bin)
+{
+  return
+      ((no_shmr_population_slot(population) * (size_t)SHMR_NTYPES) +
+       (size_t)type) * (size_t)SHMR_NX +
+      (size_t)bin;
+}
 
-  while (gal != NULL) {
-    if (no_shmr_source_eligible(gal) &&
-        gal->Mvir > 0.0 &&
-        gal->GrossStellarMass > 0.0) {
-      double log10_mvir = log10(gal->Mvir);
-      double log10_mstar = log10(gal->GrossStellarMass);
-      int bin =
-          (int)floor((log10_mvir - SHMR_XMIN) / SHMR_DX);
+static void no_shmr_count_population_samples(
+    size_t* gsm_offsets,
+    size_t* sfr_offsets,
+    const galaxy_t* gal,
+    no_shmr_population_t population,
+    int bin)
+{
+  size_t cell = no_shmr_sample_cell(
+      population,
+      gal->Type,
+      bin
+  );
 
-      if (bin >= 0 && bin < SHMR_NX) {
-        size_t index =
-            (size_t)gal->Type * (size_t)SHMR_NX +
-            (size_t)bin;
+  double mstar = no_shmr_gross_stellar_mass(gal, population);
+  double sfr = no_shmr_sfr(gal, population);
 
-        local_sum_log[index] += log10_mstar;
-        local_count[index]++;
-      }
-    }
+  if (mstar > 0.0 && mstar <= DBL_MAX)
+    gsm_offsets[cell + 1]++;
 
-    gal = gal->Next;
+  if (sfr > 0.0 && sfr <= DBL_MAX)
+    sfr_offsets[cell + 1]++;
+}
+
+static void no_shmr_store_population_samples(
+    double* gsm_values,
+    double* sfr_values,
+    size_t* gsm_cursors,
+    size_t* sfr_cursors,
+    const galaxy_t* gal,
+    no_shmr_population_t population,
+    int bin)
+{
+  size_t cell = no_shmr_sample_cell(
+      population,
+      gal->Type,
+      bin
+  );
+
+  double mstar = no_shmr_gross_stellar_mass(gal, population);
+  double sfr = no_shmr_sfr(gal, population);
+
+  if (mstar > 0.0 && mstar <= DBL_MAX)
+    gsm_values[gsm_cursors[cell]++] = log10(mstar);
+
+  if (sfr > 0.0 && sfr <= DBL_MAX)
+    sfr_values[sfr_cursors[cell]++] = log10(sfr);
+}
+
+static void no_shmr_global_bin_medians(
+    const double* local_values,
+    const size_t* local_offsets,
+    size_t n_cells,
+    int min_count,
+    double* medians,
+    unsigned char* valid)
+{
+  size_t local_total = local_offsets[n_cells];
+  long long global_total = 0;
+  int* local_counts;
+  int* rank_counts = NULL;
+  int* receive_counts = NULL;
+  int* displacements = NULL;
+  double* global_values = NULL;
+
+  local_counts = no_shmr_calloc(n_cells, sizeof(*local_counts));
+
+  for (size_t cell = 0; cell < n_cells; cell++) {
+    local_counts[cell] = (int)(
+        local_offsets[cell + 1] - local_offsets[cell]
+    );
   }
-
-  MPI_Allreduce(local_sum_log,
-                global_sum_log,
-                (int)n_cells,
-                MPI_DOUBLE,
-                MPI_SUM,
-                run_globals.mpi_comm);
-
-  MPI_Allreduce(local_count,
-                global_count,
-                (int)n_cells,
-                MPI_LONG_LONG_INT,
-                MPI_SUM,
-                run_globals.mpi_comm);
 
   {
-    double values[SHMR_NX];
+    long long local_total_mpi = (long long)local_total;
 
-    for (int bin = 0; bin < SHMR_NX; bin++) {
-      size_t index = (size_t)bin;
+    MPI_Allreduce(
+        &local_total_mpi,
+        &global_total,
+        1,
+        MPI_LONG_LONG_INT,
+        MPI_SUM,
+        run_globals.mpi_comm
+    );
+  }
 
-      if (global_count[index] >= NO_SHMR_SHMR_MIN_COUNT) {
-        values[bin] =
-            global_sum_log[index] /
-            (double)global_count[index];
-      } else {
-        values[bin] = NAN;
-      }
+  if (global_total > INT_MAX) {
+    mlog_error(
+        "Global noSHMR median sample count %lld exceeds MPI_Gatherv limits.",
+        global_total
+    );
+    ABORT(EXIT_FAILURE);
+  }
+
+  if (run_globals.mpi_rank == 0) {
+    rank_counts = no_shmr_calloc(
+        (size_t)run_globals.mpi_size * n_cells,
+        sizeof(*rank_counts)
+    );
+    receive_counts = no_shmr_calloc(
+        (size_t)run_globals.mpi_size,
+        sizeof(*receive_counts)
+    );
+    displacements = no_shmr_calloc(
+        (size_t)run_globals.mpi_size,
+        sizeof(*displacements)
+    );
+  }
+
+  MPI_Gather(
+      local_counts,
+      (int)n_cells,
+      MPI_INT,
+      rank_counts,
+      (int)n_cells,
+      MPI_INT,
+      0,
+      run_globals.mpi_comm
+  );
+
+  if (run_globals.mpi_rank == 0) {
+    int displacement = 0;
+
+    for (int rank = 0; rank < run_globals.mpi_size; rank++) {
+      int rank_total = 0;
+
+      for (size_t cell = 0; cell < n_cells; cell++)
+        rank_total += rank_counts[(size_t)rank * n_cells + cell];
+
+      receive_counts[rank] = rank_total;
+      displacements[rank] = displacement;
+      displacement += rank_total;
     }
 
-    no_shmr_fill_inside_only_with_floor(
-        values,
-        SHMR_NX,
-        NO_SHMR_LOG10_MSTAR_FLOOR
-    );
-
-    for (int bin = 0; bin < SHMR_NX; bin++) {
-      run_globals.SHMRs[
-          SHMR_INDEX(snapshot, 0, bin)
-      ] = (float)values[bin];
+    if (global_total > 0) {
+      global_values = no_shmr_calloc(
+          (size_t)global_total,
+          sizeof(*global_values)
+      );
     }
   }
 
-  for (int type = 1; type < SHMR_NTYPES; type++) {
-    double values[SHMR_NX];
+  {
+    double dummy = 0.0;
 
-    for (int bin = 0; bin < SHMR_NX; bin++) {
-      size_t index =
-          (size_t)type * (size_t)SHMR_NX +
-          (size_t)bin;
+    MPI_Gatherv(
+        local_total > 0 ? local_values : &dummy,
+        (int)local_total,
+        MPI_DOUBLE,
+        run_globals.mpi_rank == 0 && global_total > 0
+            ? global_values
+            : &dummy,
+        receive_counts,
+        displacements,
+        MPI_DOUBLE,
+        0,
+        run_globals.mpi_comm
+    );
+  }
 
-      if (global_count[index] >= NO_SHMR_SHMR_MIN_COUNT) {
-        values[bin] =
-            global_sum_log[index] /
-            (double)global_count[index];
-      } else {
-        values[bin] = NAN;
+  if (run_globals.mpi_rank == 0) {
+    int* rank_cursor = no_shmr_calloc(
+        (size_t)run_globals.mpi_size,
+        sizeof(*rank_cursor)
+    );
+
+    int max_cell_count = 0;
+    double* scratch = NULL;
+
+    for (int rank = 0; rank < run_globals.mpi_size; rank++)
+      rank_cursor[rank] = displacements[rank];
+
+    for (size_t cell = 0; cell < n_cells; cell++) {
+      int cell_count = 0;
+
+      for (int rank = 0; rank < run_globals.mpi_size; rank++) {
+        cell_count += rank_counts[
+            (size_t)rank * n_cells + cell
+        ];
+      }
+
+      if (cell_count > max_cell_count)
+        max_cell_count = cell_count;
+    }
+
+    if (max_cell_count > 0) {
+      scratch = no_shmr_calloc(
+          (size_t)max_cell_count,
+          sizeof(*scratch)
+      );
+    }
+
+    for (size_t cell = 0; cell < n_cells; cell++) {
+      int cell_count = 0;
+
+      for (int rank = 0; rank < run_globals.mpi_size; rank++) {
+        int count = rank_counts[(size_t)rank * n_cells + cell];
+
+        for (int ii = 0; ii < count; ii++) {
+          scratch[cell_count++] = global_values[
+              rank_cursor[rank] + ii
+          ];
+        }
+
+        rank_cursor[rank] += count;
+      }
+
+      if (cell_count >= min_count) {
+        qsort(
+            scratch,
+            (size_t)cell_count,
+            sizeof(*scratch),
+            compare_doubles
+        );
+
+        if (cell_count % 2 == 0) {
+          medians[cell] = 0.5 * (
+              scratch[cell_count / 2 - 1] +
+              scratch[cell_count / 2]
+          );
+        } else {
+          medians[cell] = scratch[cell_count / 2];
+        }
+
+        valid[cell] = 1;
       }
     }
 
-    if (no_shmr_count_finite_entries(values, SHMR_NX) < 2) {
+    free(rank_cursor);
+    free(scratch);
+  }
+
+  free(local_counts);
+  free(rank_counts);
+  free(receive_counts);
+  free(displacements);
+  free(global_values);
+}
+
+static void no_shmr_store_median_table(
+    float* table,
+    int snapshot,
+    no_shmr_population_t population,
+    const double* medians,
+    const unsigned char* valid,
+    double floor_value)
+{
+  for (int type = 0; type < SHMR_NTYPES; type++) {
+    double values[SHMR_NX];
+    unsigned char type_valid[SHMR_NX];
+
+    for (int bin = 0; bin < SHMR_NX; bin++) {
+      size_t cell = no_shmr_sample_cell(
+          population,
+          type,
+          bin
+      );
+
+      values[bin] = medians[cell];
+      type_valid[bin] = valid[cell];
+    }
+
+    if (type > 0 &&
+        no_shmr_count_valid_entries(type_valid, SHMR_NX) < 2) {
       for (int bin = 0; bin < SHMR_NX; bin++) {
-        values[bin] = run_globals.SHMRs[
+        values[bin] = table[
             SHMR_INDEX(snapshot, 0, bin)
         ];
       }
     } else {
       no_shmr_fill_inside_only_with_floor(
           values,
+          type_valid,
           SHMR_NX,
-          NO_SHMR_LOG10_MSTAR_FLOOR
+          floor_value
       );
     }
 
     for (int bin = 0; bin < SHMR_NX; bin++) {
-      run_globals.SHMRs[
+      table[
           SHMR_INDEX(snapshot, type, bin)
       ] = (float)values[bin];
     }
   }
-
-  free(local_sum_log);
-  free(global_sum_log);
-  free(local_count);
-  free(global_count);
 }
 
-static void no_shmr_build_sfr_table(int snapshot)
+static void no_shmr_broadcast_population_tables(
+    int snapshot,
+    no_shmr_population_t population)
 {
-  size_t n_cells = (size_t)SFR_NTYPES * (size_t)SFR_NX;
-  double* local_sum_log = no_shmr_calloc(n_cells, sizeof(double));
-  double* global_sum_log = no_shmr_calloc(n_cells, sizeof(double));
-  long long* local_count = no_shmr_calloc(n_cells, sizeof(long long));
-  long long* global_count = no_shmr_calloc(n_cells, sizeof(long long));
+  int n_values = SHMR_NTYPES * SHMR_NX;
+
+  MPI_Bcast(
+      no_shmr_shmr_table(population) + SHMR_INDEX(snapshot, 0, 0),
+      n_values,
+      MPI_FLOAT,
+      0,
+      run_globals.mpi_comm
+  );
+
+  MPI_Bcast(
+      no_shmr_sfr_table(population) + SHMR_INDEX(snapshot, 0, 0),
+      n_values,
+      MPI_FLOAT,
+      0,
+      run_globals.mpi_comm
+  );
+}
+
+static void no_shmr_build_source_tables(int snapshot)
+{
+  size_t n_cells =
+      (size_t)NO_SHMR_NPOPULATIONS *
+      (size_t)SHMR_NTYPES *
+      (size_t)SHMR_NX;
+
+  size_t* gsm_offsets = no_shmr_calloc(
+      n_cells + 1,
+      sizeof(*gsm_offsets)
+  );
+
+  size_t* sfr_offsets = no_shmr_calloc(
+      n_cells + 1,
+      sizeof(*sfr_offsets)
+  );
+
+  size_t* gsm_cursors;
+  size_t* sfr_cursors;
+  double* gsm_values = NULL;
+  double* sfr_values = NULL;
+
+  double* gsm_medians = no_shmr_calloc(
+      n_cells,
+      sizeof(*gsm_medians)
+  );
+
+  double* sfr_medians = no_shmr_calloc(
+      n_cells,
+      sizeof(*sfr_medians)
+  );
+
+  unsigned char* gsm_valid = no_shmr_calloc(
+      n_cells,
+      sizeof(*gsm_valid)
+  );
+
+  unsigned char* sfr_valid = no_shmr_calloc(
+      n_cells,
+      sizeof(*sfr_valid)
+  );
 
   galaxy_t* gal = run_globals.FirstGal;
 
   while (gal != NULL) {
-    if (no_shmr_source_eligible(gal) &&
-        gal->Mvir > 0.0 &&
-        gal->Sfr > 0.0) {
-      double log10_mstar =
-          no_shmr_get_log10_mstar(gal, snapshot);
-      double mstar =
-          no_shmr_log10_mstar_to_linear(log10_mstar);
+    if (no_shmr_type_eligible(gal)) {
+      int bin = no_shmr_mvir_bin_clamped(gal);
+      no_shmr_population_t population =
+          no_shmr_current_population(gal);
 
-      if (mstar > 0.0) {
-        double log10_sfr = log10(gal->Sfr);
-        int bin =
-            (int)floor((log10_mstar - SFR_XMIN) / SFR_DX);
-
-        if (bin >= 0 && bin < SFR_NX) {
-          size_t index =
-              (size_t)gal->Type * (size_t)SFR_NX +
-              (size_t)bin;
-
-          local_sum_log[index] += log10_sfr;
-          local_count[index]++;
-        }
-      }
+      no_shmr_count_population_samples(
+          gsm_offsets,
+          sfr_offsets,
+          gal,
+          population,
+          bin
+      );
     }
 
     gal = gal->Next;
   }
 
-  MPI_Allreduce(local_sum_log,
-                global_sum_log,
-                (int)n_cells,
-                MPI_DOUBLE,
-                MPI_SUM,
-                run_globals.mpi_comm);
-
-  MPI_Allreduce(local_count,
-                global_count,
-                (int)n_cells,
-                MPI_LONG_LONG_INT,
-                MPI_SUM,
-                run_globals.mpi_comm);
-
-  {
-    double values[SFR_NX];
-
-    for (int bin = 0; bin < SFR_NX; bin++) {
-      size_t index = (size_t)bin;
-
-      if (global_count[index] >= NO_SHMR_SFR_MIN_COUNT) {
-        values[bin] =
-            global_sum_log[index] /
-            (double)global_count[index];
-      } else {
-        values[bin] = NAN;
-      }
-    }
-
-    no_shmr_fill_inside_only_with_floor(
-        values,
-        SFR_NX,
-        NO_SHMR_LOG10_SFR_FLOOR
-    );
-
-    for (int bin = 0; bin < SFR_NX; bin++) {
-      run_globals.SFRs[
-          SFR_INDEX(snapshot, 0, bin)
-      ] = (float)values[bin];
-    }
+  for (size_t cell = 0; cell < n_cells; cell++) {
+    gsm_offsets[cell + 1] += gsm_offsets[cell];
+    sfr_offsets[cell + 1] += sfr_offsets[cell];
   }
 
-  for (int type = 1; type < SFR_NTYPES; type++) {
-    double values[SFR_NX];
+  if (gsm_offsets[n_cells] > INT_MAX ||
+      sfr_offsets[n_cells] > INT_MAX) {
+    mlog_error("Too many local noSHMR median samples for MPI_Gatherv.");
+    ABORT(EXIT_FAILURE);
+  }
 
-    for (int bin = 0; bin < SFR_NX; bin++) {
-      size_t index =
-          (size_t)type * (size_t)SFR_NX +
-          (size_t)bin;
+  if (gsm_offsets[n_cells] > 0) {
+    gsm_values = no_shmr_calloc(
+        gsm_offsets[n_cells],
+        sizeof(*gsm_values)
+    );
+  }
 
-      if (global_count[index] >= NO_SHMR_SFR_MIN_COUNT) {
-        values[bin] =
-            global_sum_log[index] /
-            (double)global_count[index];
-      } else {
-        values[bin] = NAN;
-      }
-    }
+  if (sfr_offsets[n_cells] > 0) {
+    sfr_values = no_shmr_calloc(
+        sfr_offsets[n_cells],
+        sizeof(*sfr_values)
+    );
+  }
 
-    if (no_shmr_count_finite_entries(values, SFR_NX) < 2) {
-      for (int bin = 0; bin < SFR_NX; bin++) {
-        values[bin] = run_globals.SFRs[
-            SFR_INDEX(snapshot, 0, bin)
-        ];
-      }
-    } else {
-      no_shmr_fill_inside_only_with_floor(
-          values,
-          SFR_NX,
-          NO_SHMR_LOG10_SFR_FLOOR
+  gsm_cursors = no_shmr_calloc(n_cells, sizeof(*gsm_cursors));
+  sfr_cursors = no_shmr_calloc(n_cells, sizeof(*sfr_cursors));
+
+  for (size_t cell = 0; cell < n_cells; cell++) {
+    gsm_cursors[cell] = gsm_offsets[cell];
+    sfr_cursors[cell] = sfr_offsets[cell];
+  }
+
+  gal = run_globals.FirstGal;
+
+  while (gal != NULL) {
+    if (no_shmr_type_eligible(gal)) {
+      int bin = no_shmr_mvir_bin_clamped(gal);
+      no_shmr_population_t population =
+          no_shmr_current_population(gal);
+
+      no_shmr_store_population_samples(
+          gsm_values,
+          sfr_values,
+          gsm_cursors,
+          sfr_cursors,
+          gal,
+          population,
+          bin
       );
     }
 
-    for (int bin = 0; bin < SFR_NX; bin++) {
-      run_globals.SFRs[
-          SFR_INDEX(snapshot, type, bin)
-      ] = (float)values[bin];
-    }
+    gal = gal->Next;
   }
 
-  free(local_sum_log);
-  free(global_sum_log);
-  free(local_count);
-  free(global_count);
+  free(gsm_cursors);
+  free(sfr_cursors);
+
+  no_shmr_global_bin_medians(
+      gsm_values,
+      gsm_offsets,
+      n_cells,
+      NO_SHMR_SHMR_MIN_COUNT,
+      gsm_medians,
+      gsm_valid
+  );
+
+  no_shmr_global_bin_medians(
+      sfr_values,
+      sfr_offsets,
+      n_cells,
+      NO_SHMR_SFR_MIN_COUNT,
+      sfr_medians,
+      sfr_valid
+  );
+
+  if (run_globals.mpi_rank == 0) {
+    no_shmr_store_median_table(
+        run_globals.SHMRs,
+        snapshot,
+        NO_SHMR_POPII,
+        gsm_medians,
+        gsm_valid,
+        NO_SHMR_LOG10_MSTAR_FLOOR
+    );
+
+    no_shmr_store_median_table(
+        run_globals.SFRs,
+        snapshot,
+        NO_SHMR_POPII,
+        sfr_medians,
+        sfr_valid,
+        NO_SHMR_LOG10_SFR_FLOOR
+    );
+
+#if USE_MINI_HALOS
+    no_shmr_store_median_table(
+        run_globals.SHMRsIII,
+        snapshot,
+        NO_SHMR_POPIII,
+        gsm_medians,
+        gsm_valid,
+        NO_SHMR_LOG10_MSTAR_FLOOR
+    );
+
+    no_shmr_store_median_table(
+        run_globals.SFRsIII,
+        snapshot,
+        NO_SHMR_POPIII,
+        sfr_medians,
+        sfr_valid,
+        NO_SHMR_LOG10_SFR_FLOOR
+    );
+#endif
+  }
+
+  no_shmr_broadcast_population_tables(snapshot, NO_SHMR_POPII);
+
+#if USE_MINI_HALOS
+  no_shmr_broadcast_population_tables(snapshot, NO_SHMR_POPIII);
+#endif
+
+  free(gsm_values);
+  free(sfr_values);
+  free(gsm_offsets);
+  free(sfr_offsets);
+  free(gsm_medians);
+  free(sfr_medians);
+  free(gsm_valid);
+  free(sfr_valid);
 }
 
-// Evaluate the deterministic source on a stack copy. The real galaxy keeps
-// its raw fields; only the deterministic history fields are advanced.
-static void no_shmr_evaluate_deterministic_source(
+static void no_shmr_evaluate_active_source(
     galaxy_t* gal,
+    no_shmr_population_t population,
     double mstar_source,
     double sfr_source,
-    int snapshot,
-    double* det_gsm,
-    double* det_sfr)
+    int snapshot)
 {
-  galaxy_t source_view;
-  double previous_mstar;
-  double previous_weighted_gsm;
-  double new_stars_source;
+  galaxy_t source_view = *gal;
 
-  previous_mstar = gal->SourceGrossStellarMass;
-  previous_weighted_gsm = gal->SourceFescWeightedGSM;
+  double previous_mstar =
+      no_shmr_gross_stellar_mass_no_scatter(gal, population);
+
+  double previous_weighted_gsm =
+      no_shmr_weighted_gsm_no_scatter(gal, population);
 
   if (mstar_source < previous_mstar)
     mstar_source = previous_mstar;
 
-  new_stars_source = mstar_source - previous_mstar;
+  double new_stars_source = mstar_source - previous_mstar;
 
-  source_view = *gal;
-  source_view.GrossStellarMass = mstar_source;
   source_view.StellarMass = mstar_source;
+
+#if USE_MINI_HALOS
+  if (population == NO_SHMR_POPIII) {
+    gal->SfrIIINoScatter = sfr_source;
+    source_view.GrossStellarMassIII = mstar_source;
+    source_view.StellarMass_III = mstar_source;
+    source_view.SfrIII = sfr_source;
+    source_view.FescIIIWeightedGSM = previous_weighted_gsm;
+    source_view.FescIIIWeightedSfr = 0.0;
+  } else {
+    gal->SfrNoScatter = sfr_source;
+    source_view.GrossStellarMass = mstar_source;
+    source_view.StellarMass_II = mstar_source;
+    source_view.Sfr = sfr_source;
+    source_view.FescWeightedGSM = previous_weighted_gsm;
+    source_view.FescWeightedSfr = 0.0;
+  }
+#else
+  gal->SfrNoScatter = sfr_source;
+  source_view.GrossStellarMass = mstar_source;
   source_view.Sfr = sfr_source;
   source_view.FescWeightedGSM = previous_weighted_gsm;
   source_view.FescWeightedSfr = 0.0;
+#endif
 
   update_galaxy_fesc_vals(
       &source_view,
@@ -513,211 +953,314 @@ static void no_shmr_evaluate_deterministic_source(
       snapshot
   );
 
-  gal->SourceGrossStellarMass = mstar_source;
-  gal->SourceFescWeightedGSM = source_view.FescWeightedGSM;
+#if USE_MINI_HALOS
+  if (population == NO_SHMR_POPIII) {
+    gal->GrossStellarMassIIINoScatter = mstar_source;
+    gal->FescIIIWeightedGSMNoScatter =
+        source_view.FescIIIWeightedGSM;
+    gal->TargetFescIIIWeightedGSM =
+        source_view.FescIIIWeightedGSM;
+    gal->TargetFescIIIWeightedSfr =
+        source_view.FescIIIWeightedSfr;
+    return;
+  }
+#endif
 
-  *det_gsm = source_view.FescWeightedGSM;
-  *det_sfr = source_view.FescWeightedSfr;
+  gal->GrossStellarMassNoScatter = mstar_source;
+  gal->FescWeightedGSMNoScatter =
+      source_view.FescWeightedGSM;
+  gal->TargetFescWeightedGSM =
+      source_view.FescWeightedGSM;
+  gal->TargetFescWeightedSfr =
+      source_view.FescWeightedSfr;
 }
 
-static void no_shmr_build_records(int snapshot)
+static void no_shmr_prepare_sources(int snapshot)
 {
-  galaxy_t* gal;
-  size_t record_index;
-
-  free(no_shmr_records);
-  no_shmr_records = NULL;
-  no_shmr_record_count = 0;
-
-  gal = run_globals.FirstGal;
+  galaxy_t* gal = run_globals.FirstGal;
 
   while (gal != NULL) {
-    if (no_shmr_source_eligible(gal))
-      no_shmr_record_count++;
+    if (no_shmr_type_eligible(gal)) {
+      no_shmr_population_t population =
+          no_shmr_current_population(gal);
+
+      double raw_mstar =
+          no_shmr_gross_stellar_mass(gal, population);
+
+      double raw_sfr =
+          no_shmr_sfr(gal, population);
+
+      gal->TargetFescWeightedGSM =
+          gal->FescWeightedGSMNoScatter;
+      gal->TargetFescWeightedSfr = 0.0;
+      gal->SfrNoScatter = 0.0;
+
+#if USE_MINI_HALOS
+      gal->TargetFescIIIWeightedGSM =
+          gal->FescIIIWeightedGSMNoScatter;
+      gal->TargetFescIIIWeightedSfr = 0.0;
+      gal->SfrIIINoScatter = 0.0;
+#endif
+
+      if (raw_mstar > 0.0 || raw_sfr > 0.0) {
+        double mstar_source = no_shmr_log10_mstar_to_linear(
+            no_shmr_get_log10_mstar(
+                gal,
+                snapshot,
+                population
+            )
+        );
+
+        double sfr_source = raw_sfr > 0.0
+            ? no_shmr_get_sfr(gal, snapshot, population)
+            : 0.0;
+
+        no_shmr_evaluate_active_source(
+            gal,
+            population,
+            mstar_source,
+            sfr_source,
+            snapshot
+        );
+      }
+    }
+
+    gal = gal->Next;
+  }
+}
+
+static int no_shmr_has_gsm_recalibration_source(
+    const galaxy_t* gal,
+    no_shmr_population_t population)
+{
+  return no_shmr_type_eligible(gal) &&
+         (no_shmr_raw_gsm(gal, population) > 0.0 ||
+          no_shmr_grid_gsm(gal, population) > 0.0);
+}
+
+static int no_shmr_has_sfr_recalibration_source(
+    const galaxy_t* gal,
+    no_shmr_population_t population)
+{
+  return no_shmr_type_eligible(gal) &&
+         no_shmr_current_population(gal) == population &&
+         (no_shmr_raw_sfr(gal, population) > 0.0 ||
+          no_shmr_grid_sfr(gal, population) > 0.0);
+}
+
+static void no_shmr_apply_fixed_bin_recalibration(
+    no_shmr_population_t population)
+{
+  size_t n_bins =
+      (size_t)SHMR_NTYPES * (size_t)SHMR_NX;
+
+  double* local_target_gsm =
+      no_shmr_calloc(n_bins, sizeof(double));
+  double* global_target_gsm =
+      no_shmr_calloc(n_bins, sizeof(double));
+  double* local_target_sfr =
+      no_shmr_calloc(n_bins, sizeof(double));
+  double* global_target_sfr =
+      no_shmr_calloc(n_bins, sizeof(double));
+  double* local_source_gsm =
+      no_shmr_calloc(n_bins, sizeof(double));
+  double* global_source_gsm =
+      no_shmr_calloc(n_bins, sizeof(double));
+  double* local_source_sfr =
+      no_shmr_calloc(n_bins, sizeof(double));
+  double* global_source_sfr =
+      no_shmr_calloc(n_bins, sizeof(double));
+
+  long long* local_target_gsm_count =
+      no_shmr_calloc(n_bins, sizeof(long long));
+  long long* global_target_gsm_count =
+      no_shmr_calloc(n_bins, sizeof(long long));
+  long long* local_target_sfr_count =
+      no_shmr_calloc(n_bins, sizeof(long long));
+  long long* global_target_sfr_count =
+      no_shmr_calloc(n_bins, sizeof(long long));
+
+  galaxy_t* gal = run_globals.FirstGal;
+
+  while (gal != NULL) {
+    int has_gsm =
+        no_shmr_has_gsm_recalibration_source(gal, population);
+
+    int has_sfr =
+        no_shmr_has_sfr_recalibration_source(gal, population);
+
+    if (has_gsm || has_sfr) {
+      size_t index =
+          (size_t)gal->Type * (size_t)SHMR_NX +
+          (size_t)no_shmr_mvir_bin_clamped(gal);
+
+      if (has_gsm) {
+        double raw_gsm =
+            no_shmr_raw_gsm(gal, population);
+
+        local_target_gsm[index] += raw_gsm;
+        local_source_gsm[index] +=
+            no_shmr_grid_gsm(gal, population);
+
+        if (raw_gsm > 0.0)
+          local_target_gsm_count[index]++;
+      }
+
+      if (has_sfr) {
+        double raw_sfr =
+            no_shmr_raw_sfr(gal, population);
+
+        local_target_sfr[index] += raw_sfr;
+        local_source_sfr[index] +=
+            no_shmr_grid_sfr(gal, population);
+
+        if (raw_sfr > 0.0)
+          local_target_sfr_count[index]++;
+      }
+    }
 
     gal = gal->Next;
   }
 
-  if (no_shmr_record_count > 0) {
-    no_shmr_records = no_shmr_calloc(no_shmr_record_count,
-                                     sizeof(no_shmr_source_record_t));
-  }
+  MPI_Allreduce(
+      local_target_gsm,
+      global_target_gsm,
+      (int)n_bins,
+      MPI_DOUBLE,
+      MPI_SUM,
+      run_globals.mpi_comm
+  );
 
-  record_index = 0;
+  MPI_Allreduce(
+      local_target_sfr,
+      global_target_sfr,
+      (int)n_bins,
+      MPI_DOUBLE,
+      MPI_SUM,
+      run_globals.mpi_comm
+  );
+
+  MPI_Allreduce(
+      local_source_gsm,
+      global_source_gsm,
+      (int)n_bins,
+      MPI_DOUBLE,
+      MPI_SUM,
+      run_globals.mpi_comm
+  );
+
+  MPI_Allreduce(
+      local_source_sfr,
+      global_source_sfr,
+      (int)n_bins,
+      MPI_DOUBLE,
+      MPI_SUM,
+      run_globals.mpi_comm
+  );
+
+  MPI_Allreduce(
+      local_target_gsm_count,
+      global_target_gsm_count,
+      (int)n_bins,
+      MPI_LONG_LONG_INT,
+      MPI_SUM,
+      run_globals.mpi_comm
+  );
+
+  MPI_Allreduce(
+      local_target_sfr_count,
+      global_target_sfr_count,
+      (int)n_bins,
+      MPI_LONG_LONG_INT,
+      MPI_SUM,
+      run_globals.mpi_comm
+  );
+
   gal = run_globals.FirstGal;
 
   while (gal != NULL) {
-    if (no_shmr_source_eligible(gal)) {
-      no_shmr_source_record_t* record =
-          &no_shmr_records[record_index++];
+    int has_gsm =
+        no_shmr_has_gsm_recalibration_source(gal, population);
 
-      record->gal = gal;
-      record->mvir_bin = no_shmr_mvir_bin_clamped(gal);
-      record->raw_gsm = gal->FescWeightedGSM;
-      record->raw_sfr = gal->FescWeightedSfr;
+    int has_sfr =
+        no_shmr_has_sfr_recalibration_source(gal, population);
+
+    if (!has_gsm && !has_sfr) {
+      gal = gal->Next;
+      continue;
+    }
+
+    size_t index =
+        (size_t)gal->Type * (size_t)SHMR_NX +
+        (size_t)no_shmr_mvir_bin_clamped(gal);
+
+    if (has_gsm) {
+      double raw_gsm =
+          no_shmr_raw_gsm(gal, population);
+
+      double source_gsm =
+          no_shmr_grid_gsm(gal, population);
+
+      if (global_source_gsm[index] <=
+              NO_SHMR_RECALIBRATION_EPS &&
+          global_target_gsm[index] >
+              NO_SHMR_RECALIBRATION_EPS) {
+        no_shmr_set_grid_gsm(
+            gal,
+            population,
+            raw_gsm > 0.0
+                ? global_target_gsm[index] /
+                      (double)global_target_gsm_count[index]
+                : 0.0
+        );
+      } else {
+        no_shmr_set_grid_gsm(
+            gal,
+            population,
+            global_source_gsm[index] >
+                    NO_SHMR_RECALIBRATION_EPS
+                ? source_gsm *
+                      (global_target_gsm[index] /
+                       global_source_gsm[index])
+                : source_gsm
+        );
+      }
+    }
+
+    if (has_sfr) {
+      double raw_sfr =
+          no_shmr_raw_sfr(gal, population);
+
+      double source_sfr =
+          no_shmr_grid_sfr(gal, population);
+
+      if (global_source_sfr[index] <=
+              NO_SHMR_RECALIBRATION_EPS &&
+          global_target_sfr[index] >
+              NO_SHMR_RECALIBRATION_EPS) {
+        no_shmr_set_grid_sfr(
+            gal,
+            population,
+            raw_sfr > 0.0
+                ? global_target_sfr[index] /
+                      (double)global_target_sfr_count[index]
+                : 0.0
+        );
+      } else {
+        no_shmr_set_grid_sfr(
+            gal,
+            population,
+            global_source_sfr[index] >
+                    NO_SHMR_RECALIBRATION_EPS
+                ? source_sfr *
+                      (global_target_sfr[index] /
+                       global_source_sfr[index])
+                : source_sfr
+        );
+      }
     }
 
     gal = gal->Next;
-  }
-
-  for (size_t ii = 0; ii < no_shmr_record_count; ii++) {
-    no_shmr_source_record_t* record = &no_shmr_records[ii];
-    double log10_mstar_source;
-    double mstar_source = 0.0;
-    double sfr_source = 0.0;
-    int occupied;
-
-    gal = record->gal;
-
-    occupied =
-        gal->GrossStellarMass > 0.0 ||
-        gal->Sfr > 0.0;
-
-    log10_mstar_source =
-        no_shmr_get_log10_mstar(gal, snapshot);
-
-    if (occupied) {
-      mstar_source =
-          no_shmr_log10_mstar_to_linear(log10_mstar_source);
-    }
-
-    if (gal->Sfr > 0.0 && mstar_source > 0.0) {
-      sfr_source = no_shmr_get_sfr(
-          log10_mstar_source,
-          gal->Type,
-          snapshot
-      );
-    }
-
-    no_shmr_evaluate_deterministic_source(
-        gal,
-        mstar_source,
-        sfr_source,
-        snapshot,
-        &record->det_gsm,
-        &record->det_sfr
-    );
-
-    record->grid_gsm = record->det_gsm;
-    record->grid_sfr = record->det_sfr;
-  }
-}
-
-static void no_shmr_apply_fixed_bin_recalibration(void)
-{
-  size_t n_bins = (size_t)SHMR_NTYPES * (size_t)SHMR_NX;
-  double* local_target_gsm = no_shmr_calloc(n_bins, sizeof(double));
-  double* global_target_gsm = no_shmr_calloc(n_bins, sizeof(double));
-  double* local_target_sfr = no_shmr_calloc(n_bins, sizeof(double));
-  double* global_target_sfr = no_shmr_calloc(n_bins, sizeof(double));
-  double* local_source_gsm = no_shmr_calloc(n_bins, sizeof(double));
-  double* global_source_gsm = no_shmr_calloc(n_bins, sizeof(double));
-  double* local_source_sfr = no_shmr_calloc(n_bins, sizeof(double));
-  double* global_source_sfr = no_shmr_calloc(n_bins, sizeof(double));
-  long long* local_target_gsm_count = no_shmr_calloc(n_bins, sizeof(long long));
-  long long* global_target_gsm_count = no_shmr_calloc(n_bins, sizeof(long long));
-  long long* local_target_sfr_count = no_shmr_calloc(n_bins, sizeof(long long));
-  long long* global_target_sfr_count = no_shmr_calloc(n_bins, sizeof(long long));
-
-  for (size_t ii = 0; ii < no_shmr_record_count; ii++) {
-    const no_shmr_source_record_t* record = &no_shmr_records[ii];
-    size_t index =
-        (size_t)record->gal->Type * (size_t)SHMR_NX +
-        (size_t)record->mvir_bin;
-
-    local_target_gsm[index] += record->raw_gsm;
-    local_target_sfr[index] += record->raw_sfr;
-    local_source_gsm[index] += record->det_gsm;
-    local_source_sfr[index] += record->det_sfr;
-
-    if (record->raw_gsm > 0.0)
-      local_target_gsm_count[index]++;
-
-    if (record->raw_sfr > 0.0)
-      local_target_sfr_count[index]++;
-  }
-
-  MPI_Allreduce(local_target_gsm,
-                global_target_gsm,
-                (int)n_bins,
-                MPI_DOUBLE,
-                MPI_SUM,
-                run_globals.mpi_comm);
-
-  MPI_Allreduce(local_target_sfr,
-                global_target_sfr,
-                (int)n_bins,
-                MPI_DOUBLE,
-                MPI_SUM,
-                run_globals.mpi_comm);
-
-  MPI_Allreduce(local_source_gsm,
-                global_source_gsm,
-                (int)n_bins,
-                MPI_DOUBLE,
-                MPI_SUM,
-                run_globals.mpi_comm);
-
-  MPI_Allreduce(local_source_sfr,
-                global_source_sfr,
-                (int)n_bins,
-                MPI_DOUBLE,
-                MPI_SUM,
-                run_globals.mpi_comm);
-
-  MPI_Allreduce(local_target_gsm_count,
-                global_target_gsm_count,
-                (int)n_bins,
-                MPI_LONG_LONG_INT,
-                MPI_SUM,
-                run_globals.mpi_comm);
-
-  MPI_Allreduce(local_target_sfr_count,
-                global_target_sfr_count,
-                (int)n_bins,
-                MPI_LONG_LONG_INT,
-                MPI_SUM,
-                run_globals.mpi_comm);
-
-  for (size_t ii = 0; ii < no_shmr_record_count; ii++) {
-    no_shmr_source_record_t* record = &no_shmr_records[ii];
-    size_t index =
-        (size_t)record->gal->Type * (size_t)SHMR_NX +
-        (size_t)record->mvir_bin;
-
-    // A populated bin can have zero deterministic source after edge filling.
-    // In that case preserve the positive-source mask and assign its mean.
-    if (global_source_gsm[index] <=
-            NO_SHMR_RECALIBRATION_EPS &&
-        global_target_gsm[index] >
-            NO_SHMR_RECALIBRATION_EPS) {
-      record->grid_gsm =
-          record->raw_gsm > 0.0
-              ? global_target_gsm[index] /
-                    (double)global_target_gsm_count[index]
-              : 0.0;
-    } else {
-      record->grid_gsm = global_source_gsm[index] > NO_SHMR_RECALIBRATION_EPS
-          ? record->det_gsm * (global_target_gsm[index] /
-                global_source_gsm[index])
-          : record->det_gsm;
-    }
-
-    if (global_source_sfr[index] <=
-            NO_SHMR_RECALIBRATION_EPS &&
-        global_target_sfr[index] >
-            NO_SHMR_RECALIBRATION_EPS) {
-      record->grid_sfr =
-          record->raw_sfr > 0.0
-              ? global_target_sfr[index] /
-                    (double)global_target_sfr_count[index]
-              : 0.0;
-    } else {
-      record->grid_sfr = global_source_sfr[index] > NO_SHMR_RECALIBRATION_EPS
-          ? record->det_sfr * (global_target_sfr[index] /
-                global_source_sfr[index])
-          : record->det_sfr;
-    }
   }
 
   free(local_target_gsm);
@@ -737,7 +1280,6 @@ static void no_shmr_apply_fixed_bin_recalibration(void)
 static void no_shmr_sources_init(void)
 {
   size_t n_shmr;
-  size_t n_sfr;
 
   if (no_shmr_initialized)
     return;
@@ -761,41 +1303,26 @@ static void no_shmr_sources_init(void)
       (size_t)SHMR_NTYPES *
       (size_t)SHMR_NX;
 
-  n_sfr =
-      (size_t)run_globals.SourceTableNSnaps *
-      (size_t)SFR_NTYPES *
-      (size_t)SFR_NX;
+  run_globals.SHMRs =
+      no_shmr_calloc(n_shmr, sizeof(float));
 
-  run_globals.SHMRs = malloc(sizeof(float) * n_shmr);
-  run_globals.SFRs = malloc(sizeof(float) * n_sfr);
+  run_globals.SFRs =
+      no_shmr_calloc(n_shmr, sizeof(float));
 
-  if (run_globals.SHMRs == NULL || run_globals.SFRs == NULL) {
-    free(run_globals.SHMRs);
-    free(run_globals.SFRs);
-    run_globals.SHMRs = NULL;
-    run_globals.SFRs = NULL;
+#if USE_MINI_HALOS
+  run_globals.SHMRsIII =
+      no_shmr_calloc(n_shmr, sizeof(float));
 
-    mlog_error("Failed to allocate fixed-bin noSHMR source tables.");
-    ABORT(EXIT_FAILURE);
-  }
-
-  no_shmr_owns_tables = 1;
-
-  for (size_t ii = 0; ii < n_shmr; ii++)
-    run_globals.SHMRs[ii] = NO_SHMR_LOG10_MSTAR_FLOOR;
-
-  for (size_t ii = 0; ii < n_sfr; ii++)
-    run_globals.SFRs[ii] = NO_SHMR_LOG10_SFR_FLOOR;
-
-  if (run_globals.mpi_rank == 0) {
-    mlog("noSHMR recalibration is %s.", MLOG_MESG,
-         run_globals.params.physics.Flag_SourceRecalibration
-             ? "active" : "inactive");
-  }
+  run_globals.SFRsIII =
+      no_shmr_calloc(n_shmr, sizeof(float));
+#endif
 }
 
-static void no_shmr_sources_prepare(int snapshot)
+void no_shmr_sources_prepare(int snapshot)
 {
+  if (!no_shmr_enabled())
+    return;
+
   if (!no_shmr_initialized)
     no_shmr_sources_init();
 
@@ -812,79 +1339,97 @@ static void no_shmr_sources_prepare(int snapshot)
   if (no_shmr_prepared_snapshot == snapshot)
     return;
 
-  if (no_shmr_applied) {
-    mlog_error(
-        "Cannot prepare noSHMR snapshot %d while a source override "
-        "is applied.",
-        snapshot
-    );
-    ABORT(EXIT_FAILURE);
+  no_shmr_build_source_tables(snapshot);
+  no_shmr_prepare_sources(snapshot);
+
+  if (run_globals.params.physics.Flag_SourceRecalibration) {
+    no_shmr_apply_fixed_bin_recalibration(NO_SHMR_POPII);
+
+#if USE_MINI_HALOS
+    no_shmr_apply_fixed_bin_recalibration(NO_SHMR_POPIII);
+#endif
   }
-
-  no_shmr_build_shmr_table(snapshot);
-  no_shmr_build_sfr_table(snapshot);
-  no_shmr_build_records(snapshot);
-
-  if (run_globals.params.physics.Flag_SourceRecalibration)
-    no_shmr_apply_fixed_bin_recalibration();
 
   no_shmr_prepared_snapshot = snapshot;
 }
 
-void no_shmr_sources_apply(int snapshot)
+double no_shmr_sources_grid_gsm(const galaxy_t* gal)
 {
-  if (!no_shmr_enabled())
-    return;
-
-  no_shmr_sources_prepare(snapshot);
-
-  if (no_shmr_applied) {
-    mlog_error("A noSHMR source override is already applied.");
-    ABORT(EXIT_FAILURE);
-  }
-
-  for (size_t ii = 0; ii < no_shmr_record_count; ii++) {
-    no_shmr_source_record_t* record = &no_shmr_records[ii];
-
-    record->gal->FescWeightedGSM = record->grid_gsm;
-    record->gal->FescWeightedSfr = record->grid_sfr;
-  }
-
-  no_shmr_applied = 1;
+  return no_shmr_enabled()
+      ? gal->TargetFescWeightedGSM
+      : fesc_recalibration_grid_gsm(gal);
 }
 
-void no_shmr_sources_restore(void)
+double no_shmr_sources_grid_sfr(const galaxy_t* gal)
 {
-  if (!no_shmr_applied)
-    return;
+  return no_shmr_enabled()
+      ? gal->TargetFescWeightedSfr
+      : fesc_recalibration_grid_sfr(gal);
+}
 
-  for (size_t ii = 0; ii < no_shmr_record_count; ii++) {
-    no_shmr_source_record_t* record = &no_shmr_records[ii];
-
-    record->gal->FescWeightedGSM = record->raw_gsm;
-    record->gal->FescWeightedSfr = record->raw_sfr;
+double no_shmr_sources_grid_sfr_source(const galaxy_t* gal)
+{
+  if (run_globals.params.Flag_InstantaneousSFR) {
+    return no_shmr_enabled()
+        ? gal->SfrNoScatter
+        : gal->Sfr;
   }
 
-  no_shmr_applied = 0;
+  return no_shmr_enabled()
+      ? gal->GrossStellarMassNoScatter
+      : gal->GrossStellarMass;
 }
+
+#if USE_MINI_HALOS
+double no_shmr_sources_grid_gsm_popIII(const galaxy_t* gal)
+{
+  return no_shmr_enabled()
+      ? gal->TargetFescIIIWeightedGSM
+      : fesc_recalibration_grid_gsm_popIII(gal);
+}
+
+double no_shmr_sources_grid_sfr_popIII(const galaxy_t* gal)
+{
+  return no_shmr_enabled()
+      ? gal->TargetFescIIIWeightedSfr
+      : fesc_recalibration_grid_sfr_popIII(gal);
+}
+
+double no_shmr_sources_grid_sfr_source_popIII(const galaxy_t* gal)
+{
+  if (run_globals.params.Flag_InstantaneousSFR) {
+    return no_shmr_enabled()
+        ? gal->SfrIIINoScatter
+        : gal->SfrIII;
+  }
+
+  return no_shmr_enabled()
+      ? gal->GrossStellarMassIIINoScatter
+      : gal->GrossStellarMassIII;
+}
+#endif
 
 void no_shmr_sources_free(void)
 {
-  no_shmr_sources_restore();
-
-  free(no_shmr_records);
-  no_shmr_records = NULL;
-  no_shmr_record_count = 0;
   no_shmr_prepared_snapshot = -1;
 
-  if (no_shmr_owns_tables) {
-    free(run_globals.SHMRs);
-    free(run_globals.SFRs);
-    run_globals.SHMRs = NULL;
-    run_globals.SFRs = NULL;
-  }
+  free(run_globals.SHMRs);
+  free(run_globals.SFRs);
 
-  no_shmr_owns_tables = 0;
+#if USE_MINI_HALOS
+  free(run_globals.SHMRsIII);
+  free(run_globals.SFRsIII);
+#endif
+
+  run_globals.SHMRs = NULL;
+  run_globals.SFRs = NULL;
+
+#if USE_MINI_HALOS
+  run_globals.SHMRsIII = NULL;
+  run_globals.SFRsIII = NULL;
+#endif
+
+  run_globals.SourceTableNSnaps = 0;
   no_shmr_initialized = 0;
 }
 
@@ -893,3 +1438,5 @@ void init_reion_source_tables(void)
   no_shmr_sources_init();
   fesc_recalibration_init();
 }
+
+#endif

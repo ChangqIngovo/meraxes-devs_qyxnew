@@ -186,14 +186,24 @@ void merge_with_target(galaxy_t* gal, int* dead_gals, int snapshot)
   parent->GrossStellarMassIII += gal->GrossStellarMassIII;
   parent->FescIIIWeightedGSM += gal->FescIIIWeightedGSM;
   parent->FescIIIWeightedSfr += gal->FescIIIWeightedSfr;
+#if USE_SCATTERS
+  parent->GrossStellarMassIIINoScatter +=
+      gal->GrossStellarMassIIINoScatter;
+  parent->FescIIIWeightedGSMNoScatter +=
+      gal->FescIIIWeightedGSMNoScatter;
+  parent->TargetFescIIIWeightedGSM += gal->TargetFescIIIWeightedGSM;
+  parent->TargetFescIIIWeightedSfr += gal->TargetFescIIIWeightedSfr;
+#endif
 #endif
   parent->GrossStellarMass += gal->GrossStellarMass;
   parent->FescWeightedGSM += gal->FescWeightedGSM;
-  // Source only no scatter accumulators
-  parent->SourceGrossStellarMass += gal->SourceGrossStellarMass;
-  parent->SourceFescWeightedGSM += gal->SourceFescWeightedGSM;
+#if USE_SCATTERS
+  // Cumulative no-scatter source histories.
+  parent->GrossStellarMassNoScatter += gal->GrossStellarMassNoScatter;
+  parent->FescWeightedGSMNoScatter += gal->FescWeightedGSMNoScatter;
   parent->TargetFescWeightedGSM += gal->TargetFescWeightedGSM;
   parent->TargetFescWeightedSfr += gal->TargetFescWeightedSfr;
+#endif
   parent->MetalsStellarMass += gal->MetalsStellarMass;
   parent->Sfr += gal->Sfr;
   parent->FescWeightedSfr += gal->FescWeightedSfr;
