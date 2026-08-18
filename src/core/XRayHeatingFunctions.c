@@ -777,6 +777,7 @@ double integrand_in_nu_lya_integral(double nu, void* params)
 double integrate_over_nu(double zp,
                          double local_x_e,
                          double lower_int_limit,
+                         double upper_int_limit,
                          double thresh_energy,
                          double spec_index,
                          int FLAG)
@@ -785,7 +786,6 @@ double integrate_over_nu(double zp,
   double rel_tol = 0.01; //<- relative tolerance
   gsl_function F;
 
-  double upper_int_limit = run_globals.params.physics.NuXrayMax * NU_over_EV;
   if (lower_int_limit >= upper_int_limit)
     return 0.0;
 
@@ -1461,25 +1461,16 @@ void evolveInt(float zp,
     }
 #endif
 
-    if (isfinite(const_zp_prefactor_AGN_soft)) {
-      dxheat_dt_AGN       *= const_zp_prefactor_AGN_soft;
-      dxion_source_dt_AGN *= const_zp_prefactor_AGN_soft;
-      dxlya_dt_AGN        *= const_zp_prefactor_AGN_soft * n_b;
-    } else {
-      dxheat_dt_AGN       = 0.0;
-      dxion_source_dt_AGN = 0.0;
-      dxlya_dt_AGN        = 0.0;
-    }
+    /* const_zp_prefactor_AGN_soft/hard are guaranteed finite here — ComputeTs.c
+     * aborts the run if either ever comes out non-finite, rather than letting
+     * a bad value reach this far. */
+    dxheat_dt_AGN       *= const_zp_prefactor_AGN_soft;
+    dxion_source_dt_AGN *= const_zp_prefactor_AGN_soft;
+    dxlya_dt_AGN        *= const_zp_prefactor_AGN_soft * n_b;
 
-    if (isfinite(const_zp_prefactor_AGN_hard)) {
-      dxheat_dt_AGN_hard       *= const_zp_prefactor_AGN_hard;
-      dxion_source_dt_AGN_hard *= const_zp_prefactor_AGN_hard;
-      dxlya_dt_AGN_hard        *= const_zp_prefactor_AGN_hard * n_b;
-    } else {
-      dxheat_dt_AGN_hard       = 0.0;
-      dxion_source_dt_AGN_hard = 0.0;
-      dxlya_dt_AGN_hard        = 0.0;
-    }
+    dxheat_dt_AGN_hard       *= const_zp_prefactor_AGN_hard;
+    dxion_source_dt_AGN_hard *= const_zp_prefactor_AGN_hard;
+    dxlya_dt_AGN_hard        *= const_zp_prefactor_AGN_hard * n_b;
 
     /* Only now, with each band independently normalised, sum them into
      * the shared accumulators used by every downstream deriv[] below. */

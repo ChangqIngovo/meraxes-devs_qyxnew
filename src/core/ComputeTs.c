@@ -106,6 +106,9 @@ void _ComputeTs(int snapshot)
   double hmxb_xray_ave = 0.0; /* volume-averaged HMXB (galaxy) X-ray emissivity density, this snapshot */
   double lower_int_limit_AGN_soft;
   double lower_int_limit_AGN_hard;
+  double upper_int_limit_GAL;
+  double upper_int_limit_AGN_soft;
+  double upper_int_limit_AGN_hard;
   double Luminosity_converstion_factor_AGN_soft;  /* soft band: nu_thresh -> nu_break   */
   double Luminosity_converstion_factor_AGN_hard;  /* hard band: nu_break  -> nu_hard_cut */
   double agn_emissivity_zpp;       /* AGN emissivity at shell redshift z'': integral of LF x SED */
@@ -621,8 +624,14 @@ void _ComputeTs(int snapshot)
       filling_factor_of_HI_zp = 1. - ReionEfficiency * collapse_fraction / (1.0 - x_e_ave);
 #endif
 
+      /* NuXrayThreshold/NuXrayMax are rest-frame (at emission, zpp) SED band
+       * edges; nu_tau_one() already returns a frequency in the arrival frame
+       * at zp, so the fixed band edges need the same (1+zp)/(1+zpp) redshift
+       * factor to land in that frame before being compared/integrated
+       * against it. */
       lower_int_limit_GAL = fmax(nu_tau_one(zp, zpp, x_e_ave, filling_factor_of_HI_zp, snapshot),
-                                 run_globals.params.physics.NuXrayThreshold * NU_over_EV);
+                                 run_globals.params.physics.NuXrayThreshold * NU_over_EV * (1. + zp) / (1. + zpp));
+      upper_int_limit_GAL = run_globals.params.physics.NuXrayMax * NU_over_EV * (1. + zp) / (1. + zpp);
 
       if (filling_factor_of_HI_zp < 0)
         filling_factor_of_HI_zp =
@@ -632,18 +641,21 @@ void _ComputeTs(int snapshot)
         freq_int_heat_tbl_GAL[x_e_ct][R_ct] = integrate_over_nu(zp,
                                                                 x_int_XHII[x_e_ct],
                                                                 lower_int_limit_GAL,
+                                                                upper_int_limit_GAL,
                                                                 run_globals.params.physics.NuXrayThreshold,
                                                                 run_globals.params.physics.SpecIndexXrayGal,
                                                                 0);
         freq_int_ion_tbl_GAL[x_e_ct][R_ct] = integrate_over_nu(zp,
                                                                x_int_XHII[x_e_ct],
                                                                lower_int_limit_GAL,
+                                                               upper_int_limit_GAL,
                                                                run_globals.params.physics.NuXrayThreshold,
                                                                run_globals.params.physics.SpecIndexXrayGal,
                                                                1);
         freq_int_lya_tbl_GAL[x_e_ct][R_ct] = integrate_over_nu(zp,
                                                                x_int_XHII[x_e_ct],
                                                                lower_int_limit_GAL,
+                                                               upper_int_limit_GAL,
                                                                run_globals.params.physics.NuXrayThreshold,
                                                                run_globals.params.physics.SpecIndexXrayGal,
                                                                2);
@@ -652,18 +664,21 @@ void _ComputeTs(int snapshot)
         freq_int_heat_tbl_III[x_e_ct][R_ct] = integrate_over_nu(zp,
                                                                 x_int_XHII[x_e_ct],
                                                                 lower_int_limit_GAL,
+                                                                upper_int_limit_GAL,
                                                                 run_globals.params.physics.NuXrayThreshold,
                                                                 run_globals.params.physics.SpecIndexXrayIII,
                                                                 0);
         freq_int_ion_tbl_III[x_e_ct][R_ct] = integrate_over_nu(zp,
                                                                x_int_XHII[x_e_ct],
                                                                lower_int_limit_GAL,
+                                                               upper_int_limit_GAL,
                                                                run_globals.params.physics.NuXrayThreshold,
                                                                run_globals.params.physics.SpecIndexXrayIII,
                                                                1);
         freq_int_lya_tbl_III[x_e_ct][R_ct] = integrate_over_nu(zp,
                                                                x_int_XHII[x_e_ct],
                                                                lower_int_limit_GAL,
+                                                               upper_int_limit_GAL,
                                                                run_globals.params.physics.NuXrayThreshold,
                                                                run_globals.params.physics.SpecIndexXrayIII,
                                                                2);
@@ -689,15 +704,24 @@ void _ComputeTs(int snapshot)
        *   nu_break to avoid double-counting with the soft component.
        */
 
+      /* NuXrayThreshold/NuXraySoftCut/NuXrayMax are rest-frame (at emission,
+       * zpp) SED band edges; nu_tau_one() already returns a frequency in the
+       * arrival frame at zp, so the fixed band edges need the same
+       * (1+zp)/(1+zpp) redshift factor to land in that frame before being
+       * compared/integrated against it. */
+
       /* Soft band lower limit: opacity cutoff or AGN threshold, whichever is higher */
       lower_int_limit_AGN_soft = fmax(
         nu_tau_one(zp, zpp, x_e_ave, filling_factor_of_HI_zp, snapshot),
-        run_globals.params.physics.NuXrayThreshold * NU_over_EV);
+        run_globals.params.physics.NuXrayThreshold * NU_over_EV * (1. + zp) / (1. + zpp));
+      /* Soft band upper limit: capped at the soft/hard break, not NuXrayMax */
+      upper_int_limit_AGN_soft = run_globals.params.physics.NuXraySoftCut * NU_over_EV * (1. + zp) / (1. + zpp);
 
       /* Hard band lower limit: start at break frequency (no double counting) */
       lower_int_limit_AGN_hard = fmax(
         nu_tau_one(zp, zpp, x_e_ave, filling_factor_of_HI_zp, snapshot),
-        run_globals.params.physics.NuXrayThreshold * NU_over_EV);
+        run_globals.params.physics.NuXraySoftCut * NU_over_EV * (1. + zp) / (1. + zpp));
+      upper_int_limit_AGN_hard = run_globals.params.physics.NuXrayMax * NU_over_EV * (1. + zp) / (1. + zpp);
 
       /* AGN source amplitudes are per-cell, independently per band, from
        * SMOOTHED_AGN/SMOOTHED_AGN_soft (set in the cell loop below from
@@ -713,36 +737,42 @@ void _ComputeTs(int snapshot)
         freq_int_heat_tbl_AGN_soft[x_e_ct][R_ct] = integrate_over_nu(
           zp, x_int_XHII[x_e_ct],
           lower_int_limit_AGN_soft,
+          upper_int_limit_AGN_soft,
           run_globals.params.physics.NuXrayThreshold,
           run_globals.params.physics.SpecIndexXrayAGNSoft, 0);
 
         freq_int_ion_tbl_AGN_soft[x_e_ct][R_ct] = integrate_over_nu(
           zp, x_int_XHII[x_e_ct],
           lower_int_limit_AGN_soft,
+          upper_int_limit_AGN_soft,
           run_globals.params.physics.NuXrayThreshold,
           run_globals.params.physics.SpecIndexXrayAGNSoft, 1);
 
         freq_int_lya_tbl_AGN_soft[x_e_ct][R_ct] = integrate_over_nu(
           zp, x_int_XHII[x_e_ct],
           lower_int_limit_AGN_soft,
+          upper_int_limit_AGN_soft,
           run_globals.params.physics.NuXrayThreshold,
           run_globals.params.physics.SpecIndexXrayAGNSoft, 2);
 
         freq_int_heat_tbl_AGN_hard[x_e_ct][R_ct] = integrate_over_nu(
           zp, x_int_XHII[x_e_ct],
           lower_int_limit_AGN_hard,
+          upper_int_limit_AGN_hard,
           run_globals.params.physics.NuXrayThreshold,
           run_globals.params.physics.SpecIndexXrayAGNHard, 0);
 
         freq_int_ion_tbl_AGN_hard[x_e_ct][R_ct] = integrate_over_nu(
           zp, x_int_XHII[x_e_ct],
           lower_int_limit_AGN_hard,
+          upper_int_limit_AGN_hard,
           run_globals.params.physics.NuXrayThreshold,
           run_globals.params.physics.SpecIndexXrayAGNHard, 1);
 
         freq_int_lya_tbl_AGN_hard[x_e_ct][R_ct] = integrate_over_nu(
           zp, x_int_XHII[x_e_ct],
           lower_int_limit_AGN_hard,
+          upper_int_limit_AGN_hard,
           run_globals.params.physics.NuXrayThreshold,
           run_globals.params.physics.SpecIndexXrayAGNHard, 2);
       }
@@ -947,15 +977,23 @@ void _ComputeTs(int snapshot)
       Luminosity_converstion_factor_AGN_soft /
       (run_globals.params.physics.NuXrayThreshold * NU_over_EV) * SPEED_OF_LIGHT *
       pow(1.0 + zp, run_globals.params.physics.SpecIndexXrayAGNSoft + 3.0);
-    if (!isfinite(const_zp_prefactor_AGN_soft))
-      const_zp_prefactor_AGN_soft = 0.0;
+    if (!isfinite(const_zp_prefactor_AGN_soft)) {
+      /* Most likely cause: NuXraySoftCut == NuXrayThreshold (zero-width soft
+       * band), which makes Luminosity_converstion_factor_AGN_soft divide by
+       * zero above. That's a parameter error, not a physical edge case — stop
+       * here rather than silently treating the AGN soft band as always zero. */
+      mlog_error("const_zp_prefactor_AGN_soft is not finite — check NuXrayThreshold/NuXraySoftCut/SpecIndexXrayAGNSoft.");
+      ABORT(EXIT_FAILURE);
+    }
 
     const_zp_prefactor_AGN_hard =
       Luminosity_converstion_factor_AGN_hard /
       (run_globals.params.physics.NuXrayThreshold * NU_over_EV) * SPEED_OF_LIGHT *
       pow(1.0 + zp, run_globals.params.physics.SpecIndexXrayAGNHard + 3.0);
-    if (!isfinite(const_zp_prefactor_AGN_hard))
-      const_zp_prefactor_AGN_hard = 0.0;
+    if (!isfinite(const_zp_prefactor_AGN_hard)) {
+      mlog_error("const_zp_prefactor_AGN_hard is not finite — check NuXrayThreshold/NuXrayMax/SpecIndexXrayAGNHard.");
+      ABORT(EXIT_FAILURE);
+    }
     // Note the factor of 0.59 appears to be required to match 21cmFAST
 
     // I believe it arises from differing definitions of a stellar baryon mass

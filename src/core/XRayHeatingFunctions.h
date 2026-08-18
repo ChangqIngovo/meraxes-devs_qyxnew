@@ -154,6 +154,7 @@ extern "C"
   double integrate_over_nu(double zp,
                            double local_x_e,
                            double lower_int_limit,
+                           double upper_int_limit,
                            double thresh_energy,
                            double spec_index,
                            int FLAG);
