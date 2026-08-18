@@ -109,6 +109,9 @@ void _ComputeTs(int snapshot)
   double upper_int_limit_GAL;
   double upper_int_limit_AGN_soft;
   double upper_int_limit_AGN_hard;
+  double nu_tau_one_agn; /* shared opacity-cutoff frequency for AGN soft+hard — same
+                          * (zp, zpp, x_e_ave, filling_factor_of_HI_zp, snapshot) for both,
+                          * so nu_tau_one()'s Brent root-solve only needs to run once. */
   double Luminosity_converstion_factor_AGN_soft;  /* soft band: nu_thresh -> nu_break   */
   double Luminosity_converstion_factor_AGN_hard;  /* hard band: nu_break  -> nu_hard_cut */
   double agn_emissivity_zpp;       /* AGN emissivity at shell redshift z'': integral of LF x SED */
@@ -711,16 +714,20 @@ void _ComputeTs(int snapshot)
        * (1+zp)/(1+zpp) before comparing against the arrival-frame nu is what
        * lets that hard-to-soft shift show up correctly in the split. */
 
+      /* Soft and hard both use the same (zp, zpp, x_e_ave, filling_factor_of_HI_zp,
+       * snapshot) at this point (post-clamp), so nu_tau_one() only needs to run once. */
+      nu_tau_one_agn = nu_tau_one(zp, zpp, x_e_ave, filling_factor_of_HI_zp, snapshot);
+
       /* Soft band lower limit: opacity cutoff or AGN threshold, whichever is higher */
       lower_int_limit_AGN_soft = fmax(
-        nu_tau_one(zp, zpp, x_e_ave, filling_factor_of_HI_zp, snapshot),
+        nu_tau_one_agn,
         run_globals.params.physics.NuXrayThreshold * NU_over_EV * (1. + zp) / (1. + zpp));
       /* Soft band upper limit: capped at the soft/hard break, not NuXrayMax */
       upper_int_limit_AGN_soft = run_globals.params.physics.NuXraySoftCut * NU_over_EV * (1. + zp) / (1. + zpp);
 
       /* Hard band lower limit: start at break frequency (no double counting) */
       lower_int_limit_AGN_hard = fmax(
-        nu_tau_one(zp, zpp, x_e_ave, filling_factor_of_HI_zp, snapshot),
+        nu_tau_one_agn,
         run_globals.params.physics.NuXraySoftCut * NU_over_EV * (1. + zp) / (1. + zpp));
       upper_int_limit_AGN_hard = run_globals.params.physics.NuXrayMax * NU_over_EV * (1. + zp) / (1. + zpp);
 
