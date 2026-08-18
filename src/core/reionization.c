@@ -1850,12 +1850,10 @@ void construct_baryon_grids(int snapshot, int local_ngals)
       continue;
 
     /*
-     * Skip the AGN emissivity properties if SpinTemp is off (no heating
-     * calculation) or if AGN X-ray heating is disabled.
+     * Skip the AGN emissivity properties if their grid was never allocated
+     * (which only happens when both SpinTemp and AGN X-ray heating are on).
      */
     if (prop == prop_bh_xray_emissivity || prop == prop_bh_xray_emissivity_soft) {
-      if (!run_globals.params.Flag_IncludeSpinTemp) continue;
-      if (!run_globals.params.physics.Flag_IncludeAGNXray) continue;
       if (prop == prop_bh_xray_emissivity      && bh_xray_grid      == NULL) continue;
       if (prop == prop_bh_xray_emissivity_soft && bh_xray_grid_soft == NULL) continue;
     }
