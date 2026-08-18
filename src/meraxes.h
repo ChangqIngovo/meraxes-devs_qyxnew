@@ -524,9 +524,9 @@ typedef struct reion_grids_t
 #endif
 
   float* BHXrayEmissivity;        //!< Per-cell AGN X-ray emissivity grid (current snapshot, hard band) [slab_n_complex*2]
-  float* bh_xray_histories;       //!< Ring-buffer of NstoreSnapshots_SFR past BHXrayEmissivity snapshots
+  float* bh_xray_histories;       //!< Ring-buffer of NstoreSnapshots_Heating past BHXrayEmissivity snapshots
   float* BHXrayEmissivity_soft;   //!< Per-cell AGN X-ray emissivity grid (current snapshot, soft band) [slab_n_complex*2]
-  float* bh_xray_histories_soft;  //!< Ring-buffer of NstoreSnapshots_SFR past BHXrayEmissivity_soft snapshots
+  float* bh_xray_histories_soft;  //!< Ring-buffer of NstoreSnapshots_Heating past BHXrayEmissivity_soft snapshots
 
   // Grids necessary for LW background and future disentangling between MC/AC Pop3/Pop2 stuff
 
@@ -936,7 +936,7 @@ typedef struct run_globals_t
   int NFOFGroupsMax;
   int NRequestedForests;
   int NStoreSnapshots;
-  int NstoreSnapshots_SFR;
+  int NstoreSnapshots_Heating;
 
   bool SelectForestsSwitch;
   struct Modifier* mass_ratio_modifier;

@@ -306,8 +306,8 @@ void init_meraxes()
   init_xray_obscuration_tables();
 
   if (run_globals.params.Flag_IncludeSpinTemp){
-    run_globals.NstoreSnapshots_SFR = set_sfr_history();
-    mlog("Storing %d snapshots of SFR histories for Ts.", MLOG_MESG, run_globals.NstoreSnapshots_SFR);
+    run_globals.NstoreSnapshots_Heating = set_sfr_history();
+    mlog("Storing %d snapshots of SFR histories for Ts.", MLOG_MESG, run_globals.NstoreSnapshots_Heating);
   }
 
   // Determine the size of the light-cone for initialising the light-cone grid
