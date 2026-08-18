@@ -624,14 +624,12 @@ void _ComputeTs(int snapshot)
       filling_factor_of_HI_zp = 1. - ReionEfficiency * collapse_fraction / (1.0 - x_e_ave);
 #endif
 
-      /* NuXrayThreshold/NuXrayMax are rest-frame (at emission, zpp) SED band
-       * edges; nu_tau_one() already returns a frequency in the arrival frame
-       * at zp, so the fixed band edges need the same (1+zp)/(1+zpp) redshift
-       * factor to land in that frame before being compared/integrated
-       * against it. */
+      // GAL/III have no soft/hard split — their calibration already accounts
+      // for whatever redshift dependence is needed, so the band edges stay
+      // unscaled here (unlike the AGN soft/hard limits below).
       lower_int_limit_GAL = fmax(nu_tau_one(zp, zpp, x_e_ave, filling_factor_of_HI_zp, snapshot),
-                                 run_globals.params.physics.NuXrayThreshold * NU_over_EV * (1. + zp) / (1. + zpp));
-      upper_int_limit_GAL = run_globals.params.physics.NuXrayMax * NU_over_EV * (1. + zp) / (1. + zpp);
+                                 run_globals.params.physics.NuXrayThreshold * NU_over_EV);
+      upper_int_limit_GAL = run_globals.params.physics.NuXrayMax * NU_over_EV;
 
       if (filling_factor_of_HI_zp < 0)
         filling_factor_of_HI_zp =
@@ -704,11 +702,14 @@ void _ComputeTs(int snapshot)
        *   nu_break to avoid double-counting with the soft component.
        */
 
-      /* NuXrayThreshold/NuXraySoftCut/NuXrayMax are rest-frame (at emission,
-       * zpp) SED band edges; nu_tau_one() already returns a frequency in the
-       * arrival frame at zp, so the fixed band edges need the same
-       * (1+zp)/(1+zpp) redshift factor to land in that frame before being
-       * compared/integrated against it. */
+      /* Unlike GAL/III, the AGN soft/hard split needs the redshift factor:
+       * NuXrayThreshold/NuXraySoftCut/NuXrayMax are rest-frame (at emission,
+       * zpp) SED band edges, but nu_tau_one() returns a frequency in the
+       * arrival frame at zp — so a hard-band photon emitted above the
+       * rest-frame break can still redshift down into what is locally the
+       * soft band by the time it arrives at zp. Scaling the break by
+       * (1+zp)/(1+zpp) before comparing against the arrival-frame nu is what
+       * lets that hard-to-soft shift show up correctly in the split. */
 
       /* Soft band lower limit: opacity cutoff or AGN threshold, whichever is higher */
       lower_int_limit_AGN_soft = fmax(
