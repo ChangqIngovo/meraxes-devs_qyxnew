@@ -97,7 +97,7 @@ void _ComputeTs(int snapshot)
     prev_redshift = run_globals.ZZ[snapshot - 1];
   }
 
-  int i_real, i_padded, i_smoothedSFR, R_ct, x_e_ct, n_ct, m_xHII_low, m_xHII_high, NO_LIGHT;
+  int i_real, i_padded, i_smoothed_heating, R_ct, x_e_ct, n_ct, m_xHII_low, m_xHII_high, NO_LIGHT;
 
   double prev_zpp, prev_R, zpp, zp, lower_int_limit_GAL, filling_factor_of_HI_zp, R_factor, R, nuprime, dzp,
     Luminosity_converstion_factor_GAL;
@@ -481,34 +481,34 @@ void _ComputeTs(int snapshot)
             for (int iz = 0; iz < ReionGridDim; iz++) {
               i_padded = grid_index(ix, iy, iz, ReionGridDim, INDEX_PADDED);
               i_real = grid_index(ix, iy, iz, ReionGridDim, INDEX_REAL);
-              i_smoothedSFR = grid_index_smoothedSFR(R_ct, ix, iy, iz, TsNumFilterSteps, ReionGridDim);
+              i_smoothed_heating = grid_index_smoothedSFR(R_ct, ix, iy, iz, TsNumFilterSteps, ReionGridDim);
 
               ((float*)sfr_filtered)[i_padded] = fmaxf(((float*)sfr_filtered)[i_padded], 0.0);
 
-              SMOOTHED_SFR_GAL[i_smoothedSFR] = (((float*)sfr_filtered)[i_padded] / pixel_volume) *
+              SMOOTHED_SFR_GAL[i_smoothed_heating] = (((float*)sfr_filtered)[i_padded] / pixel_volume) *
                                                 (units->UnitMass_in_g / units->UnitTime_in_s) *
                                                 pow(units->UnitLength_in_cm, -3.) / SOLAR_MASS;
 
               hmxb_xray_ave += run_globals.params.physics.LXrayGal * SEC_PER_YEAR *
-                               SMOOTHED_SFR_GAL[i_smoothedSFR];
+                               SMOOTHED_SFR_GAL[i_smoothed_heating];
 #if USE_MINI_HALOS
               ((float*)sfrIII_filtered)[i_padded] = fmaxf(((float*)sfrIII_filtered)[i_padded], 0.0);
 
-              SMOOTHED_SFR_III[i_smoothedSFR] = (((float*)sfrIII_filtered)[i_padded] / pixel_volume) *
+              SMOOTHED_SFR_III[i_smoothed_heating] = (((float*)sfrIII_filtered)[i_padded] / pixel_volume) *
                                                 (units->UnitMass_in_g / units->UnitTime_in_s) *
                                                 pow(units->UnitLength_in_cm, -3.) / SOLAR_MASS;
 #endif
 
               if (run_globals.params.physics.Flag_IncludeAGNXray > 0) {
                 bh = fmaxf(run_globals.reion_grids.BHXrayEmissivity[i_padded], 0.0f);
-                SMOOTHED_AGN[i_smoothedSFR] = (double)bh * 1e10 * SOLAR_LUM / pixel_volume
+                SMOOTHED_AGN[i_smoothed_heating] = (double)bh * 1e10 * SOLAR_LUM / pixel_volume
                                               * pow(units->UnitLength_in_cm, -3.0);
-                agn_xray_hard_ave += SMOOTHED_AGN[i_smoothedSFR];
+                agn_xray_hard_ave += SMOOTHED_AGN[i_smoothed_heating];
 
                 bh_soft = fmaxf(run_globals.reion_grids.BHXrayEmissivity_soft[i_padded], 0.0f);
-                SMOOTHED_AGN_soft[i_smoothedSFR] = (double)bh_soft * 1e10 * SOLAR_LUM / pixel_volume
+                SMOOTHED_AGN_soft[i_smoothed_heating] = (double)bh_soft * 1e10 * SOLAR_LUM / pixel_volume
                                                    * pow(units->UnitLength_in_cm, -3.0);
-                agn_xray_soft_ave += SMOOTHED_AGN_soft[i_smoothedSFR];
+                agn_xray_soft_ave += SMOOTHED_AGN_soft[i_smoothed_heating];
               }
 
               density_over_mean = 1.0 + run_globals.reion_grids.deltax[i_padded];
@@ -569,29 +569,29 @@ void _ComputeTs(int snapshot)
             for (int iz = 0; iz < ReionGridDim; iz++) {
               i_real = grid_index(ix, iy, iz, ReionGridDim, INDEX_REAL);
               i_padded = grid_index(ix, iy, iz, ReionGridDim, INDEX_PADDED);
-              i_smoothedSFR = grid_index_smoothedSFR(R_ct, ix, iy, iz, TsNumFilterSteps, ReionGridDim);
+              i_smoothed_heating = grid_index_smoothedSFR(R_ct, ix, iy, iz, TsNumFilterSteps, ReionGridDim);
 
               ((float*)sfr_filtered)[i_padded] = fmaxf(((float*)sfr_filtered)[i_padded], 0.0);
 #if USE_MINI_HALOS
               ((float*)sfrIII_filtered)[i_padded] = fmaxf(((float*)sfrIII_filtered)[i_padded], 0.0);
 #endif
 
-              SMOOTHED_SFR_GAL[i_smoothedSFR] = (((float*)sfr_filtered)[i_padded] / pixel_volume) *
+              SMOOTHED_SFR_GAL[i_smoothed_heating] = (((float*)sfr_filtered)[i_padded] / pixel_volume) *
                                                 (units->UnitMass_in_g / units->UnitTime_in_s) *
                                                 pow(units->UnitLength_in_cm, -3.) / SOLAR_MASS;
 #if USE_MINI_HALOS
-              SMOOTHED_SFR_III[i_smoothedSFR] = (((float*)sfrIII_filtered)[i_padded] / pixel_volume) *
+              SMOOTHED_SFR_III[i_smoothed_heating] = (((float*)sfrIII_filtered)[i_padded] / pixel_volume) *
                                                 (units->UnitMass_in_g / units->UnitTime_in_s) *
                                                 pow(units->UnitLength_in_cm, -3.) / SOLAR_MASS;
 #endif
 
               if (run_globals.params.physics.Flag_IncludeAGNXray > 0) {
                 bh = fmaxf(run_globals.reion_grids.BHXrayEmissivity[i_padded], 0.0f);
-                SMOOTHED_AGN[i_smoothedSFR] = (double)bh * 1e10 * SOLAR_LUM / pixel_volume
+                SMOOTHED_AGN[i_smoothed_heating] = (double)bh * 1e10 * SOLAR_LUM / pixel_volume
                                               * pow(units->UnitLength_in_cm, -3.0);
 
                 bh_soft = fmaxf(run_globals.reion_grids.BHXrayEmissivity_soft[i_padded], 0.0f);
-                SMOOTHED_AGN_soft[i_smoothedSFR] = (double)bh_soft * 1e10 * SOLAR_LUM / pixel_volume
+                SMOOTHED_AGN_soft[i_smoothed_heating] = (double)bh_soft * 1e10 * SOLAR_LUM / pixel_volume
                                                    * pow(units->UnitLength_in_cm, -3.0);
               }
             }
@@ -1033,16 +1033,16 @@ void _ComputeTs(int snapshot)
 #endif
 
           for (R_ct = 0; R_ct < TsNumFilterSteps; R_ct++) {
-            i_smoothedSFR = grid_index_smoothedSFR(R_ct, ix, iy, iz, TsNumFilterSteps, ReionGridDim);
+            i_smoothed_heating = grid_index_smoothedSFR(R_ct, ix, iy, iz, TsNumFilterSteps, ReionGridDim);
 
-            SFR_GAL[R_ct] = SMOOTHED_SFR_GAL[i_smoothedSFR];
+            SFR_GAL[R_ct] = SMOOTHED_SFR_GAL[i_smoothed_heating];
 
             {
-              XAGN_soft[R_ct] = (flag_agn == 1 || flag_agn == 3) ? SMOOTHED_AGN_soft[i_smoothedSFR] : 0.0;
-              XAGN_hard[R_ct] = (flag_agn == 1 || flag_agn == 2) ? SMOOTHED_AGN[i_smoothedSFR] : 0.0;
+              XAGN_soft[R_ct] = (flag_agn == 1 || flag_agn == 3) ? SMOOTHED_AGN_soft[i_smoothed_heating] : 0.0;
+              XAGN_hard[R_ct] = (flag_agn == 1 || flag_agn == 2) ? SMOOTHED_AGN[i_smoothed_heating] : 0.0;
             }
 #if USE_MINI_HALOS
-            SFR_III[R_ct] = SMOOTHED_SFR_III[i_smoothedSFR];
+            SFR_III[R_ct] = SMOOTHED_SFR_III[i_smoothed_heating];
 #endif
             xHII_call = x_e_box_prev[i_padded];
 
