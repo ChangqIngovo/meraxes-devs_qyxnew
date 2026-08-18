@@ -379,8 +379,12 @@ double tauX(double nu, double x_e, double zp, double zpp, double HI_filling_fact
    * to keep its root search moving in the right direction, so returning a
    * large finite value on failure is safe; trusting an unconverged result
    * (or letting GSL's default handler abort the whole run) is not. */
-  if (status != GSL_SUCCESS)
+  if (status != GSL_SUCCESS) {
+    mlog("WARNING: tauX integral failed to converge (snap %d, zp=%.3f, zpp=%.3f, nu=%.3e): %s — "
+         "falling back to tau=1e10\n",
+         MLOG_MESG, snap_i, zp, zpp, nu, gsl_strerror(status));
     return 1e10;
+  }
 
   return result;
 }
