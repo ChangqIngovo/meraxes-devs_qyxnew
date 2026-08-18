@@ -489,13 +489,13 @@ void _ComputeTs(int snapshot)
 
               if (SMOOTHED_AGN != NULL && run_globals.reion_grids.BHXrayEmissivity != NULL) {
                 bh = fmaxf(run_globals.reion_grids.BHXrayEmissivity[i_padded], 0.0f);
-                SMOOTHED_AGN[i_smoothedSFR] = (double)bh * LSUN_1E10_IN_ERG_S / pixel_volume
+                SMOOTHED_AGN[i_smoothedSFR] = (double)bh * 1e10 * SOLAR_LUM / pixel_volume
                                               * pow(units->UnitLength_in_cm, -3.0);
                 agn_xray_hard_ave += SMOOTHED_AGN[i_smoothedSFR];
               }
               if (SMOOTHED_AGN_soft != NULL && run_globals.reion_grids.BHXrayEmissivity_soft != NULL) {
                 bh_soft = fmaxf(run_globals.reion_grids.BHXrayEmissivity_soft[i_padded], 0.0f);
-                SMOOTHED_AGN_soft[i_smoothedSFR] = (double)bh_soft * LSUN_1E10_IN_ERG_S / pixel_volume
+                SMOOTHED_AGN_soft[i_smoothedSFR] = (double)bh_soft * 1e10 * SOLAR_LUM / pixel_volume
                                                    * pow(units->UnitLength_in_cm, -3.0);
                 agn_xray_soft_ave += SMOOTHED_AGN_soft[i_smoothedSFR];
               }
@@ -576,12 +576,12 @@ void _ComputeTs(int snapshot)
 
               if (SMOOTHED_AGN != NULL && run_globals.reion_grids.BHXrayEmissivity != NULL) {
                 bh = fmaxf(run_globals.reion_grids.BHXrayEmissivity[i_padded], 0.0f);
-                SMOOTHED_AGN[i_smoothedSFR] = (double)bh * LSUN_1E10_IN_ERG_S / pixel_volume
+                SMOOTHED_AGN[i_smoothedSFR] = (double)bh * 1e10 * SOLAR_LUM / pixel_volume
                                               * pow(units->UnitLength_in_cm, -3.0);
               }
               if (SMOOTHED_AGN_soft != NULL && run_globals.reion_grids.BHXrayEmissivity_soft != NULL) {
                 bh_soft = fmaxf(run_globals.reion_grids.BHXrayEmissivity_soft[i_padded], 0.0f);
-                SMOOTHED_AGN_soft[i_smoothedSFR] = (double)bh_soft * LSUN_1E10_IN_ERG_S / pixel_volume
+                SMOOTHED_AGN_soft[i_smoothedSFR] = (double)bh_soft * 1e10 * SOLAR_LUM / pixel_volume
                                                    * pow(units->UnitLength_in_cm, -3.0);
               }
             }

@@ -46,15 +46,17 @@ double dt_dzpp;
 double dt_dzp;
 double* zpp_edge;
 
-// Have this arbitrarily large for now. Will do this properly later
-double stored_fcoll[1000];
-double stored_fcollIII[1000];
+// One entry per snapshot (indexed directly by snapshot number). Allocated
+// in init.c to run_globals.params.SnaplistLength once that's known, and
+// freed in cleanup.c — same lifecycle as run_globals.ZZ/LTTime/AA.
+double* stored_fcoll;
+double* stored_fcollIII;
 /* Volume-averaged AGN X-ray emissivity density [erg/s/cm^3] per snapshot,
  * one value per band — for plotting an epsilon_X-style curve vs redshift*/
-double stored_XrayEmissivity_hard[1000];
-double stored_XrayEmissivity_soft[1000];
+double* stored_XrayEmissivity_hard;
+double* stored_XrayEmissivity_soft;
 // Volume-averaged HMXB (galaxy/stellar) X-ray emissivity density [erg/s/cm^3] per snapshot.
-double stored_XrayEmissivity_HMXB[1000];
+double* stored_XrayEmissivity_HMXB;
 double* sum_lyn;
 double* sum_lyn_LW;
 double* sum_lyn_III;
@@ -74,11 +76,11 @@ extern double x_e_ave;
 extern double dt_dzpp;
 extern double dt_dzp;
 extern double* zpp_edge;
-extern double stored_fcoll[1000];
-extern double stored_fcollIII[1000];
-extern double stored_XrayEmissivity_hard[1000];
-extern double stored_XrayEmissivity_soft[1000];
-extern double stored_XrayEmissivity_HMXB[1000];
+extern double* stored_fcoll;
+extern double* stored_fcollIII;
+extern double* stored_XrayEmissivity_hard;
+extern double* stored_XrayEmissivity_soft;
+extern double* stored_XrayEmissivity_HMXB;
 extern double* sum_lyn;
 extern double* sum_lyn_LW;
 extern double* sum_lyn_III;

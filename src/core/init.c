@@ -18,6 +18,7 @@
 #include "save.h"
 #include "stellar_feedback.h"
 #include "virial_properties.h"
+#include "XRayHeatingFunctions.h"
 #include "physics/emission_lines.h"
 #include "physics/blackhole_feedback.h"
 #if USE_MINI_HALOS
@@ -149,6 +150,17 @@ static void read_snap_list()
     run_globals.rhocrit = malloc(sizeof(double) * run_globals.params.SnaplistLength);
   }
   MPI_Bcast(run_globals.AA, run_globals.params.SnaplistLength, MPI_DOUBLE, 0, run_globals.mpi_comm);
+
+  // Per-snapshot Ts/X-ray-heating diagnostic buffers, indexed directly by
+  // snapshot number (see XRayHeatingFunctions.h) — only needed if the
+  // spin-temperature/X-ray-heating subsystem actually runs.
+  if (run_globals.params.Flag_IncludeSpinTemp) {
+    stored_fcoll = calloc((size_t)run_globals.params.SnaplistLength, sizeof(double));
+    stored_fcollIII = calloc((size_t)run_globals.params.SnaplistLength, sizeof(double));
+    stored_XrayEmissivity_hard = calloc((size_t)run_globals.params.SnaplistLength, sizeof(double));
+    stored_XrayEmissivity_soft = calloc((size_t)run_globals.params.SnaplistLength, sizeof(double));
+    stored_XrayEmissivity_HMXB = calloc((size_t)run_globals.params.SnaplistLength, sizeof(double));
+  }
 }
 
 double integrand_time_to_present(double a, void* params)
