@@ -142,13 +142,24 @@ void _ComputeTs(int snapshot)
 
   /* AGN broken power law: separate tables for soft and hard spectral components.
    * soft = intrinsic soft emission + redshifted hard becoming soft
-   * hard = hard emission still in hard band at observation redshift */
-  double freq_int_heat_tbl_AGN_soft[x_int_NXHII][TsNumFilterSteps];
-  double freq_int_ion_tbl_AGN_soft[x_int_NXHII][TsNumFilterSteps];
-  double freq_int_lya_tbl_AGN_soft[x_int_NXHII][TsNumFilterSteps];
-  double freq_int_heat_tbl_AGN_hard[x_int_NXHII][TsNumFilterSteps];
-  double freq_int_ion_tbl_AGN_hard[x_int_NXHII][TsNumFilterSteps];
-  double freq_int_lya_tbl_AGN_hard[x_int_NXHII][TsNumFilterSteps];
+   * hard = hard emission still in hard band at observation redshift
+   * Heap-allocated (not VLAs) and only when Flag_IncludeAGNXray is on — every
+   * read/write of these six tables already happens inside a Flag_IncludeAGNXray
+   * block below, so there's no reason to reserve the space otherwise. */
+  double (*freq_int_heat_tbl_AGN_soft)[TsNumFilterSteps] = NULL;
+  double (*freq_int_ion_tbl_AGN_soft)[TsNumFilterSteps] = NULL;
+  double (*freq_int_lya_tbl_AGN_soft)[TsNumFilterSteps] = NULL;
+  double (*freq_int_heat_tbl_AGN_hard)[TsNumFilterSteps] = NULL;
+  double (*freq_int_ion_tbl_AGN_hard)[TsNumFilterSteps] = NULL;
+  double (*freq_int_lya_tbl_AGN_hard)[TsNumFilterSteps] = NULL;
+  if (run_globals.params.physics.Flag_IncludeAGNXray > 0) {
+    freq_int_heat_tbl_AGN_soft = calloc((size_t)x_int_NXHII, sizeof(*freq_int_heat_tbl_AGN_soft));
+    freq_int_ion_tbl_AGN_soft = calloc((size_t)x_int_NXHII, sizeof(*freq_int_ion_tbl_AGN_soft));
+    freq_int_lya_tbl_AGN_soft = calloc((size_t)x_int_NXHII, sizeof(*freq_int_lya_tbl_AGN_soft));
+    freq_int_heat_tbl_AGN_hard = calloc((size_t)x_int_NXHII, sizeof(*freq_int_heat_tbl_AGN_hard));
+    freq_int_ion_tbl_AGN_hard = calloc((size_t)x_int_NXHII, sizeof(*freq_int_ion_tbl_AGN_hard));
+    freq_int_lya_tbl_AGN_hard = calloc((size_t)x_int_NXHII, sizeof(*freq_int_lya_tbl_AGN_hard));
+  }
 
   /* Per-cell interpolated AGN integrals — kept separate for soft and hard
    * so that Flag_IncludeAGNXray can select which components contribute:
@@ -162,11 +173,6 @@ void _ComputeTs(int snapshot)
   double freq_int_heat_AGN_hard[TsNumFilterSteps];
   double freq_int_ion_AGN_hard[TsNumFilterSteps];
   double freq_int_lya_AGN_hard[TsNumFilterSteps];
-  /* Combined arrays passed to evolveInt — filled from soft/hard
-   * according to Flag_IncludeAGNXray before each evolveInt call.           */
-  double freq_int_heat_AGN[TsNumFilterSteps];
-  double freq_int_ion_AGN[TsNumFilterSteps];
-  double freq_int_lya_AGN[TsNumFilterSteps];
 
 #if USE_MINI_HALOS
   double freq_int_heat_tbl_III[x_int_NXHII][TsNumFilterSteps], freq_int_ion_tbl_III[x_int_NXHII][TsNumFilterSteps],
@@ -1405,6 +1411,13 @@ void _ComputeTs(int snapshot)
        MLOG_MESG, zp, Xheat_ave_AGN_soft, Xheat_ave_AGN_hard,
        run_globals.params.physics.Flag_IncludeAGNXray);
 #endif
+
+  free(freq_int_heat_tbl_AGN_soft);
+  free(freq_int_ion_tbl_AGN_soft);
+  free(freq_int_lya_tbl_AGN_soft);
+  free(freq_int_heat_tbl_AGN_hard);
+  free(freq_int_ion_tbl_AGN_hard);
+  free(freq_int_lya_tbl_AGN_hard);
 }
 
 // This function makes sure that the right version of ComputeTs() gets called.
