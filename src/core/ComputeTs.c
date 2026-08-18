@@ -145,7 +145,7 @@ void _ComputeTs(int snapshot)
   double freq_int_lya_tbl_AGN_hard[x_int_NXHII][TsNumFilterSteps];
 
   /* Per-cell interpolated AGN integrals — kept separate for soft and hard
-   * so that Flag_includeAGN can select which components contribute:
+   * so that Flag_IncludeAGNXray can select which components contribute:
    *   0 = no AGN
    *   1 = soft + hard
    *   2 = hard only
@@ -157,7 +157,7 @@ void _ComputeTs(int snapshot)
   double freq_int_ion_AGN_hard[TsNumFilterSteps];
   double freq_int_lya_AGN_hard[TsNumFilterSteps];
   /* Combined arrays passed to evolveInt — filled from soft/hard
-   * according to Flag_includeAGN before each evolveInt call.           */
+   * according to Flag_IncludeAGNXray before each evolveInt call.           */
   double freq_int_heat_AGN[TsNumFilterSteps];
   double freq_int_ion_AGN[TsNumFilterSteps];
   double freq_int_lya_AGN[TsNumFilterSteps];
@@ -174,7 +174,7 @@ void _ComputeTs(int snapshot)
   double ans[2], dansdz[20], xHII_call;
   double SFR_GAL[TsNumFilterSteps];
   /* AGN source term per shell — kept separate for soft and hard so that
-   * Flag_includeAGN can zero out either component independently.        */
+   * Flag_IncludeAGNXray can zero out either component independently.        */
   double XAGN_soft[TsNumFilterSteps];
   double XAGN_hard[TsNumFilterSteps];
 
@@ -672,7 +672,7 @@ void _ComputeTs(int snapshot)
 
 
 
-      if (run_globals.params.physics.Flag_includeAGN > 0) {
+      if (run_globals.params.physics.Flag_IncludeAGNXray > 0) {
       /*
        * Frequency integral tables for AGN broken power law.
        *
@@ -969,7 +969,7 @@ void _ComputeTs(int snapshot)
     // this same factor higher than 21cmFAST, but at least it is understood why and trivially accounted for.
 
     // interpolate to correct nu integral value based on the cell's ionization state
-    int flag_agn = run_globals.params.physics.Flag_includeAGN;
+    int flag_agn = run_globals.params.physics.Flag_IncludeAGNXray;
     for (int ix = 0; ix < local_nix; ix++)
       for (int iy = 0; iy < ReionGridDim; iy++)
         for (int iz = 0; iz < ReionGridDim; iz++) {
@@ -1051,7 +1051,7 @@ void _ComputeTs(int snapshot)
             freq_int_lya_III[R_ct] += freq_int_lya_tbl_III[m_xHII_low][R_ct];
 #endif
 
-            if (run_globals.params.physics.Flag_includeAGN > 0) {
+            if (run_globals.params.physics.Flag_IncludeAGNXray > 0) {
             /* --- soft component --- */
             freq_int_heat_AGN_soft[R_ct] =
               (freq_int_heat_tbl_AGN_soft[m_xHII_high][R_ct] - freq_int_heat_tbl_AGN_soft[m_xHII_low][R_ct]) /
@@ -1107,7 +1107,7 @@ void _ComputeTs(int snapshot)
            * dx_e/dz, dT_K/dz, and J_alpha, AND the AGN contribution — soft and
            * hard passed in as two independent amplitude/freq_int pairs (Option
            * 2), summed internally only after each has been through its own
-           * prefactor. Flag_includeAGN's four settings need no special-casing
+           * prefactor. Flag_IncludeAGNXray's four settings need no special-casing
            * here: XAGN_soft/XAGN_hard were already zeroed for excluded bands
            * when they were built above (from SMOOTHED_AGN_soft/SMOOTHED_AGN),
            * so a zeroed amplitude naturally contributes zero regardless of
@@ -1342,9 +1342,9 @@ void _ComputeTs(int snapshot)
        J_LW_ave,
        J_LW_aveII);
   /* AGN broken power law diagnostic — soft and hard tracked separately */
-  mlog("zp = %e  AGN_Xheat_soft = %e  AGN_Xheat_hard = %e  (Flag_includeAGN=%d)",
+  mlog("zp = %e  AGN_Xheat_soft = %e  AGN_Xheat_hard = %e  (Flag_IncludeAGNXray=%d)",
        MLOG_MESG, zp, Xheat_ave_AGN_soft, Xheat_ave_AGN_hard,
-       run_globals.params.physics.Flag_includeAGN);
+       run_globals.params.physics.Flag_IncludeAGNXray);
 #else
   mlog("zp = %e Ts_ave = %e Tk_ave = %e x_e_ave = %e", MLOG_MESG, zp, Ave_Ts, Ave_Tk, Ave_x_e);
   mlog("zp = %e J_alpha_ave = %e xalpha_ave = %e Xheat_ave = %e Xion_ave = %e",
@@ -1355,9 +1355,9 @@ void _ComputeTs(int snapshot)
        Xheat_ave,
        Xion_ave);
   /* AGN broken power law diagnostic — soft and hard tracked separately */
-  mlog("zp = %e  AGN_Xheat_soft = %e  AGN_Xheat_hard = %e  (Flag_includeAGN=%d)",
+  mlog("zp = %e  AGN_Xheat_soft = %e  AGN_Xheat_hard = %e  (Flag_IncludeAGNXray=%d)",
        MLOG_MESG, zp, Xheat_ave_AGN_soft, Xheat_ave_AGN_hard,
-       run_globals.params.physics.Flag_includeAGN);
+       run_globals.params.physics.Flag_IncludeAGNXray);
 #endif
 }
 

@@ -22,18 +22,15 @@
 #define SOLAR_MASS 1.989e33
 #define SOLAR_LUM 3.826e33
 #define LOG_10_SOLAR_LUM 33.5827449657
-/* erg/s per "1e10 Lsun" — the QuasarLX/QuasarLuv/BHXrayEmissivity convention
- * (galaxy_t fields accumulated in units of 1e10 Lsun, converted to physical
- * erg/s at the point of use, e.g. ComputeTs.c's SMOOTHED_AGN/_soft build). */
 #define LSUN_1E10_IN_ERG_S (1e10 * SOLAR_LUM)
 #define RAD_CONST 7.565e-15
 #define AVOGADRO 6.0222e23
 #define BOLTZMANN 1.3806e-16
 #define GAS_CONST 8.31425e7
 #define SPEED_OF_LIGHT 2.9979e10 // [cm/s]
-#define PLANCK 6.6262e-27        //! [erg/s]
+#define PLANCK 6.6262e-27        // [erg/s]
 #define PROTONMASS 1.6726e-24
-#define HUBBLE 3.2407789e-18 //! [h/sec]
+#define HUBBLE 3.2407789e-18 // [h/sec]
 #define SEC_PER_MEGAYEAR 3.155e13
 #define SEC_PER_YEAR 3.155e7
 #define MPC 3.086e24
@@ -173,7 +170,7 @@ typedef struct physics_params_t
   double NuXraySoftCut;
   double NuXrayMax;
 
-  int Flag_includeAGN;      /* 0=no AGN, 1=soft+hard, 2=hard only, 3=soft only */
+  int Flag_IncludeAGNXray;      /* 0=no AGN, 1=soft+hard, 2=hard only, 3=soft only */
   double SpecIndexXrayAGNSoft;
   double SpecIndexXrayAGNHard;
 
@@ -530,9 +527,6 @@ typedef struct reion_grids_t
   float* bh_xray_histories;       //!< Ring-buffer of NstoreSnapshots_SFR past BHXrayEmissivity snapshots
   float* BHXrayEmissivity_soft;   //!< Per-cell AGN X-ray emissivity grid (current snapshot, soft band) [slab_n_complex*2]
   float* bh_xray_histories_soft;  //!< Ring-buffer of NstoreSnapshots_SFR past BHXrayEmissivity_soft snapshots
-  /* Neither the hard nor soft BHXrayEmissivity grids depend on USE_MINI_HALOS —
-   * AGN X-ray heating is independent of the Pop II/III minihalo treatment,
-   * so both stay unconditional regardless of that build flag. */
 
   // Grids necessary for LW background and future disentangling between MC/AC Pop3/Pop2 stuff
 
@@ -699,12 +693,8 @@ typedef struct galaxy_t
   double BHemissivity;
   double QuasarLuv;         //!< UV luminosity LUV of quasar (1e10 Lsun, summable for mergers)
   double QuasarLX;               //!< Intrinsic hard X-ray luminosity [1e10 Lsun]; 0 if inactive
-  int    NHbin;                  //!< Which of the 5 NH bins this snapshot's stochastic draw landed in
-                                  //!< (0-4; logNH 20-21/21-22/22-23/23-24/24-26 CTK), or -1 if no AGN
-                                  //!< activity this step. BHXrayEmissivity below already carries that
-                                  //!< bin's observed (obscured) luminosity, so this (bin, luminosity)
-                                  //!< pair replaces the old QuasarLX_obs0-4/NHfrac0-4 fields (5
-                                  //!< mostly-zero doubles each, every galaxy).
+  int    NHbin;                  //!< Which of the 5 NH bins this snapshot's stochastic draw landed in (0-4; logNH 20-21/21-22/22-23/23-24/24-26 CTK), or -1 if no AGN.
+                                  //!<This (bin, luminosity) pair replaces the old QuasarLX_obs0-4/NHfrac0-4 fields (5 mostly-zero doubles each, every galaxy).
   double BHXrayEmissivity;       //!< Observed hard X-ray emissivity [1e10 Lsun], obscuration-weighted
   double BHXrayEmissivity_soft;  //!< Observed soft X-ray emissivity [1e10 Lsun], obscuration-weighted
   double EffectiveBHM;
