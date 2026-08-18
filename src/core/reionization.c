@@ -991,6 +991,18 @@ void malloc_reionization_grids()
         grids->bh_xray_histories = fftwf_alloc_real((size_t)slab_n_complex * 2 * run_globals.NstoreSnapshots_Heating);
         grids->BHXrayEmissivity_soft  = fftwf_alloc_real((size_t)slab_n_complex * 2);
         grids->bh_xray_histories_soft = fftwf_alloc_real((size_t)slab_n_complex * 2 * run_globals.NstoreSnapshots_Heating);
+        /*
+         * Fail loudly here if allocation ever fails, rather than leaving a
+         * NULL pointer for downstream code to silently work around. Nothing
+         * else in this function checks its fftwf_alloc_* calls either, but
+         * these four are the only ones that are conditionally allocated, so
+         * a NULL here is the one case worth telling apart from "feature off".
+         */
+        if (grids->BHXrayEmissivity == NULL || grids->bh_xray_histories == NULL ||
+            grids->BHXrayEmissivity_soft == NULL || grids->bh_xray_histories_soft == NULL) {
+          mlog_error("Failed to allocate AGN X-ray emissivity grids.");
+          ABORT(EXIT_FAILURE);
+        }
         for (size_t ii = 0; ii < (size_t)slab_n_complex * 2; ii++) {
           grids->BHXrayEmissivity[ii]      = 0.0f;
           grids->BHXrayEmissivity_soft[ii] = 0.0f;
@@ -1850,13 +1862,14 @@ void construct_baryon_grids(int snapshot, int local_ngals)
       continue;
 
     /*
-     * Skip the AGN emissivity properties if their grid was never allocated
-     * (which only happens when both SpinTemp and AGN X-ray heating are on).
+     * Skip the AGN emissivity properties if SpinTemp or AGN X-ray heating is
+     * off. Matches the effective_bhm/effective_bhar pattern below: trust the
+     * flags, not a NULL check — the grids are guaranteed allocated whenever
+     * these flags are on (see the allocation abort in construct_baryon_grids).
      */
-    if (prop == prop_bh_xray_emissivity || prop == prop_bh_xray_emissivity_soft) {
-      if (prop == prop_bh_xray_emissivity      && bh_xray_grid      == NULL) continue;
-      if (prop == prop_bh_xray_emissivity_soft && bh_xray_grid_soft == NULL) continue;
-    }
+    if ((prop == prop_bh_xray_emissivity || prop == prop_bh_xray_emissivity_soft) &&
+        (!run_globals.params.Flag_IncludeSpinTemp || !run_globals.params.physics.Flag_IncludeAGNXray))
+      continue;
 
     // no need to bh grids if not using BHFeedback
     if ((!run_globals.params.physics.Flag_BHFeedback) && ((prop == prop_effective_bhm) || (prop == prop_effective_bhar)))
@@ -2290,16 +2303,12 @@ void load_reion_sfr_grids(int snapshot_counter_backwards, float weight, const in
             (grids->sfrIII)[grid_index(ii, jj, kk, ReionGridDim, INDEX_PADDED)] = grids->sfrIII_histories[snapshot_counter_backwards * local_n_complex * 2+grid_index(ii, jj, kk, ReionGridDim, INDEX_REAL)]  * weight;
 #endif
 
-            if (run_globals.params.physics.Flag_IncludeAGNXray &&
-                grids->BHXrayEmissivity != NULL &&
-                grids->bh_xray_histories != NULL)
+            if (run_globals.params.physics.Flag_IncludeAGNXray)
               (grids->BHXrayEmissivity)[grid_index(ii, jj, kk, ReionGridDim, INDEX_PADDED)] =
                   grids->bh_xray_histories[snapshot_counter_backwards * local_n_complex * 2 +
                                            grid_index(ii, jj, kk, ReionGridDim, INDEX_REAL)] * weight;
             /* Same as above, independently, for the soft-band grid/history. */
-            if (run_globals.params.physics.Flag_IncludeAGNXray &&
-                grids->BHXrayEmissivity_soft != NULL &&
-                grids->bh_xray_histories_soft != NULL)
+            if (run_globals.params.physics.Flag_IncludeAGNXray)
               (grids->BHXrayEmissivity_soft)[grid_index(ii, jj, kk, ReionGridDim, INDEX_PADDED)] =
                   grids->bh_xray_histories_soft[snapshot_counter_backwards * local_n_complex * 2 +
                                                 grid_index(ii, jj, kk, ReionGridDim, INDEX_REAL)] * weight;
@@ -2314,16 +2323,12 @@ void load_reion_sfr_grids(int snapshot_counter_backwards, float weight, const in
             (grids->sfrIII)[grid_index(ii, jj, kk, ReionGridDim, INDEX_PADDED)] += grids->sfrIII_histories[snapshot_counter_backwards * local_n_complex * 2+grid_index(ii, jj, kk, ReionGridDim, INDEX_REAL)]  * weight;
 #endif
 
-            if (run_globals.params.physics.Flag_IncludeAGNXray &&
-                grids->BHXrayEmissivity != NULL &&
-                grids->bh_xray_histories != NULL)
+            if (run_globals.params.physics.Flag_IncludeAGNXray)
               (grids->BHXrayEmissivity)[grid_index(ii, jj, kk, ReionGridDim, INDEX_PADDED)] +=
                   grids->bh_xray_histories[snapshot_counter_backwards * local_n_complex * 2 +
                                            grid_index(ii, jj, kk, ReionGridDim, INDEX_REAL)] * weight;
             /* Same as above, independently, for the soft-band grid/history. */
-            if (run_globals.params.physics.Flag_IncludeAGNXray &&
-                grids->BHXrayEmissivity_soft != NULL &&
-                grids->bh_xray_histories_soft != NULL)
+            if (run_globals.params.physics.Flag_IncludeAGNXray)
               (grids->BHXrayEmissivity_soft)[grid_index(ii, jj, kk, ReionGridDim, INDEX_PADDED)] +=
                   grids->bh_xray_histories_soft[snapshot_counter_backwards * local_n_complex * 2 +
                                                 grid_index(ii, jj, kk, ReionGridDim, INDEX_REAL)] * weight;
