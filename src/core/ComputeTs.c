@@ -499,13 +499,12 @@ void _ComputeTs(int snapshot)
                                                 pow(units->UnitLength_in_cm, -3.) / SOLAR_MASS;
 #endif
 
-              if (SMOOTHED_AGN != NULL && run_globals.reion_grids.BHXrayEmissivity != NULL) {
+              if (run_globals.params.physics.Flag_IncludeAGNXray > 0) {
                 bh = fmaxf(run_globals.reion_grids.BHXrayEmissivity[i_padded], 0.0f);
                 SMOOTHED_AGN[i_smoothedSFR] = (double)bh * 1e10 * SOLAR_LUM / pixel_volume
                                               * pow(units->UnitLength_in_cm, -3.0);
                 agn_xray_hard_ave += SMOOTHED_AGN[i_smoothedSFR];
-              }
-              if (SMOOTHED_AGN_soft != NULL && run_globals.reion_grids.BHXrayEmissivity_soft != NULL) {
+
                 bh_soft = fmaxf(run_globals.reion_grids.BHXrayEmissivity_soft[i_padded], 0.0f);
                 SMOOTHED_AGN_soft[i_smoothedSFR] = (double)bh_soft * 1e10 * SOLAR_LUM / pixel_volume
                                                    * pow(units->UnitLength_in_cm, -3.0);
@@ -586,12 +585,11 @@ void _ComputeTs(int snapshot)
                                                 pow(units->UnitLength_in_cm, -3.) / SOLAR_MASS;
 #endif
 
-              if (SMOOTHED_AGN != NULL && run_globals.reion_grids.BHXrayEmissivity != NULL) {
+              if (run_globals.params.physics.Flag_IncludeAGNXray > 0) {
                 bh = fmaxf(run_globals.reion_grids.BHXrayEmissivity[i_padded], 0.0f);
                 SMOOTHED_AGN[i_smoothedSFR] = (double)bh * 1e10 * SOLAR_LUM / pixel_volume
                                               * pow(units->UnitLength_in_cm, -3.0);
-              }
-              if (SMOOTHED_AGN_soft != NULL && run_globals.reion_grids.BHXrayEmissivity_soft != NULL) {
+
                 bh_soft = fmaxf(run_globals.reion_grids.BHXrayEmissivity_soft[i_padded], 0.0f);
                 SMOOTHED_AGN_soft[i_smoothedSFR] = (double)bh_soft * 1e10 * SOLAR_LUM / pixel_volume
                                                    * pow(units->UnitLength_in_cm, -3.0);
@@ -1040,10 +1038,8 @@ void _ComputeTs(int snapshot)
             SFR_GAL[R_ct] = SMOOTHED_SFR_GAL[i_smoothedSFR];
 
             {
-              XAGN_soft[R_ct] = (SMOOTHED_AGN_soft != NULL && (flag_agn == 1 || flag_agn == 3))
-                                   ? SMOOTHED_AGN_soft[i_smoothedSFR] : 0.0;
-              XAGN_hard[R_ct] = (SMOOTHED_AGN != NULL && (flag_agn == 1 || flag_agn == 2))
-                                   ? SMOOTHED_AGN[i_smoothedSFR] : 0.0;
+              XAGN_soft[R_ct] = (flag_agn == 1 || flag_agn == 3) ? SMOOTHED_AGN_soft[i_smoothedSFR] : 0.0;
+              XAGN_hard[R_ct] = (flag_agn == 1 || flag_agn == 2) ? SMOOTHED_AGN[i_smoothedSFR] : 0.0;
             }
 #if USE_MINI_HALOS
             SFR_III[R_ct] = SMOOTHED_SFR_III[i_smoothedSFR];

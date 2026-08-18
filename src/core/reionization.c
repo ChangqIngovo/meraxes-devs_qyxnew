@@ -1812,13 +1812,13 @@ void construct_baryon_grids(int snapshot, int local_ngals)
       for (int snap = run_globals.NstoreSnapshots_Heating - 2; snap >= 0; snap--)
           sfrIII_histories_grid[(snap+1)*local_n_complex * 2+ii] = sfrIII_histories_grid[snap*local_n_complex * 2+ii];
 #endif
-      if (run_globals.params.physics.Flag_IncludeAGNXray && bh_xray_grid != NULL) {
+      if (run_globals.params.physics.Flag_IncludeAGNXray) {
         bh_xray_grid[ii] = 0.0f;
         for (int snap = run_globals.NstoreSnapshots_Heating - 2; snap >= 0; snap--)
           bh_xray_hist_grid[(snap+1)*local_n_complex * 2 + ii] =
               bh_xray_hist_grid[snap*local_n_complex * 2 + ii];
       }
-      if (run_globals.params.physics.Flag_IncludeAGNXray && bh_xray_grid_soft != NULL) {
+      if (run_globals.params.physics.Flag_IncludeAGNXray) {
         bh_xray_grid_soft[ii] = 0.0f;
         for (int snap = run_globals.NstoreSnapshots_Heating - 2; snap >= 0; snap--)
           bh_xray_hist_grid_soft[(snap+1)*local_n_complex * 2 + ii] =
