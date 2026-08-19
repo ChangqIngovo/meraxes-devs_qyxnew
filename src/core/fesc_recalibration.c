@@ -80,31 +80,6 @@ void fesc_recalibration_init(void)
   }
 }
 
-void fesc_accumulate_target_popII(galaxy_t* gal,
-                                  double new_stars,
-                                  double sfr,
-                                  double target_fesc)
-{
-  if (!fesc_recalibration_enabled())
-    return;
-
-  gal->TargetFescWeightedGSM += new_stars * target_fesc;
-  gal->TargetFescWeightedSfr += sfr * target_fesc;
-}
-
-#if USE_MINI_HALOS
-void fesc_accumulate_target_popIII(galaxy_t* gal,
-                                  double new_stars,
-                                  double sfr,
-                                  double target_fesc)
-{
-  if (!fesc_recalibration_enabled())
-    return;
-
-  gal->TargetFescIIIWeightedGSM += new_stars * target_fesc;
-  gal->TargetFescIIIWeightedSfr += sfr * target_fesc;
-}
-#endif
 
 static double fesc_get_global_correction(double target,
                                          double source,

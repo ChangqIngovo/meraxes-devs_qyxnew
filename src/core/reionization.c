@@ -264,12 +264,10 @@ void update_galaxy_fesc_vals(galaxy_t* gal, double new_stars, int snapshot)
     gal->FescWeightedSfr += gal->Sfr * fesc;
 
 #if USE_SCATTERS
-    fesc_accumulate_target_popII(
-        gal,
-        new_stars,
-        gal->Sfr,
-        fesc_target
-    );
+  if (params->Flag_SourceRecalibration){
+    gal->TargetFescWeightedGSM += new_stars * fesc_target;
+    gal->TargetFescWeightedSfr += gal->Sfr * fesc_target;
+  };
 #endif
   }
 
@@ -279,12 +277,10 @@ void update_galaxy_fesc_vals(galaxy_t* gal, double new_stars, int snapshot)
     gal->FescIIIWeightedSfr += gal->SfrIII * fescIII;
 
 #if USE_SCATTERS
-    fesc_accumulate_target_popIII(
-        gal,
-        new_stars,
-        gal->SfrIII,
-        fescIII_target
-    );
+  if (params->Flag_SourceRecalibration){
+    gal->TargetFescIIIWeightedGSM += new_stars * fescIII_target;
+    gal->TargetFescIIIWeightedSfr += gal->SfrIII * fescIII_target;
+  };
 #endif
   }
 #else
@@ -293,12 +289,10 @@ void update_galaxy_fesc_vals(galaxy_t* gal, double new_stars, int snapshot)
   gal->FescWeightedSfr += gal->Sfr * fesc;
 
 #if USE_SCATTERS
-  fesc_accumulate_target_popII(
-      gal,
-      new_stars,
-      gal->Sfr,
-      fesc_target
-  );
+  if (params->Flag_SourceRecalibration){
+    gal->TargetFescWeightedGSM += new_stars * fesc_target;
+    gal->TargetFescWeightedSfr += gal->Sfr * fesc_target;
+  };
 #endif
 #endif
 
