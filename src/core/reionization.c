@@ -749,6 +749,10 @@ void malloc_reionization_grids()
   grids->SMOOTHED_AGN_soft      = NULL;
 
 #if USE_MINI_HALOS
+  grids->BHLWEmissivity  = NULL;
+  grids->bh_lw_histories = NULL;
+  grids->SMOOTHED_AGN_LW = NULL;
+
   grids->Tk_boxII = NULL;
   grids->TS_boxII = NULL;
 
@@ -1083,6 +1087,47 @@ void malloc_reionization_grids()
         }
       }
 
+#if USE_MINI_HALOS
+      /*
+       * AGN Lyman-Werner emissivity grid — independent of Flag_IncludeAGNXray
+       * (soft/hard X-ray), gated on Flag_IncludeLymanWerner instead. Same
+       * grid/history/filter-buffer/FFTW-plan pattern as BHXrayEmissivity(_soft).
+       */
+      if (run_globals.params.Flag_IncludeLymanWerner) {
+        grids->BHLWEmissivity  = fftwf_alloc_real((size_t)slab_n_complex * 2);
+        grids->bh_lw_histories = fftwf_alloc_real((size_t)slab_n_complex * 2 * run_globals.NstoreSnapshots_Heating);
+
+        grids->BHLWEmissivity_unfiltered = fftwf_alloc_complex((size_t)slab_n_complex);
+        grids->BHLWEmissivity_filtered = fftwf_alloc_complex((size_t)slab_n_complex);
+        grids->BHLWEmissivity_forward_plan = fftwf_mpi_plan_dft_r2c_3d(ReionGridDim,
+                                                                        ReionGridDim,
+                                                                        ReionGridDim,
+                                                                        grids->BHLWEmissivity,
+                                                                        grids->BHLWEmissivity_unfiltered,
+                                                                        run_globals.mpi_comm,
+                                                                        plan_flags);
+        grids->BHLWEmissivity_filtered_reverse_plan = fftwf_mpi_plan_dft_c2r_3d(ReionGridDim,
+                                                                                 ReionGridDim,
+                                                                                 ReionGridDim,
+                                                                                 grids->BHLWEmissivity_filtered,
+                                                                                 (float*)grids->BHLWEmissivity_filtered,
+                                                                                 run_globals.mpi_comm,
+                                                                                 plan_flags);
+
+        if (grids->BHLWEmissivity == NULL || grids->bh_lw_histories == NULL ||
+            grids->BHLWEmissivity_unfiltered == NULL || grids->BHLWEmissivity_filtered == NULL) {
+          mlog_error("Failed to allocate AGN Lyman-Werner emissivity grids.");
+          ABORT(EXIT_FAILURE);
+        }
+        for (size_t ii = 0; ii < (size_t)slab_n_complex * 2; ii++)
+          grids->BHLWEmissivity[ii] = 0.0f;
+        for (size_t ii = 0; ii < (size_t)slab_n_complex * 2 * run_globals.NstoreSnapshots_Heating; ii++)
+          grids->bh_lw_histories[ii] = 0.0f;
+
+        grids->SMOOTHED_AGN_LW = calloc((size_t)slab_n_real_smoothedSFR, sizeof(double));
+      }
+#endif
+
       grids->x_e_box = fftwf_alloc_real((size_t)slab_n_complex * 2);
       grids->x_e_unfiltered = fftwf_alloc_complex((size_t)slab_n_complex);
       grids->x_e_filtered = fftwf_alloc_complex((size_t)slab_n_complex);
@@ -1339,6 +1384,16 @@ void free_reionization_grids()
 
 #if USE_MINI_HALOS
     free(grids->SMOOTHED_SFR_III);
+
+    if (run_globals.params.Flag_IncludeLymanWerner) {
+      free(grids->SMOOTHED_AGN_LW);
+      fftwf_destroy_plan(grids->BHLWEmissivity_filtered_reverse_plan);
+      fftwf_destroy_plan(grids->BHLWEmissivity_forward_plan);
+      fftwf_free(grids->BHLWEmissivity_filtered);
+      fftwf_free(grids->BHLWEmissivity_unfiltered);
+      fftwf_free(grids->BHLWEmissivity);
+      fftwf_free(grids->bh_lw_histories);
+    }
 #endif
 
     fftwf_free(grids->Tk_box);
@@ -1859,6 +1914,10 @@ void construct_baryon_grids(int snapshot, int local_ngals)
   float* bh_xray_hist_grid = run_globals.reion_grids.bh_xray_histories;
   float* bh_xray_grid_soft      = run_globals.reion_grids.BHXrayEmissivity_soft;
   float* bh_xray_hist_grid_soft = run_globals.reion_grids.bh_xray_histories_soft;
+#if USE_MINI_HALOS
+  float* bh_lw_grid      = run_globals.reion_grids.BHLWEmissivity;
+  float* bh_lw_hist_grid = run_globals.reion_grids.bh_lw_histories;
+#endif
 
   gal_to_slab_t* galaxy_to_slab_map = run_globals.reion_grids.galaxy_to_slab_map;
   ptrdiff_t* slab_ix_start = run_globals.reion_grids.slab_ix_start;
@@ -1898,6 +1957,14 @@ void construct_baryon_grids(int snapshot, int local_ngals)
           bh_xray_hist_grid_soft[(snap+1)*local_n_complex * 2 + ii] =
               bh_xray_hist_grid_soft[snap*local_n_complex * 2 + ii];
       }
+#if USE_MINI_HALOS
+      if (run_globals.params.Flag_IncludeLymanWerner) {
+        bh_lw_grid[ii] = 0.0f;
+        for (int snap = run_globals.NstoreSnapshots_Heating - 2; snap >= 0; snap--)
+          bh_lw_hist_grid[(snap+1)*local_n_complex * 2 + ii] =
+              bh_lw_hist_grid[snap*local_n_complex * 2 + ii];
+      }
+#endif
     }
   }
 
@@ -1922,9 +1989,16 @@ void construct_baryon_grids(int snapshot, int local_ngals)
 #endif
     prop_sfr,
     prop_bh_xray_emissivity,
-    prop_bh_xray_emissivity_soft
+    prop_bh_xray_emissivity_soft,
+#if USE_MINI_HALOS
+    prop_bh_lw_emissivity
+#endif
   };
+#if USE_MINI_HALOS
+  for (int prop = prop_stellar; prop <= prop_bh_lw_emissivity; prop++) {
+#else
   for (int prop = prop_stellar; prop <= prop_bh_xray_emissivity_soft; prop++) {
+#endif
 
     // no need for sfr or sfrIII grid is not using SpinTemp
 #if USE_MINI_HALOS
@@ -1950,6 +2024,13 @@ void construct_baryon_grids(int snapshot, int local_ngals)
         (!run_globals.params.Flag_IncludeSpinTemp ||
          !(run_globals.params.physics.Flag_IncludeAGNXray == 1 || run_globals.params.physics.Flag_IncludeAGNXray == 3)))
       continue;
+
+#if USE_MINI_HALOS
+    // AGN LW: independent of Flag_IncludeAGNXray, gated on Flag_IncludeLymanWerner instead.
+    if (prop == prop_bh_lw_emissivity &&
+        (!run_globals.params.Flag_IncludeSpinTemp || !run_globals.params.Flag_IncludeLymanWerner))
+      continue;
+#endif
 
     // no need to bh grids if not using BHFeedback
     if ((!run_globals.params.physics.Flag_BHFeedback) && ((prop == prop_effective_bhm) || (prop == prop_effective_bhar)))
@@ -2059,6 +2140,13 @@ void construct_baryon_grids(int snapshot, int local_ngals)
                 buffer[ind] += gal->BHXrayEmissivity_soft;
               break;
 
+#if USE_MINI_HALOS
+            case prop_bh_lw_emissivity:
+              if (gal->BlackHoleMass >= run_globals.params.physics.BlackHoleMassLimitReion)
+                buffer[ind] += gal->BHLWEmissivity;
+              break;
+#endif
+
             default:
               mlog_error("Unrecognised property in slab creation.");
               ABORT(EXIT_FAILURE);
@@ -2158,6 +2246,20 @@ void construct_baryon_grids(int snapshot, int local_ngals)
                   bh_xray_hist_grid_soft[grid_index(ix, iy, iz, ReionGridDim, INDEX_PADDED)] = val;
                 }
             break;
+
+#if USE_MINI_HALOS
+          /* AGN Lyman-Werner emissivity, independent of the X-ray bands above. */
+          case prop_bh_lw_emissivity:
+            for (int ix = 0; ix < slab_nix[i_r]; ix++)
+              for (int iy = 0; iy < ReionGridDim; iy++)
+                for (int iz = 0; iz < ReionGridDim; iz++) {
+                  float val = buffer[grid_index(ix, iy, iz, ReionGridDim, INDEX_REAL)];
+                  CLAMP_NEGATIVE(val);
+                  bh_lw_grid[grid_index(ix, iy, iz, ReionGridDim, INDEX_PADDED)]      = val;
+                  bh_lw_hist_grid[grid_index(ix, iy, iz, ReionGridDim, INDEX_PADDED)] = val;
+                }
+            break;
+#endif
 
           case prop_stellar:
             for (int ix = 0; ix < slab_nix[i_r]; ix++)
@@ -2392,6 +2494,13 @@ void load_reion_sfr_grids(int snapshot_counter_backwards, float weight, const in
               (grids->BHXrayEmissivity_soft)[grid_index(ii, jj, kk, ReionGridDim, INDEX_PADDED)] =
                   grids->bh_xray_histories_soft[snapshot_counter_backwards * local_n_complex * 2 +
                                                 grid_index(ii, jj, kk, ReionGridDim, INDEX_REAL)] * weight;
+#if USE_MINI_HALOS
+            /* AGN Lyman-Werner, independent of Flag_IncludeAGNXray. */
+            if (run_globals.params.Flag_IncludeLymanWerner)
+              (grids->BHLWEmissivity)[grid_index(ii, jj, kk, ReionGridDim, INDEX_PADDED)] =
+                  grids->bh_lw_histories[snapshot_counter_backwards * local_n_complex * 2 +
+                                         grid_index(ii, jj, kk, ReionGridDim, INDEX_REAL)] * weight;
+#endif
         }
   }
   else{
@@ -2412,6 +2521,12 @@ void load_reion_sfr_grids(int snapshot_counter_backwards, float weight, const in
               (grids->BHXrayEmissivity_soft)[grid_index(ii, jj, kk, ReionGridDim, INDEX_PADDED)] +=
                   grids->bh_xray_histories_soft[snapshot_counter_backwards * local_n_complex * 2 +
                                                 grid_index(ii, jj, kk, ReionGridDim, INDEX_REAL)] * weight;
+#if USE_MINI_HALOS
+            if (run_globals.params.Flag_IncludeLymanWerner)
+              (grids->BHLWEmissivity)[grid_index(ii, jj, kk, ReionGridDim, INDEX_PADDED)] +=
+                  grids->bh_lw_histories[snapshot_counter_backwards * local_n_complex * 2 +
+                                         grid_index(ii, jj, kk, ReionGridDim, INDEX_REAL)] * weight;
+#endif
         }
   }
 }

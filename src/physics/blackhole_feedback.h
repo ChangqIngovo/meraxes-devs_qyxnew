@@ -18,6 +18,10 @@
 // = (1 solar mass *(speed of light)^2/450e6year) /3.828e26watt
 // where 450e6year is eddington time scale
 
+#define NU_1450 (double)(2.0675e15)
+// frequency [Hz] corresponding to 1450 Angstrom (SPEED_OF_LIGHT / 1450e-8 cm),
+// the reference wavelength QuasarLuv is defined at.
+
 #define LB2EMISSIVITY 2.127633e-6
 // this is a little bit complicated...
 // firstly B band luminosity is:   LB = Lbol/kb 1e10Lsun
@@ -73,7 +77,8 @@ extern "C"
   void calculate_BHemissivity(double BlackHoleMass, double accreted_mass,
                               double *emissivity,     double *accretion_time,
                               double *quasar_luv,     double *quasar_lx,
-                              double *quasar_lx_soft, double *xray_emissivity);
+                              double *quasar_lx_soft, double *xray_emissivity,
+                              double *quasar_lw);
 
   void merger_driven_BH_growth(struct galaxy_t* gal, double merger_ratio, int snapshot);
   void previous_merger_driven_BH_growth(struct galaxy_t* gal, int snapshot);

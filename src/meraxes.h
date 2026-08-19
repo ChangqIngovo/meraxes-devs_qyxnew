@@ -172,6 +172,7 @@ typedef struct physics_params_t
   int Flag_IncludeAGNXray;      /* 0=no AGN, 1=soft+hard, 2=hard only, 3=soft only */
   double SpecIndexXrayAGNSoft;
   double SpecIndexXrayAGNHard;
+  double SpecIndexUVAGN;        /* AGN NUV/FUV continuum slope (Lusso et al. 2015), QuasarLuv (1450A) extrapolated into the LW band */
 
   double ReionMaxHeatingRedshift;
 
@@ -520,12 +521,17 @@ typedef struct reion_grids_t
   double* SMOOTHED_AGN_soft;  //!< per-cell AGN X-ray luminosity density per shell [erg/s/cm^3] (soft band)
 #if USE_MINI_HALOS
   double* SMOOTHED_SFR_III;
+  double* SMOOTHED_AGN_LW;    //!< per-cell AGN Lyman-Werner luminosity density per shell [erg/s/cm^3]
 #endif
 
   float* BHXrayEmissivity;        //!< Per-cell AGN X-ray emissivity grid (current snapshot, hard band) [slab_n_complex*2]
   float* bh_xray_histories;       //!< Ring-buffer of NstoreSnapshots_Heating past BHXrayEmissivity snapshots
   float* BHXrayEmissivity_soft;   //!< Per-cell AGN X-ray emissivity grid (current snapshot, soft band) [slab_n_complex*2]
   float* bh_xray_histories_soft;  //!< Ring-buffer of NstoreSnapshots_Heating past BHXrayEmissivity_soft snapshots
+#if USE_MINI_HALOS
+  float* BHLWEmissivity;          //!< Per-cell AGN LW emissivity grid (current snapshot) [slab_n_complex*2]
+  float* bh_lw_histories;         //!< Ring-buffer of NstoreSnapshots_Heating past BHLWEmissivity snapshots
+#endif
 
   // Spatial (k-space, radius-R) smoothing buffers/plans for BHXrayEmissivity(_soft) —
   // same shell-filtering pipeline as sfr/sfr_filtered, mirroring effective_bhm above.
@@ -537,6 +543,12 @@ typedef struct reion_grids_t
   fftwf_complex* BHXrayEmissivity_soft_filtered;
   fftwf_plan BHXrayEmissivity_soft_forward_plan;
   fftwf_plan BHXrayEmissivity_soft_filtered_reverse_plan;
+#if USE_MINI_HALOS
+  fftwf_complex* BHLWEmissivity_unfiltered;
+  fftwf_complex* BHLWEmissivity_filtered;
+  fftwf_plan BHLWEmissivity_forward_plan;
+  fftwf_plan BHLWEmissivity_filtered_reverse_plan;
+#endif
 
   // Grids necessary for LW background and future disentangling between MC/AC Pop3/Pop2 stuff
 
@@ -707,6 +719,7 @@ typedef struct galaxy_t
                                   //!<This (bin, luminosity) pair replaces the old QuasarLX_obs0-4/NHfrac0-4 fields (5 mostly-zero doubles each, every galaxy).
   double BHXrayEmissivity;       //!< Observed hard X-ray emissivity [1e10 Lsun], obscuration-weighted
   double BHXrayEmissivity_soft;  //!< Observed soft X-ray emissivity [1e10 Lsun], obscuration-weighted
+  double BHLWEmissivity;         //!< AGN Lyman-Werner band emissivity [1e10 Lsun], extrapolated from QuasarLuv
   double EffectiveBHM;
   double EffectiveBHAR;
   double DutyCycleAGN;

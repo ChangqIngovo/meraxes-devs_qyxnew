@@ -116,6 +116,9 @@ void _ComputeTs(int snapshot)
   double Luminosity_converstion_factor_AGN_hard;  /* hard band: nu_break  -> nu_hard_cut */
   double agn_emissivity_zpp;       /* AGN emissivity at shell redshift z'': integral of LF x SED */
   float bh, bh_soft;                /* per-cell BHXrayEmissivity(_soft), read while building SMOOTHED_AGN(_soft) */
+#if USE_MINI_HALOS
+  float bh_lw;                      /* per-cell BHLWEmissivity, read while building SMOOTHED_AGN_LW */
+#endif
   double ratio;                     /* soft/hard split ratio for the Xheat_ave_AGN_soft/hard diagnostic */
 
 #if USE_MINI_HALOS
@@ -192,6 +195,9 @@ void _ComputeTs(int snapshot)
    * Flag_IncludeAGNXray can zero out either component independently.        */
   double XAGN_soft[TsNumFilterSteps];
   double XAGN_hard[TsNumFilterSteps];
+#if USE_MINI_HALOS
+  double XAGN_LW[TsNumFilterSteps];
+#endif
 
 #if USE_MINI_HALOS
   double SFR_III[TsNumFilterSteps];
@@ -218,6 +224,11 @@ void _ComputeTs(int snapshot)
   fftwf_complex* BHXrayEmissivity_filtered = run_globals.reion_grids.BHXrayEmissivity_filtered;
   fftwf_complex* BHXrayEmissivity_soft_unfiltered = run_globals.reion_grids.BHXrayEmissivity_soft_unfiltered;
   fftwf_complex* BHXrayEmissivity_soft_filtered = run_globals.reion_grids.BHXrayEmissivity_soft_filtered;
+#if USE_MINI_HALOS
+  /* NULL unless Flag_IncludeLymanWerner is on — same convention as above. */
+  fftwf_complex* BHLWEmissivity_unfiltered = run_globals.reion_grids.BHLWEmissivity_unfiltered;
+  fftwf_complex* BHLWEmissivity_filtered = run_globals.reion_grids.BHLWEmissivity_filtered;
+#endif
 
 #if USE_MINI_HALOS
   fftwf_complex* sfrIII_unfiltered = run_globals.reion_grids.sfrIII_unfiltered;
@@ -227,6 +238,9 @@ void _ComputeTs(int snapshot)
   double* SMOOTHED_SFR_GAL = run_globals.reion_grids.SMOOTHED_SFR_GAL;
   double* SMOOTHED_AGN      = run_globals.reion_grids.SMOOTHED_AGN;
   double* SMOOTHED_AGN_soft = run_globals.reion_grids.SMOOTHED_AGN_soft;
+#if USE_MINI_HALOS
+  double* SMOOTHED_AGN_LW   = run_globals.reion_grids.SMOOTHED_AGN_LW;
+#endif
 #if USE_MINI_HALOS
   double* SMOOTHED_SFR_III = run_globals.reion_grids.SMOOTHED_SFR_III;
 #endif
@@ -479,6 +493,14 @@ void _ComputeTs(int snapshot)
         for (int ii = 0; ii < slab_n_complex; ii++)
           BHXrayEmissivity_soft_unfiltered[ii] /= (float)total_n_cells;
       }
+#if USE_MINI_HALOS
+      /* Same smoothing pipeline, independent flag (Flag_IncludeLymanWerner). */
+      if (run_globals.params.Flag_IncludeLymanWerner) {
+        fftwf_execute(run_globals.reion_grids.BHLWEmissivity_forward_plan);
+        for (int ii = 0; ii < slab_n_complex; ii++)
+          BHLWEmissivity_unfiltered[ii] /= (float)total_n_cells;
+      }
+#endif
 
       memcpy(sfr_filtered, sfr_unfiltered, sizeof(fftwf_complex) * slab_n_complex);
   #if USE_MINI_HALOS
@@ -488,6 +510,10 @@ void _ComputeTs(int snapshot)
         memcpy(BHXrayEmissivity_filtered, BHXrayEmissivity_unfiltered, sizeof(fftwf_complex) * slab_n_complex);
       if (run_globals.params.physics.Flag_IncludeAGNXray == 1 || run_globals.params.physics.Flag_IncludeAGNXray == 3)
         memcpy(BHXrayEmissivity_soft_filtered, BHXrayEmissivity_soft_unfiltered, sizeof(fftwf_complex) * slab_n_complex);
+#if USE_MINI_HALOS
+      if (run_globals.params.Flag_IncludeLymanWerner)
+        memcpy(BHLWEmissivity_filtered, BHLWEmissivity_unfiltered, sizeof(fftwf_complex) * slab_n_complex);
+#endif
 
       if (R_ct > 0) {
         int local_ix_start = (int)(run_globals.reion_grids.slab_ix_start[run_globals.mpi_rank]);
@@ -500,6 +526,10 @@ void _ComputeTs(int snapshot)
           filter(BHXrayEmissivity_filtered, local_ix_start, local_nix, ReionGridDim, (float)R, run_globals.params.TsHeatingFilterType);
         if (run_globals.params.physics.Flag_IncludeAGNXray == 1 || run_globals.params.physics.Flag_IncludeAGNXray == 3)
           filter(BHXrayEmissivity_soft_filtered, local_ix_start, local_nix, ReionGridDim, (float)R, run_globals.params.TsHeatingFilterType);
+#if USE_MINI_HALOS
+        if (run_globals.params.Flag_IncludeLymanWerner)
+          filter(BHLWEmissivity_filtered, local_ix_start, local_nix, ReionGridDim, (float)R, run_globals.params.TsHeatingFilterType);
+#endif
       }
 
       // inverse fourier transform back to real space
@@ -511,7 +541,11 @@ void _ComputeTs(int snapshot)
         fftwf_execute(run_globals.reion_grids.BHXrayEmissivity_filtered_reverse_plan);
       if (run_globals.params.physics.Flag_IncludeAGNXray == 1 || run_globals.params.physics.Flag_IncludeAGNXray == 3)
         fftwf_execute(run_globals.reion_grids.BHXrayEmissivity_soft_filtered_reverse_plan);
-  
+#if USE_MINI_HALOS
+      if (run_globals.params.Flag_IncludeLymanWerner)
+        fftwf_execute(run_globals.reion_grids.BHLWEmissivity_filtered_reverse_plan);
+#endif
+
       // Compute and store the collapse fraction and average electron fraction. Necessary for evaluating the integrals
       // back along the light-cone. Need the non-smoothed version, hence this is only done for R_ct == 0.
       if (R_ct == 0) {
@@ -556,6 +590,15 @@ void _ComputeTs(int snapshot)
                                                    * pow(units->UnitLength_in_cm, -3.0);
                 agn_xray_soft_ave += SMOOTHED_AGN_soft[i_smoothed_heating];
               }
+#if USE_MINI_HALOS
+              if (run_globals.params.Flag_IncludeLymanWerner) {
+                ((float*)BHLWEmissivity_filtered)[i_padded] = fmaxf(((float*)BHLWEmissivity_filtered)[i_padded], 0.0);
+
+                bh_lw = ((float*)BHLWEmissivity_filtered)[i_padded];
+                SMOOTHED_AGN_LW[i_smoothed_heating] = (double)bh_lw * 1e10 * SOLAR_LUM / pixel_volume
+                                                  * pow(units->UnitLength_in_cm, -3.0);
+              }
+#endif
 
               density_over_mean = 1.0 + run_globals.reion_grids.deltax[i_padded];
 
@@ -646,6 +689,15 @@ void _ComputeTs(int snapshot)
                 SMOOTHED_AGN_soft[i_smoothed_heating] = (double)bh_soft * 1e10 * SOLAR_LUM / pixel_volume
                                                    * pow(units->UnitLength_in_cm, -3.0);
               }
+#if USE_MINI_HALOS
+              if (run_globals.params.Flag_IncludeLymanWerner) {
+                ((float*)BHLWEmissivity_filtered)[i_padded] = fmaxf(((float*)BHLWEmissivity_filtered)[i_padded], 0.0);
+
+                bh_lw = ((float*)BHLWEmissivity_filtered)[i_padded];
+                SMOOTHED_AGN_LW[i_smoothed_heating] = (double)bh_lw * 1e10 * SOLAR_LUM / pixel_volume
+                                                  * pow(units->UnitLength_in_cm, -3.0);
+              }
+#endif
             }
       }
 
@@ -804,6 +856,9 @@ void _ComputeTs(int snapshot)
       agn_emissivity_zpp  = 0.0;
       XAGN_soft[R_ct]  = 0.0;
       XAGN_hard[R_ct]  = 0.0;
+#if USE_MINI_HALOS
+      XAGN_LW[R_ct] = 0.0;
+#endif
 
       for (x_e_ct = 0; x_e_ct < x_int_NXHII; x_e_ct++) {
 
@@ -857,6 +912,9 @@ void _ComputeTs(int snapshot)
       } else {
         XAGN_soft[R_ct] = 0.0;
         XAGN_hard[R_ct] = 0.0;
+#if USE_MINI_HALOS
+        XAGN_LW[R_ct] = 0.0;
+#endif
       }
 
       // and create the sum over Lya transitions from direct Lyn flux
@@ -1029,6 +1087,26 @@ void _ComputeTs(int snapshot)
     /* Same as the soft-band comment above: no SEC_PER_YEAR needed. */
     Luminosity_converstion_factor_AGN_hard /= (PLANCK);
 
+#if USE_MINI_HALOS
+    /*
+     * AGN Lyman-Werner prefactor. Unlike const_zp_prefactor_AGN_soft/hard,
+     * gal->BHLWEmissivity is already the full band-integrated LW luminosity
+     * (computed in calculate_BHemissivity from QuasarLuv + SpecIndexUVAGN,
+     * see blackhole_feedback.c) rather than a point on the SED needing its
+     * own amplitude solve, so there's no Luminosity_converstion_factor step
+     * here. This just converts SMOOTHED_AGN_LW's energy-density units
+     * [erg/s/cm^3] into the same photon-number-flux convention
+     * dstarlyLW_dt_GAL is in after its own Conversion_factor (dividing by a
+     * characteristic LW-band photon energy, PLANCK*NU_LW), so both can be
+     * summed before deriv[5]/deriv[10]'s shared (PLANCK*1e21) at the end of
+     * evolveInt(). Not yet validated against the stellar LW pathway's
+     * magnitude - worth a sanity check before trusting this quantitatively.
+     */
+    const_zp_prefactor_AGN_LW = run_globals.params.Flag_IncludeLymanWerner
+      ? SPEED_OF_LIGHT / (4.0 * M_PI) / (PLANCK * NU_LW)
+      : 0.0;
+#endif
+
     // Do the same for Pop III.
 
 #if USE_MINI_HALOS
@@ -1122,6 +1200,7 @@ void _ComputeTs(int snapshot)
             }
 #if USE_MINI_HALOS
             SFR_III[R_ct] = SMOOTHED_SFR_III[i_smoothed_heating];
+            XAGN_LW[R_ct] = run_globals.params.Flag_IncludeLymanWerner ? SMOOTHED_AGN_LW[i_smoothed_heating] : 0.0;
 #endif
             xHII_call = x_e_box_prev[i_padded];
 
@@ -1251,6 +1330,7 @@ void _ComputeTs(int snapshot)
                     SFR_III,
                     XAGN_soft,
                     XAGN_hard,
+                    XAGN_LW,
                     freq_int_heat_GAL,
                     freq_int_ion_GAL,
                     freq_int_lya_GAL,

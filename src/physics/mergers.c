@@ -210,6 +210,7 @@ void merge_with_target(galaxy_t* gal, int* dead_gals, int snapshot)
     parent->t_resp = gal->t_resp;
   }
   parent->QuasarLuv += gal->QuasarLuv;
+  parent->BHLWEmissivity += gal->BHLWEmissivity;
 
   // take the CGM tau from the one with more CGM
   if (parent->HotGas < gal->HotGas)

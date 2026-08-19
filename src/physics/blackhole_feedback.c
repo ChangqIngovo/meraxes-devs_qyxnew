@@ -191,7 +191,8 @@ void get_nh_fracs(double LX_1e10Lsun, double redshift, double f_out[5])
 void calculate_BHemissivity(double BlackHoleMass, double accreted_mass,
                             double *emissivity,     double *accretion_time,
                             double *quasar_luv,     double *quasar_lx,
-                            double *quasar_lx_soft, double *xray_emissivity)
+                            double *quasar_lx_soft, double *xray_emissivity,
+                            double *quasar_lw)
 {
   double Lbol;
   double kb;
@@ -217,11 +218,27 @@ void calculate_BHemissivity(double BlackHoleMass, double accreted_mass,
   *quasar_luv     = Lbol / kb;
   *quasar_lx      = Lbol / kb_hard;
   *quasar_lx_soft = Lbol / kb_soft;
-  
+
   // Approximation using the emissivity at the MIDDLE of accretion time
   *emissivity = physics->quasar_fobs * *quasar_luv * LB2EMISSIVITY
                * *accretion_time * run_globals.units.UnitTime_in_s
                / run_globals.params.Hubble_h;
+
+  /* Lyman-Werner band luminosity: QuasarLuv is a specific luminosity
+   * (erg/s/Hz, stored in 1e10 Lsun) at NU_1450 (1450A). Assume the AGN
+   * continuum is a power law L_nu = quasar_luv * (nu/NU_1450)^-SpecIndexUVAGN
+   * and integrate it over the fixed Lyman-Werner band [NU_LW, NU_LL]
+   * (11.2-13.6 eV; both already defined in meraxes.h and used for this same
+   * band by the stellar Lyman-Werner calculation in ComputeTs.c). Only
+   * meaningful when Flag_IncludeLymanWerner is on; harmless (just unused)
+   * otherwise. */
+  if (fabs(physics->SpecIndexUVAGN - 1.0) < REL_TOL) {
+    *quasar_lw = *quasar_luv * NU_1450 * log(NU_LL / NU_LW);
+  } else {
+    *quasar_lw = *quasar_luv * pow(NU_1450, physics->SpecIndexUVAGN) *
+                 (pow(NU_LL, 1.0 - physics->SpecIndexUVAGN) - pow(NU_LW, 1.0 - physics->SpecIndexUVAGN)) /
+                 (1.0 - physics->SpecIndexUVAGN);
+  }
 }
 
 static double get_vvir(galaxy_t* gal) {
@@ -363,6 +380,7 @@ void previous_merger_driven_BH_growth(galaxy_t* gal, int snapshot)
   double accreted_mass;
   double BHemissivity, accretion_time, quasar_luv;
   double quasar_lx, quasar_lx_soft, xray_emissivity;
+  double quasar_lw;
   double obs_fraction_hard;
   double obs_fraction_soft;
   int    NH_bin;
@@ -410,7 +428,8 @@ void previous_merger_driven_BH_growth(galaxy_t* gal, int snapshot)
     calculate_BHemissivity(gal->BlackHoleMass, accreted_mass,
                            &BHemissivity, &accretion_time,
                            &quasar_luv, &quasar_lx,
-                           &quasar_lx_soft, &xray_emissivity);
+                           &quasar_lx_soft, &xray_emissivity,
+                           &quasar_lw);
     apply_xray_obscuration(quasar_lx,
                            run_globals.ZZ[snapshot],
                            &obs_fraction_hard,
@@ -449,6 +468,9 @@ void previous_merger_driven_BH_growth(galaxy_t* gal, int snapshot)
      * conversion already happens for the analogous stellar quantity. */
     gal->BHXrayEmissivity      += quasar_lx      * obs_fraction_hard;
     gal->BHXrayEmissivity_soft += quasar_lx_soft * obs_fraction_soft;
+    /* No obscuration weighting, same as QuasarLuv above — quasar_lw is
+     * derived from the same unobscured UV continuum. */
+    gal->BHLWEmissivity += quasar_lw;
     gal->EffectiveBHAR += BHemissivity;
     // quasar mode feedback
     m_reheat = run_globals.params.physics.QuasarModeEff * 2. * ETA * run_globals.Csquare * accreted_mass / Vvir / Vvir;

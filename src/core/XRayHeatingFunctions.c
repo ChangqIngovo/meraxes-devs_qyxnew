@@ -1260,6 +1260,7 @@ void evolveInt(float zp,
                const double SFR_III[],
                const double XAGN_soft[],
                const double XAGN_hard[],
+               const double XAGN_LW[],
                const double freq_int_heat_GAL[],
                const double freq_int_ion_GAL[],
                const double freq_int_lya_GAL[],
@@ -1332,6 +1333,10 @@ void evolveInt(float zp,
   double dxion_source_dt_AGN_hard = 0.0;
   double dxlya_dt_AGN_hard       = 0.0;
   double zpp_integrand_AGN_hard;
+  /* AGN contribution to Lyman-Werner flux, same role as dstarlyLW_dt_GAL/_III
+   * but sourced from XAGN_LW (QuasarLuv extrapolated via SpecIndexUVAGN),
+   * only meaningful under USE_MINI_HALOS + Flag_IncludeLymanWerner. */
+  double dstarlyLW_dt_AGN = 0.0;
 
   x_e = y[0];
   T = y[1];
@@ -1395,6 +1400,12 @@ void evolveInt(float zp,
       if (run_globals.params.Flag_IncludeLymanWerner) {
         dstarlyLW_dt_GAL += SFR_GAL[zpp_ct] * pow(1 + zp, 2) * (1 + zpp) * sum_lyn_LW[zpp_ct] * dt_dzpp * dzpp;
         dstarlyLW_dt_III += SFR_III[zpp_ct] * pow(1 + zp, 2) * (1 + zpp) * sum_lyn_LW_III[zpp_ct] * dt_dzpp * dzpp;
+        /* AGN LW: XAGN_LW[zpp_ct] is a per-shell luminosity-density amplitude
+         * (same role as XAGN_soft/XAGN_hard), not an SFR — so unlike the
+         * stellar terms above, no sum_lyn_LW-style lookup is needed here;
+         * const_zp_prefactor_AGN_LW (applied after this loop) carries the
+         * full band normalisation, same pattern as const_zp_prefactor_AGN_soft. */
+        dstarlyLW_dt_AGN += XAGN_LW[zpp_ct] * pow(1 + zp, 2) * (1 + zpp) * dt_dzpp * dzpp;
       }
 #endif
 
@@ -1458,6 +1469,7 @@ void evolveInt(float zp,
     if (run_globals.params.Flag_IncludeLymanWerner) {
       dstarlyLW_dt_GAL *= Conversion_factor;
       dstarlyLW_dt_III *= Conversion_factor;
+      dstarlyLW_dt_AGN *= const_zp_prefactor_AGN_LW;
     }
 #endif
 
@@ -1605,8 +1617,11 @@ void evolveInt(float zp,
   deriv[8] = dxheat_dzp_II;
 
   if (run_globals.params.Flag_IncludeLymanWerner) {
-    deriv[5] = (dstarlyLW_dt_GAL + dstarlyLW_dt_III) * (PLANCK * 1e21);
-    deriv[10] = dstarlyLW_dt_GAL * (PLANCK * 1e21);
+    /* AGN LW flux is external to any individual mini-halo (comes from a
+     * distinct galaxy), same as GAL — so it's added in both boxes, mirroring
+     * how dxlya_dt_AGN joins dxlya_dt_GAL in both deriv[2] and deriv[7] above. */
+    deriv[5] = (dstarlyLW_dt_GAL + dstarlyLW_dt_III + dstarlyLW_dt_AGN) * (PLANCK * 1e21);
+    deriv[10] = (dstarlyLW_dt_GAL + dstarlyLW_dt_AGN) * (PLANCK * 1e21);
   }
 
   /*

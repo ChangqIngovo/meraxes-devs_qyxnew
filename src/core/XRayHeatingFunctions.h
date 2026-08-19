@@ -37,6 +37,9 @@
 #define NUIONIZATION (double)(13.60 * NU_over_EV)     /* ionization frequency of H */
 #define HeI_NUIONIZATION (double)(24.59 * NU_over_EV) /* ionization frequency of HeI */
 #define HeII_NUIONIZATION (double)(NUIONIZATION * 4)  /* ionization frequency of HeII */
+/* Lyman-Werner band edges: NU_LW (lower, 11.2eV) and NU_LL (upper, 13.6eV)
+ * are already defined in meraxes.h and used for this exact band in
+ * ComputeTs.c's sum_lyn_LW construction - reused here, not redefined. */
 
 // Define some global variables; yeah i know it isn't "good practice" but doesn't matter
 // NB. Not written by smutch!!! ;)
@@ -70,6 +73,11 @@ double const_zp_prefactor_III;
  * snapshot in ComputeTs.c and consumed in evolveInt(). */
 double const_zp_prefactor_AGN_soft;
 double const_zp_prefactor_AGN_hard;
+/* AGN Lyman-Werner prefactor: QuasarLuv extrapolated via SpecIndexUVAGN
+ * over the fixed LW band (NU_LW_MIN -> NU_LW_MAX). Set once per snapshot
+ * in ComputeTs.c, consumed in evolveInt(), only when Flag_IncludeLymanWerner
+ * is on. */
+double const_zp_prefactor_AGN_LW;
 float x_int_XHII[x_int_NXHII];
 #else
 extern double x_e_ave;
@@ -91,6 +99,7 @@ extern double const_zp_prefactor_GAL;
 extern double const_zp_prefactor_III;
 extern double const_zp_prefactor_AGN_soft;
 extern double const_zp_prefactor_AGN_hard;
+extern double const_zp_prefactor_AGN_LW;
 extern float x_int_XHII[x_int_NXHII];
 #endif
 
@@ -205,6 +214,7 @@ extern "C"
                  const double SFR_III[],
                  const double XAGN_soft[],
                  const double XAGN_hard[],
+                 const double XAGN_LW[],
                  const double freq_int_heat_GAL[],
                  const double freq_int_ion_GAL[],
                  const double freq_int_lya_GAL[],
