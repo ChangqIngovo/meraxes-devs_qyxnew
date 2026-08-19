@@ -1289,17 +1289,17 @@ static void no_shmr_sources_init(void)
   if (!no_shmr_enabled())
     return;
 
-  if (run_globals.SourceTableNSnaps <= 0) {
+  if (run_globals.params.SnaplistLength <= 0) {
     mlog_error(
         "Cannot initialise noSHMR source tables with "
         "SourceTableNSnaps=%d.",
-        run_globals.SourceTableNSnaps
+        run_globals.params.SnaplistLength
     );
     ABORT(EXIT_FAILURE);
   }
 
   n_shmr =
-      (size_t)run_globals.SourceTableNSnaps *
+      (size_t)run_globals.params.SnaplistLength *
       (size_t)SHMR_NTYPES *
       (size_t)SHMR_NX;
 
@@ -1327,11 +1327,11 @@ void no_shmr_sources_prepare(int snapshot)
     no_shmr_sources_init();
 
   if (snapshot < 0 ||
-      snapshot >= run_globals.SourceTableNSnaps) {
+      snapshot >= run_globals.params.SnaplistLength) {
     mlog_error(
         "noSHMR snapshot %d is outside [0, %d).",
         snapshot,
-        run_globals.SourceTableNSnaps
+        run_globals.params.SnaplistLength
     );
     ABORT(EXIT_FAILURE);
   }
@@ -1429,7 +1429,7 @@ void no_shmr_sources_free(void)
   run_globals.SFRsIII = NULL;
 #endif
 
-  run_globals.SourceTableNSnaps = 0;
+  run_globals.params.SnaplistLength = 0;
   no_shmr_initialized = 0;
 }
 

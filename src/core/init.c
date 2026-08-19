@@ -252,9 +252,6 @@ void init_meraxes()
 
 #if USE_SCATTERS
   // Initialise runtime SHMR/SFR source tables.
-  run_globals.SourceTableNSnaps =
-      run_globals.params.SnaplistLength;
-
   run_globals.SHMRs = NULL;
   run_globals.SFRs = NULL;
 #if USE_MINI_HALOS

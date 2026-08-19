@@ -962,9 +962,7 @@ typedef struct run_globals_t
   float* Time_Values;
 
 #if USE_SCATTERS
-  int SourceTableNSnaps;
-
-  // Both source tables have size SourceTableNSnaps * SHMR_NTYPES * SHMR_NX.
+  // Both source tables have size SnaplistLength * SHMR_NTYPES * SHMR_NX.
   float* SHMRs;
   float* SFRs;
 #if USE_MINI_HALOS
