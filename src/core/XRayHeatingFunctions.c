@@ -1312,19 +1312,8 @@ void evolveInt(float zp,
   double dspec_dzp_II, dxheat_dzp_II;
 #endif
 
-  /*
-   * ============================================================
-   * THIS ADDITION IS MADE TO ADD THE X-RAY CONTRIBUTION BY AGN
-   * ============================================================
-   * Physical motivation:
-   *   These variables accumulate the time-integrated AGN X-ray
-   *   contributions to the IGM heating, ionisation, and Ly-alpha
-   *   coupling rates over all radial shells (zpp_ct loop below).
-   *
-   *   dxheat_dt_AGN   : AGN X-ray heating rate  [eV s^-1 per baryon]
-   *   dxion_source_dt_AGN : AGN photo-ionisation source rate [s^-1]
-   *   dxlya_dt_AGN    : AGN contribution to Ly-alpha photon number flux [s^-1 cm^-2 Hz^-1 sr^-1]
-   */
+  /* Time-integrated AGN X-ray contributions over all shells (zpp_ct loop).
+   * dxheat_dt_AGN [eV/s/baryon], dxion_source_dt_AGN [s^-1], dxlya_dt_AGN [s^-1 cm^-2 Hz^-1 sr^-1]. */
   double dxheat_dt_AGN      = 0.0;
   double dxion_source_dt_AGN = 0.0;
   double dxlya_dt_AGN       = 0.0;
@@ -1400,34 +1389,15 @@ void evolveInt(float zp,
       if (run_globals.params.Flag_IncludeLymanWerner) {
         dstarlyLW_dt_GAL += SFR_GAL[zpp_ct] * pow(1 + zp, 2) * (1 + zpp) * sum_lyn_LW[zpp_ct] * dt_dzpp * dzpp;
         dstarlyLW_dt_III += SFR_III[zpp_ct] * pow(1 + zp, 2) * (1 + zpp) * sum_lyn_LW_III[zpp_ct] * dt_dzpp * dzpp;
-        /* AGN LW: XAGN_LW[zpp_ct] is a per-shell luminosity-density amplitude
-         * (same role as XAGN_soft/XAGN_hard), not an SFR — so unlike the
-         * stellar terms above, no sum_lyn_LW-style lookup is needed here;
-         * const_zp_prefactor_AGN_LW (applied after this loop) carries the
-         * full band normalisation, same pattern as const_zp_prefactor_AGN_soft. */
+        /* XAGN_LW is a per-shell luminosity amplitude, not an SFR — no sum_lyn_LW lookup needed.
+         * const_zp_prefactor_AGN_LW (applied after this loop) carries the full band normalisation. */
         dstarlyLW_dt_AGN += XAGN_LW[zpp_ct] * pow(1 + zp, 2) * (1 + zpp) * dt_dzpp * dzpp;
       }
 #endif
 
-      /*
-       * ============================================================
-       * THIS ADDITION IS MADE TO ADD THE X-RAY CONTRIBUTION BY AGN
-       * ============================================================
-       * Physical motivation — AGN shell integration:
-       *
-       *   For each radial shell (zpp_ct), the AGN contribution to IGM
-       *   heating, ionisation, and Ly-alpha coupling is computed once
-       *   per band, each band using only its own amplitude, its own
-       *   spectral index, and its own frequency integral:
-       *
-       *     dX_AGN_soft/dt += (dt/dz'') × dz''
-       *                       × XAGN_soft[zpp_ct] × (1+z'')^{-Γ_soft}
-       *                       × freq_int_X_AGN_soft[zpp_ct]
-       *     dX_AGN_hard/dt += (dt/dz'') × dz''
-       *                       × XAGN_hard[zpp_ct] × (1+z'')^{-Γ_hard}
-       *                       × freq_int_X_AGN_hard[zpp_ct]
-       * ============================================================
-       */
+      /* Per shell, each band uses only its own amplitude/index/integral:
+       *   dX_AGN_soft/dt += (dt/dz'')dz'' × XAGN_soft[zpp_ct] × (1+z'')^-Γ_soft × freq_int_X_AGN_soft[zpp_ct]
+       *   dX_AGN_hard/dt += (dt/dz'')dz'' × XAGN_hard[zpp_ct] × (1+z'')^-Γ_hard × freq_int_X_AGN_hard[zpp_ct] */
       zpp_integrand_AGN = XAGN_soft[zpp_ct]
                           * pow(1 + zpp,
                                 -run_globals.params.physics.SpecIndexXrayAGNSoft);
@@ -1497,16 +1467,9 @@ void evolveInt(float zp,
 
   dxion_sink_dt = alpha_A(T) * CLUMPING_FACTOR * x_e * x_e * f_H * n_b;
 
-  /*
-   * AGN photo-ionisation included in dx_e/dz for both code paths.
-   *
-   *   dx_e/dz = dt/dz × [ Γ_ion,GAL [+ Γ_ion,III] + Γ_ion,AGN − α_A·C·x_e²·f_H·n_b ]
-   *
-   * USE_MINI_HALOS adds the Pop III source term (dxion_source_dt_III).
-   * AGN is present in both paths because black holes exist in the same
-   * high-mass halos (Pop II host galaxies) regardless of whether
-   * minihalos/Pop III are tracked.
-   */
+  /* AGN photo-ionisation in both code paths:
+   *   dx_e/dz = dt/dz × [Γ_ion,GAL (+Γ_ion,III) + Γ_ion,AGN − α_A·C·x_e²·f_H·n_b]
+   * AGN is present regardless of Pop III tracking — BHs live in the same Pop II host halos. */
 #if USE_MINI_HALOS
   dxe_dzp = dt_dzp * (dxion_source_dt_GAL + dxion_source_dt_III
                       + dxion_source_dt_AGN - dxion_sink_dt);
@@ -1546,30 +1509,9 @@ void evolveInt(float zp,
   dcomp_dzp_II = dT_comp(zp, TII, x_e);
 #endif /* USE_MINI_HALOS — dadia_dzp_II / dcomp_dzp_II block */
 
-  /*
-   * ============================================================
-   * THIS ADDITION IS MADE TO ADD THE X-RAY CONTRIBUTION BY AGN
-   * ============================================================
-   * Physical motivation — IGM temperature evolution:
-   *
-   *   The gas kinetic temperature evolves as:
-   *
-   *     dT_K/dz = dT_K/dz|_adiabatic + dT_K/dz|_Compton
-   *             + dT_K/dz|_species + dT_K/dz|_Xray,GAL
-   *             + dT_K/dz|_Xray,AGN
-   *
-   *   The AGN X-ray heating term is:
-   *
-   *     dT_K/dz|_Xray,AGN = dxheat_dt_AGN × (dt/dz)
-   *                         × (2/3) / k_B / (1 + x_e)
-   *
-   *   where dxheat_dt_AGN carries the AGN broken-power-law weighted
-   *   energy deposition rate [eV s^-1 baryon^-1]. Hard X-rays
-   *   (Γ_hard ~ 1.7) contribute preferentially at larger distances
-   *   from the source and at later cosmic times, complementing the
-   *   softer stellar X-ray spectrum.
-   * ============================================================
-   */
+  /* dT_K/dz = dT_K/dz|_adiabatic + |_Compton + |_species + |_Xray,GAL + |_Xray,AGN, where
+   *   dT_K/dz|_Xray,AGN = dxheat_dt_AGN × (dt/dz) × (2/3)/k_B/(1+x_e)
+   * Hard X-rays (Γ~1.7) reach farther/later, complementing the softer stellar spectrum. */
 #if USE_MINI_HALOS
   dxheat_dzp = (dxheat_dt_GAL + dxheat_dt_III + dxheat_dt_AGN)
                * dt_dzp * 2.0 / 3.0 / BOLTZMANN / (1.0 + x_e);
@@ -1587,23 +1529,8 @@ void evolveInt(float zp,
 #if USE_MINI_HALOS
   deriv[6] = dxheat_dzp_II + dcomp_dzp_II + dspec_dzp_II + dadia_dzp_II;
 
-  /*
-   * ============================================================
-   * THIS ADDITION IS MADE TO ADD THE X-RAY CONTRIBUTION BY AGN
-   * ============================================================
-   * Physical motivation — Ly-alpha coupling:
-   *
-   *   X-ray photons from AGN produce secondary electrons which
-   *   excite HI, leading to Ly-alpha photons. This contributes to
-   *   the Wouthuysen-Field coupling between the spin temperature
-   *   and kinetic temperature. The AGN Ly-alpha term dxlya_dt_AGN
-   *   is added to the total Ly-alpha background J_alpha.
-   *
-   *   Note: the stellar Lya line term (dstarlya_dt) is NOT modified
-   *   for AGN as AGN do not produce Lyman-series photons from
-   *   stellar recombination lines.
-   * ============================================================
-   */
+  /* AGN X-rays produce secondary electrons that excite HI into Ly-alpha, added to
+   * J_alpha via dxlya_dt_AGN. dstarlya_dt (stellar recombination lines) is untouched. */
   deriv[2] = (dxlya_dt_GAL + dxlya_dt_III + dxlya_dt_AGN)
              + (dstarlya_dt_GAL + dstarlya_dt_III);
   deriv[7] = (dxlya_dt_GAL + dxlya_dt_AGN) + dstarlya_dt_GAL;
@@ -1624,16 +1551,8 @@ void evolveInt(float zp,
     deriv[10] = (dstarlyLW_dt_GAL + dstarlyLW_dt_AGN) * (PLANCK * 1e21);
   }
 
-  /*
-   * ============================================================
-   * THIS ADDITION IS MADE TO ADD THE X-RAY CONTRIBUTION BY AGN
-   * ============================================================
-   * AGN photo-ionisation source term included in the total
-   * ionisation derivative stored in deriv[4] and deriv[9].
-   * deriv[9] is the Pop II-only ionisation rate (no Pop III) —
-   * AGN is added here as an additional source on top of Pop II.
-   * ============================================================
-   */
+  /* AGN photo-ionisation added to deriv[4]/deriv[9] (total ionisation rate).
+   * deriv[9] is Pop II-only — AGN is an extra source on top of it. */
   deriv[4] = dt_dzp * (dxion_source_dt_GAL + dxion_source_dt_III
                        + dxion_source_dt_AGN);
   deriv[9] = dt_dzp * (dxion_source_dt_GAL + dxion_source_dt_AGN);

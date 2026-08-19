@@ -23,7 +23,6 @@
 // the reference wavelength QuasarLuv is defined at.
 
 #define LB2EMISSIVITY 2.127633e-6
-// this is a little bit complicated...
 // firstly B band luminosity is:   LB = Lbol/kb 1e10Lsun
 // then B band magnitude is:       MB = 4.74 - 2.5log10(1e10LB)
 // then convert from Vega to AB:   MAB,B = MB-0.09

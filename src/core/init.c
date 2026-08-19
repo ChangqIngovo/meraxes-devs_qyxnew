@@ -151,9 +151,7 @@ static void read_snap_list()
   }
   MPI_Bcast(run_globals.AA, run_globals.params.SnaplistLength, MPI_DOUBLE, 0, run_globals.mpi_comm);
 
-  // Per-snapshot Ts/X-ray-heating diagnostic buffers, indexed directly by
-  // snapshot number (see XRayHeatingFunctions.h) — only needed if the
-  // spin-temperature/X-ray-heating subsystem actually runs.
+  // Per-snapshot X-ray-heating diagnostic buffers, only needed if spin-temp runs.
   if (run_globals.params.Flag_IncludeSpinTemp) {
     stored_fcoll = calloc((size_t)run_globals.params.SnaplistLength, sizeof(double));
     stored_fcollIII = calloc((size_t)run_globals.params.SnaplistLength, sizeof(double));

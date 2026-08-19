@@ -716,12 +716,8 @@ void calc_hdf5_props()
     h5props->field_h_conv[i] = "None";
     h5props->field_types[i++] = H5T_NATIVE_FLOAT;
 
-    /* Which of the 5 NH bins this snapshot's stochastic draw landed in
-     * (0-4), or -1 if no AGN activity. Replaces the old QuasarLX_obs0-4/
-     * NHfrac0-4 (10 mostly-zero floats per galaxy, since only one bin is
-     * ever nonzero per draw) — BHXrayEmissivity below already carries
-     * that bin's observed (obscured) luminosity, so (NHbin,
-     * BHXrayEmissivity) is sufficient to reconstruct a per-bin XLF. */
+    /* Which NH bin (0-4) this snapshot's draw landed in, or -1 if no AGN.
+     * Replaces the old QuasarLX_obs0-4/NHfrac0-4 (10 mostly-zero floats/galaxy). */
     h5props->dst_offsets[i] = HOFFSET(galaxy_output_t, NHbin);
     h5props->dst_field_sizes[i] = sizeof(galout.NHbin);
     h5props->field_names[i] = "NHbin";

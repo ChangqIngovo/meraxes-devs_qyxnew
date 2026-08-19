@@ -991,12 +991,8 @@ void malloc_reionization_grids()
 
 
       {
-        /*
-         * Flag_IncludeAGNXray: 0=off, 1=soft+hard, 2=hard only, 3=soft only.
-         * Allocate each band's grids/histories/FFT buffers/plans only when
-         * that band is actually selected — mode 2/3 shouldn't pay for the
-         * band it never uses.
-         */
+        /* Flag_IncludeAGNXray: 0=off, 1=soft+hard, 2=hard only, 3=soft only.
+         * Allocate each band's buffers only when it's actually selected. */
         int flag_agn = run_globals.params.physics.Flag_IncludeAGNXray;
         bool agn_hard_needed = (flag_agn == 1 || flag_agn == 2);
         bool agn_soft_needed = (flag_agn == 1 || flag_agn == 3);
@@ -1005,11 +1001,7 @@ void malloc_reionization_grids()
           grids->BHXrayEmissivity  = fftwf_alloc_real((size_t)slab_n_complex * 2);
           grids->bh_xray_histories = fftwf_alloc_real((size_t)slab_n_complex * 2 * run_globals.NstoreSnapshots_Heating);
 
-          /*
-           * Spatial (k-space, radius-R) smoothing buffers/plans for
-           * BHXrayEmissivity — same shell-filtering pipeline as
-           * sfr/sfr_filtered, mirroring effective_bhm/effective_bhar above.
-           */
+          /* Shell-smoothing buffers/plans for BHXrayEmissivity, same pipeline as sfr/sfr_filtered. */
           grids->BHXrayEmissivity_unfiltered = fftwf_alloc_complex((size_t)slab_n_complex);
           grids->BHXrayEmissivity_filtered = fftwf_alloc_complex((size_t)slab_n_complex);
           grids->BHXrayEmissivity_forward_plan = fftwf_mpi_plan_dft_r2c_3d(ReionGridDim,
@@ -1044,10 +1036,7 @@ void malloc_reionization_grids()
           for (size_t ii = 0; ii < (size_t)slab_n_complex * 2 * run_globals.NstoreSnapshots_Heating; ii++)
             grids->bh_xray_histories[ii] = 0.0f;
 
-          /*
-           * THIS ADDITION IS MADE TO ADD THE X-RAY CONTRIBUTION BY AGN
-           * Same size as SMOOTHED_SFR_GAL. calloc ensures zeroed on allocation.
-           */
+          // Same size as SMOOTHED_SFR_GAL; calloc ensures zeroed on allocation.
           grids->SMOOTHED_AGN = calloc((size_t)slab_n_real_smoothedSFR, sizeof(double));
         }
 
@@ -1088,11 +1077,8 @@ void malloc_reionization_grids()
       }
 
 #if USE_MINI_HALOS
-      /*
-       * AGN Lyman-Werner emissivity grid — independent of Flag_IncludeAGNXray
-       * (soft/hard X-ray), gated on Flag_IncludeLymanWerner instead. Same
-       * grid/history/filter-buffer/FFTW-plan pattern as BHXrayEmissivity(_soft).
-       */
+      /* AGN LW grid: gated on Flag_IncludeLymanWerner, not Flag_IncludeAGNXray.
+       * Same pattern as BHXrayEmissivity(_soft). */
       if (run_globals.params.Flag_IncludeLymanWerner) {
         grids->BHLWEmissivity  = fftwf_alloc_real((size_t)slab_n_complex * 2);
         grids->bh_lw_histories = fftwf_alloc_real((size_t)slab_n_complex * 2 * run_globals.NstoreSnapshots_Heating);
@@ -1354,12 +1340,7 @@ void free_reionization_grids()
   if (run_globals.params.Flag_IncludeSpinTemp) {
     free(grids->SMOOTHED_SFR_GAL);
 
-    /*
-     * THIS ADDITION IS MADE TO ADD THE X-RAY CONTRIBUTION BY AGN
-     * Free the AGN smoothed-emissivity arrays (hard and soft) and the raw
-     * grid/history buffers, matching the allocation guards in
-     * malloc_reionization_grids.
-     */
+    // Free the AGN smoothed-emissivity/grid/history buffers, matching malloc_reionization_grids' guards.
     free(grids->SMOOTHED_AGN);
     free(grids->SMOOTHED_AGN_soft);
     {
@@ -1898,18 +1879,8 @@ void construct_baryon_grids(int snapshot, int local_ngals)
   float* weighted_sfrIII_grid = run_globals.reion_grids.weighted_sfrIII;
 #endif
 
-  /*
-   * THIS ADDITION IS MADE TO ADD THE X-RAY CONTRIBUTION BY AGN
-   * Physical motivation:
-   *   bh_xray_grid      — points to grids->BHXrayEmissivity (the
-   *                        current-snapshot cell-by-cell AGN emissivity,
-   *                        hard band).
-   *   bh_xray_hist_grid — points to grids->bh_xray_histories (the
-   *                        ring-buffer of past snapshots). Slot [0] is
-   *                        always the most recent snapshot's value.
-   *   *_soft            — the same two things for the independently
-   *                        obscured soft-band AGN emissivity.
-   */
+  /* bh_xray_grid/hist_grid: current-snapshot AGN hard-band emissivity and its
+   * ring-buffer history (slot [0] = most recent). *_soft: same, soft band. */
   float* bh_xray_grid      = run_globals.reion_grids.BHXrayEmissivity;
   float* bh_xray_hist_grid = run_globals.reion_grids.bh_xray_histories;
   float* bh_xray_grid_soft      = run_globals.reion_grids.BHXrayEmissivity_soft;
@@ -2009,13 +1980,8 @@ void construct_baryon_grids(int snapshot, int local_ngals)
     if ((!run_globals.params.Flag_IncludeSpinTemp) && (prop == prop_sfr))
       continue;
 
-    /*
-     * Skip the AGN emissivity properties if SpinTemp is off, or if the band
-     * in question isn't selected by Flag_IncludeAGNXray (1=soft+hard,
-     * 2=hard only, 3=soft only) — each band's grid is only guaranteed
-     * allocated when its own band is selected (see the allocation abort in
-     * malloc_reionization_grids). Trust the flags, not a NULL check.
-     */
+    /* Skip AGN emissivity properties if SpinTemp is off or the band isn't
+     * selected by Flag_IncludeAGNXray — trust the flags, not a NULL check. */
     if (prop == prop_bh_xray_emissivity &&
         (!run_globals.params.Flag_IncludeSpinTemp ||
          !(run_globals.params.physics.Flag_IncludeAGNXray == 1 || run_globals.params.physics.Flag_IncludeAGNXray == 2)))

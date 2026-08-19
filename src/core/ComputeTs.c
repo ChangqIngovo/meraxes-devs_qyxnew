@@ -143,13 +143,9 @@ void _ComputeTs(int snapshot)
   double freq_int_heat_tbl_GAL[x_int_NXHII][TsNumFilterSteps], freq_int_ion_tbl_GAL[x_int_NXHII][TsNumFilterSteps],
     freq_int_lya_tbl_GAL[x_int_NXHII][TsNumFilterSteps];
 
-  /* AGN broken power law: separate tables for soft and hard spectral components.
-   * soft = intrinsic soft emission + redshifted hard becoming soft
-   * hard = hard emission still in hard band at observation redshift
-   * Heap-allocated (not VLAs) and only when that band is actually selected by
-   * Flag_IncludeAGNXray (1=soft+hard, 2=hard only, 3=soft only) — every
-   * read/write of these six tables already happens inside a matching block
-   * below, so there's no reason to reserve the space otherwise. */
+  /* AGN broken power law: separate soft/hard tables (soft = intrinsic soft +
+   * redshifted hard; hard = still-hard at observation z). Heap-allocated only
+   * when that band is selected by Flag_IncludeAGNXray (1=both, 2=hard, 3=soft). */
   double (*freq_int_heat_tbl_AGN_soft)[TsNumFilterSteps] = NULL;
   double (*freq_int_ion_tbl_AGN_soft)[TsNumFilterSteps] = NULL;
   double (*freq_int_lya_tbl_AGN_soft)[TsNumFilterSteps] = NULL;
@@ -167,12 +163,8 @@ void _ComputeTs(int snapshot)
     freq_int_lya_tbl_AGN_hard = calloc((size_t)x_int_NXHII, sizeof(*freq_int_lya_tbl_AGN_hard));
   }
 
-  /* Per-cell interpolated AGN integrals — kept separate for soft and hard
-   * so that Flag_IncludeAGNXray can select which components contribute:
-   *   0 = no AGN
-   *   1 = soft + hard
-   *   2 = hard only
-   *   3 = soft only                                                      */
+  /* Per-cell interpolated AGN integrals, kept separate for soft/hard so
+   * Flag_IncludeAGNXray (0=off, 1=both, 2=hard, 3=soft) can select components. */
   double freq_int_heat_AGN_soft[TsNumFilterSteps];
   double freq_int_ion_AGN_soft[TsNumFilterSteps];
   double freq_int_lya_AGN_soft[TsNumFilterSteps];
@@ -476,13 +468,9 @@ void _ComputeTs(int snapshot)
         sfrIII_unfiltered[ii] /= (float)total_n_cells;
   #endif
 
-      /* Same shell-filtering pipeline as sfr/sfr_filtered above, applied to
-       * the (already time-weighted, via load_reion_sfr_grids) AGN emissivity
-       * grids — this is what actually smooths BHXrayEmissivity(_soft) over
-       * radius R, rather than reading the unfiltered per-cell grid. Each
-       * band's plans only exist (malloc_reionization_grids) when that band
-       * is actually selected by Flag_IncludeAGNXray, so the two must stay
-       * independently gated here too. */
+      /* Same shell-filtering pipeline as sfr/sfr_filtered, smoothing
+       * BHXrayEmissivity(_soft) over radius R. Each band's plans only exist
+       * when selected by Flag_IncludeAGNXray, so gated independently here too. */
       if (run_globals.params.physics.Flag_IncludeAGNXray == 1 || run_globals.params.physics.Flag_IncludeAGNXray == 2) {
         fftwf_execute(run_globals.reion_grids.BHXrayEmissivity_forward_plan);
         for (int ii = 0; ii < slab_n_complex; ii++)
@@ -797,30 +785,14 @@ void _ComputeTs(int snapshot)
 
 
       if (run_globals.params.physics.Flag_IncludeAGNXray > 0) {
-      /*
-       * Frequency integral tables for AGN broken power law.
-       *
-       * Soft component: integrate from max(nu_tau_one, nu_thresh_AGN) to nu_break.
-       *   This captures locally absorbed soft photons AND hard photons from high-z
-       *   AGN that have redshifted into the soft band by the time they reach z'.
-       *   The lower limit from nu_tau_one automatically handles the optical depth
-       *   cutoff — below tau=1 the photons are absorbed in the IGM before reaching
-       *   the cell, so we exclude them.
-       *
-       * Hard component: integrate from max(nu_tau_one, nu_break) to nu_hard_cut.
-       *   These are hard photons still in the hard band at z'. They have long mean
-       *   free paths and heat the IGM more uniformly. Their lower limit starts at
-       *   nu_break to avoid double-counting with the soft component.
-       */
+      /* Soft: integrate [max(nu_tau_one, nu_thresh_AGN), nu_break] — captures locally
+       * absorbed soft photons plus redshifted-in hard photons; nu_tau_one enforces the
+       * tau=1 opacity cutoff. Hard: [max(nu_tau_one, nu_break), nu_hard_cut] — starts
+       * at nu_break to avoid double-counting with soft. */
 
-      /* Unlike GAL/III, the AGN soft/hard split needs the redshift factor:
-       * NuXrayThreshold/NuXraySoftCut/NuXrayMax are rest-frame (at emission,
-       * zpp) SED band edges, but nu_tau_one() returns a frequency in the
-       * arrival frame at zp — so a hard-band photon emitted above the
-       * rest-frame break can still redshift down into what is locally the
-       * soft band by the time it arrives at zp. Scaling the break by
-       * (1+zp)/(1+zpp) before comparing against the arrival-frame nu is what
-       * lets that hard-to-soft shift show up correctly in the split. */
+      /* AGN soft/hard split needs a redshift factor GAL/III don't: band edges are
+       * rest-frame (at zpp) but nu_tau_one() is arrival-frame (at zp), so scaling
+       * by (1+zp)/(1+zpp) is what lets a hard photon redshift into the soft band. */
 
       /* Soft and hard both use the same (zp, zpp, x_e_ave, filling_factor_of_HI_zp,
        * snapshot) at this point (post-clamp), so nu_tau_one() only needs to run
@@ -849,10 +821,8 @@ void _ComputeTs(int snapshot)
         upper_int_limit_AGN_hard = run_globals.params.physics.NuXrayMax * NU_over_EV * (1. + zp) / (1. + zpp);
       }
 
-      /* AGN source amplitudes are per-cell, independently per band, from
-       * SMOOTHED_AGN/SMOOTHED_AGN_soft (set in the cell loop below from
-       * the BHXrayEmissivity/BHXrayEmissivity_soft ring-buffers). Zero
-       * the shell-level arrays here; they will be overwritten per cell. */
+      /* AGN amplitudes come per-cell, per-band, from SMOOTHED_AGN(_soft);
+       * zeroed here at shell level, overwritten per cell below. */
       agn_emissivity_zpp  = 0.0;
       XAGN_soft[R_ct]  = 0.0;
       XAGN_hard[R_ct]  = 0.0;
@@ -1010,10 +980,9 @@ void _ComputeTs(int snapshot)
     // Conversion here means the code otherwise remains the same as the original Ts.c
 
     /*
-     * L(nu) = L0*(nu/nu_th)^(Γ-1) on [nu_lo,nu_hi], Γ = photon index = 1 - alpha (alpha = SpecIndexXray*), nu_th = NuXrayThreshold.
-     * L_band = int L(nu)dnu = L0*nu_th^(Γ-1)/Γ * (nu_hi^Γ - nu_lo^Γ)  =>  C = L0/L_band = Γ*nu_th^(Γ-1)/(nu_hi^Γ-nu_lo^Γ).
-     * [nu_lo,nu_hi] must equal the input's calibration band: GAL/III/AGN-soft -> [NuXrayThreshold,NuXraySoftCut],
-     * AGN-hard -> [NuXraySoftCut,NuXrayMax] (same reason integrate_over_nu splits soft/hard). Γ==0: C = 1/(nu_th*ln(nu_hi/nu_lo)).
+     * L(nu) = L0*(nu/nu_th)^(Γ-1) on [nu_lo,nu_hi], Γ = 1 - alpha (alpha = SpecIndexXray*), nu_th = NuXrayThreshold.
+     * C = L0/L_band = Γ*nu_th^(Γ-1)/(nu_hi^Γ-nu_lo^Γ); Γ==0: C = 1/(nu_th*ln(nu_hi/nu_lo)).
+     * [nu_lo,nu_hi] = calibration band: GAL/III/AGN-soft -> [NuXrayThreshold,NuXraySoftCut], AGN-hard -> [NuXraySoftCut,NuXrayMax].
      */
     if (fabs(run_globals.params.physics.SpecIndexXrayGal - 1.0) < REL_TOL) {
       Luminosity_converstion_factor_GAL =
@@ -1059,13 +1028,9 @@ void _ComputeTs(int snapshot)
      * SMOOTHED_AGN is already a luminosity density in erg/s/cm^3. (from gal->BHXrayEmissivity, an actual X-ray luminosity. */
     Luminosity_converstion_factor_AGN_soft /= (PLANCK);
 
-    /* --- Hard component: nu_break to nu_hard_cut ---
-     * Band is [NuXraySoftCut, NuXrayMax] here (unlike soft/GAL/III above,
-     * which integrate [NuXrayThreshold, NuXraySoftCut]) — quasar_lx (hard)
-     * is calibrated over the hard band, so the conversion factor has to be
-     * derived over that same band or the pivot amplitude L0 comes out wrong.
-     * The pivot frequency itself stays at NuXrayThreshold, matching
-     * const_zp_prefactor_AGN_hard's division by NuXrayThreshold below. */
+    /* --- Hard component: [NuXraySoftCut, NuXrayMax], not [NuXrayThreshold, NuXraySoftCut] ---
+     * quasar_lx is calibrated over the hard band, so C must be derived over that same band.
+     * Pivot frequency stays NuXrayThreshold, matching const_zp_prefactor_AGN_hard below. */
     if (fabs(run_globals.params.physics.SpecIndexXrayAGNHard - 1.0) < REL_TOL) {
       Luminosity_converstion_factor_AGN_hard =
         (run_globals.params.physics.NuXrayThreshold * NU_over_EV) *
@@ -1089,18 +1054,10 @@ void _ComputeTs(int snapshot)
 
 #if USE_MINI_HALOS
     /*
-     * AGN Lyman-Werner prefactor. Unlike const_zp_prefactor_AGN_soft/hard,
-     * gal->BHLWEmissivity is already the full band-integrated LW luminosity
-     * (computed in calculate_BHemissivity from QuasarLuv + SpecIndexUVAGN,
-     * see blackhole_feedback.c) rather than a point on the SED needing its
-     * own amplitude solve, so there's no Luminosity_converstion_factor step
-     * here. This just converts SMOOTHED_AGN_LW's energy-density units
-     * [erg/s/cm^3] into the same photon-number-flux convention
-     * dstarlyLW_dt_GAL is in after its own Conversion_factor (dividing by a
-     * characteristic LW-band photon energy, PLANCK*NU_LW), so both can be
-     * summed before deriv[5]/deriv[10]'s shared (PLANCK*1e21) at the end of
-     * evolveInt(). Not yet validated against the stellar LW pathway's
-     * magnitude - worth a sanity check before trusting this quantitatively.
+     * AGN LW prefactor: BHLWEmissivity is already band-integrated (no
+     * Luminosity_converstion_factor step needed) — this just converts its
+     * erg/s/cm^3 units to the photon-flux convention dstarlyLW_dt_GAL uses.
+     * Not yet validated against the stellar LW pathway's magnitude.
      */
     const_zp_prefactor_AGN_LW = run_globals.params.Flag_IncludeLymanWerner
       ? SPEED_OF_LIGHT / (4.0 * M_PI) / (PLANCK * NU_LW)
@@ -1147,10 +1104,8 @@ void _ComputeTs(int snapshot)
       (run_globals.params.physics.NuXrayThreshold * NU_over_EV) * SPEED_OF_LIGHT *
       pow(1.0 + zp, run_globals.params.physics.SpecIndexXrayAGNSoft + 3.0);
     if (!isfinite(const_zp_prefactor_AGN_soft)) {
-      /* Most likely cause: NuXraySoftCut == NuXrayThreshold (zero-width soft
-       * band), which makes Luminosity_converstion_factor_AGN_soft divide by
-       * zero above. That's a parameter error, not a physical edge case — stop
-       * here rather than silently treating the AGN soft band as always zero. */
+      /* Likely cause: NuXraySoftCut == NuXrayThreshold (zero-width band) — a
+       * parameter error, so stop rather than silently zeroing the soft band. */
       mlog_error("const_zp_prefactor_AGN_soft is not finite — check NuXrayThreshold/NuXraySoftCut/SpecIndexXrayAGNSoft.");
       ABORT(EXIT_FAILURE);
     }
@@ -1311,17 +1266,10 @@ void _ComputeTs(int snapshot)
 
           // Perform the calculation of the heating/ionisation integrals, updating relevant quantities etc. GET BACK AT
           // THIS FOR USE_MINI_HALOS!!
-          /*
-           * evolveInt computes the stellar (GAL + optional III) contributions to
-           * dx_e/dz, dT_K/dz, and J_alpha, AND the AGN contribution — soft and
-           * hard passed in as two independent amplitude/freq_int pairs (Option
-           * 2), summed internally only after each has been through its own
-           * prefactor. Flag_IncludeAGNXray's four settings need no special-casing
-           * here: XAGN_soft/XAGN_hard were already zeroed for excluded bands
-           * when they were built above (from SMOOTHED_AGN_soft/SMOOTHED_AGN),
-           * so a zeroed amplitude naturally contributes zero regardless of
-           * what its freq_int table looks like.
-           */
+          /* evolveInt sums stellar + AGN contributions to dx_e/dz, dT_K/dz, J_alpha —
+           * soft/hard passed as independent amplitude/freq_int pairs, each through its
+           * own prefactor. No flag special-casing needed: excluded bands' XAGN_soft/hard
+           * were already zeroed above, so they contribute zero regardless. */
           {
 #if USE_MINI_HALOS
           evolveInt((float)zp,

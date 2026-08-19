@@ -224,14 +224,8 @@ void calculate_BHemissivity(double BlackHoleMass, double accreted_mass,
                * *accretion_time * run_globals.units.UnitTime_in_s
                / run_globals.params.Hubble_h;
 
-  /* Lyman-Werner band luminosity: QuasarLuv is a specific luminosity
-   * (erg/s/Hz, stored in 1e10 Lsun) at NU_1450 (1450A). Assume the AGN
-   * continuum is a power law L_nu = quasar_luv * (nu/NU_1450)^-SpecIndexUVAGN
-   * and integrate it over the fixed Lyman-Werner band [NU_LW, NU_LL]
-   * (11.2-13.6 eV; both already defined in meraxes.h and used for this same
-   * band by the stellar Lyman-Werner calculation in ComputeTs.c). Only
-   * meaningful when Flag_IncludeLymanWerner is on; harmless (just unused)
-   * otherwise. */
+  /* Lyman-Werner luminosity: power law L_nu = quasar_luv*(nu/NU_1450)^-SpecIndexUVAGN,
+   * integrated over [NU_LW, NU_LL]. Only meaningful under Flag_IncludeLymanWerner. */
   if (fabs(physics->SpecIndexUVAGN - 1.0) < REL_TOL) {
     *quasar_lw = *quasar_luv * NU_1450 * log(NU_LL / NU_LW);
   } else {
@@ -460,12 +454,9 @@ void previous_merger_driven_BH_growth(galaxy_t* gal, int snapshot)
     gal->QuasarLuv        += quasar_luv;
     gal->QuasarLX         += quasar_lx;
     gal->NHbin              = NH_bin; /* -1 if no AGN activity this step */
-    /* Kept in 1e10 Lsun (same convention as QuasarLX/QuasarLuv), not raw
-     * erg/s — a float can't hold raw erg/s luminosities for bright AGN
-     * (~1e43-1e44) without overflowing (galaxy_output_t.BHXrayEmissivity
-     * is a float). The 1e10*SOLAR_LUM conversion is applied downstream,
-     * in ComputeTs.c, at the same point SMOOTHED_SFR_GAL's unit
-     * conversion already happens for the analogous stellar quantity. */
+    /* Kept in 1e10 Lsun, not raw erg/s — a float can't hold bright-AGN
+     * luminosities without overflowing. Converted downstream in
+     * ComputeTs.c, same point as SMOOTHED_SFR_GAL's stellar conversion. */
     gal->BHXrayEmissivity      += quasar_lx      * obs_fraction_hard;
     gal->BHXrayEmissivity_soft += quasar_lx_soft * obs_fraction_soft;
     /* No obscuration weighting, same as QuasarLuv above — quasar_lw is
