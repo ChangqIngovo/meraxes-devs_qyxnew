@@ -10,8 +10,26 @@ static void check_problem_params(run_params_t* run_params)
     ABORT(EXIT_FAILURE);
   }
 
-#if !USE_SCATTERS
-  if (run_params->physics.EscapeFracScatterDex != 0.0 ||
+#if USE_SCATTERS
+  if (run_params->physics.EscapeFracScatterDex > ABS_TOL &&
+      run_params->physics.Flag_RemoveSHMRScatter != 0) {
+      mlog_error(
+            "Both EscapeFracScatterDex and Flag_RemoveSHMRScatter are set. "
+            "Please choose one or the other."
+      );
+      ABORT(EXIT_FAILURE);      
+  }
+  if (run_params->physics.EscapeFracScatterDex <= ABS_TOL &&
+      run_params->physics.Flag_RemoveSHMRScatter == 0 && 
+      run_params->physics.Flag_SourceRecalibration != 0) {
+      mlog_error(
+            "Flag_SourceRecalibration is set, but neither EscapeFracScatterDex nor Flag_RemoveSHMRScatter are set. "
+            "Please choose one of these options."
+      );
+      ABORT(EXIT_FAILURE);      
+  }
+#else
+  if (run_params->physics.EscapeFracScatterDex > ABS_TOL ||
       run_params->physics.Flag_RemoveSHMRScatter != 0 ||
       run_params->physics.Flag_SourceRecalibration != 0) {
     mlog_error(

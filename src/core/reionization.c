@@ -227,7 +227,7 @@ void update_galaxy_fesc_vals(galaxy_t* gal, double new_stars, int snapshot)
   const double fescIII_target = fescIII;
 #endif
 
-  if (params->EscapeFracScatterDex > 0.0) {
+  if (params->EscapeFracScatterDex > ABS_TOL) {
 #if USE_MINI_HALOS
     if (gal->Galaxy_Population == 2) {
       fesc = apply_lognormal_scatter(
@@ -264,7 +264,7 @@ void update_galaxy_fesc_vals(galaxy_t* gal, double new_stars, int snapshot)
     gal->FescWeightedSfr += gal->Sfr * fesc;
 
 #if USE_SCATTERS
-  if (params->Flag_SourceRecalibration){
+  if (params->Flag_SourceRecalibration && params->EscapeFracScatterDex > ABS_TOL) {
     gal->TargetFescWeightedGSM += new_stars * fesc_target;
     gal->TargetFescWeightedSfr += gal->Sfr * fesc_target;
   };
@@ -277,7 +277,7 @@ void update_galaxy_fesc_vals(galaxy_t* gal, double new_stars, int snapshot)
     gal->FescIIIWeightedSfr += gal->SfrIII * fescIII;
 
 #if USE_SCATTERS
-  if (params->Flag_SourceRecalibration){
+  if (params->Flag_SourceRecalibration && params->EscapeFracScatterDex > ABS_TOL){
     gal->TargetFescIIIWeightedGSM += new_stars * fescIII_target;
     gal->TargetFescIIIWeightedSfr += gal->SfrIII * fescIII_target;
   };
@@ -289,7 +289,7 @@ void update_galaxy_fesc_vals(galaxy_t* gal, double new_stars, int snapshot)
   gal->FescWeightedSfr += gal->Sfr * fesc;
 
 #if USE_SCATTERS
-  if (params->Flag_SourceRecalibration){
+  if (params->Flag_SourceRecalibration && params->EscapeFracScatterDex > ABS_TOL){
     gal->TargetFescWeightedGSM += new_stars * fesc_target;
     gal->TargetFescWeightedSfr += gal->Sfr * fesc_target;
   };
@@ -1892,11 +1892,7 @@ void construct_baryon_grids(int snapshot, int local_ngals)
 
         switch (prop) {
             case prop_stellar:
-#if USE_SCATTERS
-              buffer[ind] += no_shmr_sources_grid_gsm(gal);
-#else
               buffer[ind] += gal->FescWeightedGSM;
-#endif
               break;
 
             case prop_effective_bhm:
@@ -1910,21 +1906,11 @@ void construct_baryon_grids(int snapshot, int local_ngals)
 
 #if USE_MINI_HALOS
             case prop_stellarIII:
-#if USE_SCATTERS
-              buffer[ind] +=
-                  no_shmr_sources_grid_gsm_popIII(gal);
-#else
               buffer[ind] += gal->FescIIIWeightedGSM;
-#endif
               break;
 
             case prop_weighted_sfrIII:
-#if USE_SCATTERS
-              buffer[ind] +=
-                  no_shmr_sources_grid_sfr_popIII(gal);
-#else
               buffer[ind] += gal->FescIIIWeightedSfr;
-#endif
               break;
 
             case prop_sfrIII:
@@ -1941,11 +1927,7 @@ void construct_baryon_grids(int snapshot, int local_ngals)
 #endif
 
             case prop_weighted_sfr:
-#if USE_SCATTERS
-              buffer[ind] += no_shmr_sources_grid_sfr(gal);
-#else
               buffer[ind] += gal->FescWeightedSfr;
-#endif
               break;
 
             case prop_effective_bhar:
