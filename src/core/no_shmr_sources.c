@@ -35,10 +35,6 @@ typedef enum no_shmr_population_t
 static int no_shmr_prepared_snapshot = -1;
 static int no_shmr_initialized = 0;
 
-static int no_shmr_enabled(void)
-{
-  return run_globals.params.physics.Flag_RemoveSHMRScatter != 0;
-}
 
 static void* no_shmr_calloc(size_t count, size_t size)
 {
@@ -1286,7 +1282,7 @@ static void no_shmr_sources_init(void)
 
   no_shmr_initialized = 1;
 
-  if (!no_shmr_enabled())
+  if (run_globals.params.physics.Flag_RemoveSHMRScatter == 0)
     return;
 
   if (run_globals.params.SnaplistLength <= 0) {
@@ -1320,7 +1316,7 @@ static void no_shmr_sources_init(void)
 
 void no_shmr_sources_prepare(int snapshot)
 {
-  if (!no_shmr_enabled())
+  if (run_globals.params.physics.Flag_RemoveSHMRScatter == 0)
     return;
 
   if (!no_shmr_initialized)
@@ -1355,14 +1351,14 @@ void no_shmr_sources_prepare(int snapshot)
 
 double no_shmr_sources_grid_gsm(const galaxy_t* gal)
 {
-  return no_shmr_enabled()
+  return run_globals.params.physics.Flag_RemoveSHMRScatter == 1
       ? gal->TargetFescWeightedGSM
       : gal->FescWeightedGSM;
 }
 
 double no_shmr_sources_grid_sfr(const galaxy_t* gal)
 {
-  return no_shmr_enabled()
+  return run_globals.params.physics.Flag_RemoveSHMRScatter == 1
       ? gal->TargetFescWeightedSfr
       : gal->FescWeightedSfr;
 }
@@ -1370,12 +1366,12 @@ double no_shmr_sources_grid_sfr(const galaxy_t* gal)
 double no_shmr_sources_grid_sfr_source(const galaxy_t* gal)
 {
   if (run_globals.params.Flag_InstantaneousSFR) {
-    return no_shmr_enabled()
+    return run_globals.params.physics.Flag_RemoveSHMRScatter == 1
         ? gal->SfrNoScatter
         : gal->Sfr;
   }
 
-  return no_shmr_enabled()
+  return run_globals.params.physics.Flag_RemoveSHMRScatter == 1
       ? gal->GrossStellarMassNoScatter
       : gal->GrossStellarMass;
 }
@@ -1383,14 +1379,14 @@ double no_shmr_sources_grid_sfr_source(const galaxy_t* gal)
 #if USE_MINI_HALOS
 double no_shmr_sources_grid_gsm_popIII(const galaxy_t* gal)
 {
-  return no_shmr_enabled()
+  return run_globals.params.physics.Flag_RemoveSHMRScatter == 1
       ? gal->TargetFescIIIWeightedGSM
       : gal->FescIIIWeightedGSM;
 }
 
 double no_shmr_sources_grid_sfr_popIII(const galaxy_t* gal)
 {
-  return no_shmr_enabled()
+  return run_globals.params.physics.Flag_RemoveSHMRScatter == 1
       ? gal->TargetFescIIIWeightedSfr
       : gal->FescIIIWeightedSfr;
 }
@@ -1398,12 +1394,12 @@ double no_shmr_sources_grid_sfr_popIII(const galaxy_t* gal)
 double no_shmr_sources_grid_sfr_source_popIII(const galaxy_t* gal)
 {
   if (run_globals.params.Flag_InstantaneousSFR) {
-    return no_shmr_enabled()
+    return run_globals.params.physics.Flag_RemoveSHMRScatter == 1
         ? gal->SfrIIINoScatter
         : gal->SfrIII;
   }
 
-  return no_shmr_enabled()
+  return run_globals.params.physics.Flag_RemoveSHMRScatter == 1
       ? gal->GrossStellarMassIIINoScatter
       : gal->GrossStellarMassIII;
 }

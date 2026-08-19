@@ -7,8 +7,6 @@
 
 #if USE_SCATTERS
 
-#define FESC_RECALIBRATION_EPS 1.0e-300
-
 enum fesc_global_sum_index
 {
   FESC_POPII_GSM_RAW = 0,
@@ -58,8 +56,8 @@ static double fesc_get_global_correction(double target,
     ABORT(EXIT_FAILURE);
   }
 
-  if (source <= FESC_RECALIBRATION_EPS) {
-    if (target <= FESC_RECALIBRATION_EPS)
+  if (source <= ABS_TOL) {
+    if (target <= ABS_TOL)
       return 1.0;
 
     mlog_error(
