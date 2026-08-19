@@ -48,16 +48,23 @@ ZCrit                      : 0.0001 # Critical metallicity. If Z >= Zcrit -> Pop
 #------------------------- X-Ray stuff -----------------------------
 #----- including PopIII which is required when using Minihalos -----
 #-------------------------------------------------------------------
-
 LXrayGal                   : 3.16e40         # Soft-band (< NuXraySoftCut keV) X-ray luminosity for galaxy based sources (HMXB)
-LXrayGalIII                : 3.16e40         # Same as above for PopIII
-
-NuXrayGalThreshold         : 500.            # Energy threshold for HMXB X-rays escaping host galaxy (eV)
+LXrayGalIII                : 3.16e40         # Same as above for PopIII 
 SpecIndexXrayGal           : 1.              # Spectral index of galaxy X-ray sources  (nu^-alpha)
 SpecIndexXrayIII           : 1.              # Same as above for Pop III
+NuXrayThreshold            : 500.            # Energy threshold for HMXB X-rays escaping host galaxy (eV), this threshold used for Gal, popIII, and AGN
 NuXraySoftCut              : 2000.           # X-ray soft-band cut off in (eV)
-NuXrayMax                  : 10000.          # Maximum energy for X-ray band integration
+NuXrayMax                  : 10000.          # Maximum energy for X-ray band integration. 
 
+# Adding AGN broken-power Spectral index
+Flag_IncludeAGNXray        : 0               # 0=off, 1=soft+hard BPL, 2=hard only, 3=Soft only
+SpecIndexXrayAGNSoft       : 2.2             # Soft-band spectral index (nu^{-alpha}, E < E_break)
+SpecIndexXrayAGNHard       : 1.7             # Hard-band spectral index (nu^{-alpha}, E >= E_break)
+Flag_BHARExponentialCut    : 0               # 0=duty-cycle weighted emissivity, 1=exponential cut with random on-time
+Flag_OutputXrayLF          : 0               # 0=off, 1=output X-ray luminosity function histograms
+XrayLF_MinLogL             : 38.0            # minimum log10(LX/erg/s) for X-ray LF histogram
+XrayLF_MaxLogL             : 46.0            # maximum log10(LX/erg/s) for X-ray LF histogram
+XrayLF_BinsPerDex          : 5               # number of LF histogram bins per dex
 
 #---------------------------------------------
 #----- star formation (including PopIII) -----
@@ -140,6 +147,7 @@ SnReheatScaling2          : 0.0     # mass loading factor for SN feedback scalin
 SnReheatScaling2_III      : 0.0
 SnReheatNorm              : 70.0    # mass loading factor for SN feedback scaling (with Vmax [internal units])
 SnReheatNorm_III          : 70.0
+SnMetalRetentionFraction  : 0.0     # fraction of reheated cold-gas metals retained in cold gas (0: legacy behaviour)
 
 
 #-------------------
@@ -261,7 +269,7 @@ ReionSfrTimescale          : 0.5
 TsHeatingFilterType        : 1 
 TsNumFilterSteps           : 40
 TsVelocityComponent        : 3 # 1->X, 2->Y, 3->Z
-EndRedshiftLightcone       : 6.0
+EndRedshiftLightcone       : 5.0
 ReionRBubbleMaxRecomb      : 33.9
 ReionMaxHeatingRedshift    : 30.
 
@@ -270,6 +278,12 @@ ReionMaxHeatingRedshift    : 30.
 #----------------------------------
 
 BirthCloudLifetime         : 10e6  # yr
+DustMetallicityScale       : 1.2   # exponent for metallicity scaling in dust attenuation model
+DustTauUVISM               : 13.5  # ISM UV optical-depth normalization
+DustNISM                   : -1.6  # ISM attenuation slope
+DustTauUVBC                : 381.3 # birth-cloud UV optical-depth normalization
+DustNBC                    : -1.6  # birth-cloud attenuation slope
+DustAZ                     : -0.35 # redshift scaling coefficient in dust attenuation factor
 TargetSnaps                : -1  # Note that simple Python style slicing and indexing works here, so `-1` is the last snapshot `100:110,-5:` is snapshots 100-109 and the last 5 snapshots
 RestBands                  : 1550,1650
 BetaBands                  : 

@@ -52,15 +52,13 @@ Test(emission_lines, set_OIII_coeffs_generates_finite_coefficients)
   reset_run_globals();
   set_OIII_coeffs(1e4);
 
-  cr_expect(isfinite(run_globals.loiii_params.o30));
-  cr_expect(isfinite(run_globals.loiii_params.o40));
-  cr_expect(isfinite(run_globals.loiii_params.k03));
-  cr_expect(isfinite(run_globals.loiii_params.k04));
+  cr_expect(isfinite(run_globals.loiii_params.oxygen_abundance_over_z_sun));
+  cr_expect(isfinite(run_globals.loiii_params.excitation_rate));
+  cr_expect(isfinite(run_globals.loiii_params.branching_ratio));
 
-  cr_expect_gt(run_globals.loiii_params.o30, 0.0);
-  cr_expect_gt(run_globals.loiii_params.o40, 0.0);
-  cr_expect_gt(run_globals.loiii_params.k03, 0.0);
-  cr_expect_gt(run_globals.loiii_params.k04, 0.0);
+  cr_expect_gt(run_globals.loiii_params.oxygen_abundance_over_z_sun, 0.0);
+  cr_expect_gt(run_globals.loiii_params.excitation_rate, 0.0);
+  cr_expect_gt(run_globals.loiii_params.branching_ratio, 0.0);
 }
 
 Test(emission_lines, set_OIII_coeffs_non_positive_temperature_falls_back_to_1e4)
@@ -72,10 +70,9 @@ Test(emission_lines, set_OIII_coeffs_non_positive_temperature_falls_back_to_1e4)
 
   set_OIII_coeffs(0.0);
 
-  cr_expect_float_eq(run_globals.loiii_params.o30, ref.o30, 1e-15);
-  cr_expect_float_eq(run_globals.loiii_params.o40, ref.o40, 1e-15);
-  cr_expect_float_eq(run_globals.loiii_params.k03, ref.k03, 1e-15);
-  cr_expect_float_eq(run_globals.loiii_params.k04, ref.k04, 1e-15);
+  cr_expect_float_eq(run_globals.loiii_params.oxygen_abundance_over_z_sun, ref.oxygen_abundance_over_z_sun, 1e-15);
+  cr_expect_float_eq(run_globals.loiii_params.excitation_rate, ref.excitation_rate, 1e-15);
+  cr_expect_float_eq(run_globals.loiii_params.branching_ratio, ref.branching_ratio, 1e-15);
 }
 
 Test(emission_lines, compute_LOIII_invalid_inputs_set_zero)

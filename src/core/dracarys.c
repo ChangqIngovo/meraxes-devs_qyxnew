@@ -404,10 +404,17 @@ void dracarys()
 
 #if USE_MINI_HALOS
     if (run_globals.params.Flag_IncludeMetalEvo) {
+      int flag_output_metal = 0;
 
       construct_metal_grids(snapshot, nout_gals);
       smooth_Densitygrid_real(snapshot);
-      save_metal_input_grids(snapshot);
+
+      for (int i_out = 0; i_out < NOutputSnaps; i_out++)
+        if (snapshot == run_globals.ListOutputSnaps[i_out]) {
+          save_metal_input_grids(snapshot);
+          flag_output_metal = 1;
+        }
+
       free(run_globals.metal_grids.galaxy_to_slab_map_metals);
     }
 #endif
@@ -495,6 +502,11 @@ void dracarys()
   }
   run_globals.FirstGal = NULL;
   mlog("...done", MLOG_CLOSE);
+
+  // Close the per-rank galaxy HDF5 file (was kept open across all snapshots
+  // to avoid HDF5 1.10.x open-close fragmentation; see prep_hdf5_file()).
+  if (!run_globals.params.FlagMCMC)
+    close_hdf5_file();
 
   // Create the master file
   MPI_Barrier(run_globals.mpi_comm);

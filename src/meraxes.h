@@ -21,6 +21,7 @@
 #define GRAVITY 6.672e-8
 #define SOLAR_MASS 1.989e33
 #define SOLAR_LUM 3.826e33
+#define LOG_10_SOLAR_LUM 33.5827449657
 #define RAD_CONST 7.565e-15
 #define AVOGADRO 6.0222e23
 #define BOLTZMANN 1.3806e-16
@@ -38,6 +39,11 @@
 #define PLANCK_EV (double)(4.1357e-15)
 #define T_RE 1e4
 #define EDDINGTON_TIME_SCALE 450.514890  // Eddington timescale in Megayears
+#define SIGMA_T_CGS (double)(6.652e-25)
+#define EnergySN (double)(1e51) // Energy of a single supernova in ergs
+// Pop III stuff (Atm ENOVA_CC and ENOVA_PISN are the same but you could change)
+#define ENOVA_CC (double)(1e51)
+#define ENOVA_PISN (double)(1e51)
 
 // Extra constants for emission-line calculations
 #define HBAR_SI (PLANCK * 1e-7 / 2 / M_PI)       // [J s]
@@ -97,6 +103,7 @@ typedef struct physics_params_t
   double SnReheatScaling;
   double SnReheatScaling2;
   double SnReheatNorm;
+  double SnMetalRetentionFraction;
   double SnEjectionRedshiftDep;
   double SnEjectionEff;
   double SnEjectionScaling;
@@ -168,12 +175,17 @@ typedef struct physics_params_t
 
   // Parameters to describe the X-ray properties of the sources
   double LXrayGal;
-  double NuXrayGalThreshold;
+  double NuXrayThreshold;
   double SpecIndexXrayGal;
   double LXrayGalIII;
   double SpecIndexXrayIII;
   double NuXraySoftCut;
   double NuXrayMax;
+
+  int Flag_includeAGN;      /* 0=no AGN, 1=soft+hard, 2=hard only, 3=soft only */
+  int Flag_IncludeAGNXray;  /* 0=off, 1=soft+hard BPL, 2=hard only, 3=soft only */
+  double SpecIndexXrayAGNSoft;
+  double SpecIndexXrayAGNHard;
 
   double ReionMaxHeatingRedshift;
 
@@ -224,6 +236,7 @@ typedef struct physics_params_t
   // Flags
   int Flag_ReionizationModifier;
   int Flag_BHFeedback;
+  int Flag_BHObscuedIonization;
   int Flag_BHARExponentialCut;
   int Flag_IRA;
   int Flag_FixDiskRadiusOnInfall;
@@ -258,6 +271,12 @@ typedef struct run_params_t
   char BetaBands[STRLEN];
   char RestBands[STRLEN];
   double BirthCloudLifetime;
+  double DustMetallicityScale;
+  double DustTauUVISM;
+  double DustNISM;
+  double DustTauUVBC;
+  double DustNBC;
+  double DustAZ;
   double DeltaT; // New Parameter added to consider different time of observation! Very important for Pop. III
   char CoolingFuncsDir[STRLEN];
   char RecombinationDir[STRLEN];
@@ -355,6 +374,10 @@ typedef struct run_params_t
   double OIIILF_MinLogL;  //!< Minimum log10(LOIII [erg/s]) for OIIILF bins
   double OIIILF_MaxLogL;  //!< Maximum log10(LOIII [erg/s]) for OIIILF bins
   int OIIILF_BinsPerDex;  //!< Number of OIIILF bins per dex
+  int Flag_OutputXrayLF;  //!< Flag to enable/disable X-ray Luminosity Function output
+  double XrayLF_MinLogL;  //!< Minimum log10(LX [erg/s]) for XrayLF bins (e.g. 40.0)
+  double XrayLF_MaxLogL;  //!< Maximum log10(LX [erg/s]) for XrayLF bins (e.g. 48.0)
+  int XrayLF_BinsPerDex;  //!< Number of XrayLF bins per dex
   int FlagIgnoreProgIndex;
 } run_params_t;
 
@@ -511,9 +534,13 @@ typedef struct reion_grids_t
 #endif
 
   double* SMOOTHED_SFR_GAL;
+  double* SMOOTHED_AGN;  //!< per-cell AGN X-ray luminosity density per shell [erg/s/cm^3]
 #if USE_MINI_HALOS
   double* SMOOTHED_SFR_III;
 #endif
+
+  float* BHXrayEmissivity;   //!< Per-cell AGN X-ray emissivity grid (current snapshot) [slab_n_complex*2]
+  float* bh_xray_histories;  //!< Ring-buffer of NstoreSnapshots_SFR past BHXrayEmissivity snapshots
 
   // Grids necessary for LW background and future disentangling between MC/AC Pop3/Pop2 stuff
 
@@ -584,6 +611,12 @@ typedef struct reion_grids_t
   double mass_weighted_global_residual_xH;
   double mass_weighted_global_clumping_factor;
   double mass_weighted_global_t_resp;
+
+  // Thomson optical depth tracking based on mass-weighted ionization history.
+  double mass_weighted_global_tau_e;
+  double mass_weighted_global_tau_e_sim;
+  int tau_e_prev_snapshot;
+  double tau_e_prev_mass_weighted_xHII;
 
   double volume_ave_J_alpha;
   double volume_ave_xalpha;
@@ -678,7 +711,16 @@ typedef struct galaxy_t
   double BlackHoleMass;
   double FescBH;
   double BHemissivity;
-  double QuasarLuv;  //!< UV luminosity LUV of quasar (1e10 Lsun, summable for mergers)
+  double QuasarLuv;         //!< UV luminosity LUV of quasar (1e10 Lsun, summable for mergers)
+  double QuasarLX;               //!< Intrinsic hard X-ray luminosity [1e10 Lsun]; 0 if inactive
+  int    NHbin;                  //!< Which of the 5 NH bins this snapshot's stochastic draw landed in
+                                  //!< (0-4; logNH 20-21/21-22/22-23/23-24/24-26 CTK), or -1 if no AGN
+                                  //!< activity this step. BHXrayEmissivity below already carries that
+                                  //!< bin's observed (obscured) luminosity, so this (bin, luminosity)
+                                  //!< pair replaces the old QuasarLX_obs0-4/NHfrac0-4 fields (5
+                                  //!< mostly-zero doubles each, every galaxy).
+  double BHXrayEmissivity;       //!< Observed hard X-ray emissivity [1e10 Lsun], obscuration-weighted
+  double BHXrayEmissivity_soft;  //!< Observed soft X-ray emissivity [1e10 Lsun], obscuration-weighted
   double EffectiveBHM;
   double EffectiveBHAR;
   double DutyCycleAGN;
@@ -858,10 +900,9 @@ typedef struct mag_params_t
 
 typedef struct loiii_params_t
 {
-  double o30;
-  double o40;
-  double k03;
-  double k04;
+  double oxygen_abundance_over_z_sun;
+  double excitation_rate;
+  double branching_ratio;
 } loiii_params_t;
 
 //! Global variables which will will be passed around
@@ -869,6 +910,8 @@ typedef struct run_globals_t
 {
   struct run_params_t params;
   char FNameOut[STRLEN];
+  hid_t output_file_id; /*!< per-rank galaxy HDF5 file, kept open across all snapshots to avoid
+                             HDF5 1.10.x free-space fragmentation bug (duplicate entry in cache) */
   reion_grids_t reion_grids;
 #if USE_MINI_HALOS
   metal_grids_t metal_grids;
@@ -900,6 +943,7 @@ typedef struct run_globals_t
   gsl_rng* random_generator;
   void* mhysa_self;
   double Hubble;
+  double tau_e_postEoR;
   double RhoCrit;
   double G;
   double Csquare;
@@ -931,6 +975,7 @@ typedef struct run_globals_t
 #endif
 #ifdef CALC_MAGS
   struct mag_params_t mag_params;
+  int loiii_rest_band_mag_index;
 #endif
 
   int NOutputSnaps;

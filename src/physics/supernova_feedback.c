@@ -20,6 +20,8 @@ void update_reservoirs_from_sn_feedback(galaxy_t* gal,
                                         double new_metals)
 {
   double metallicity;
+  double retained_fraction;
+  double transferred_fraction;
   galaxy_t* central;
 
   // If this is a ghost then it doesn't have an identified halo at this
@@ -56,11 +58,13 @@ void update_reservoirs_from_sn_feedback(galaxy_t* gal,
   if (m_reheat > gal->ColdGas)
     m_reheat = gal->ColdGas;
 
+  retained_fraction = run_globals.params.physics.SnMetalRetentionFraction;
+  transferred_fraction = 1.0 - retained_fraction;
   metallicity = calc_metallicity(gal->ColdGas, gal->MetalsColdGas);
 
   gal->ColdGas -= m_reheat;
-  gal->MetalsColdGas -= m_reheat * metallicity;
-  central->MetalsHotGas += m_reheat * metallicity;
+  gal->MetalsColdGas -= m_reheat * metallicity * transferred_fraction;
+  central->MetalsHotGas += m_reheat * metallicity * transferred_fraction;
   central->HotGas += m_reheat;
 
   // If this is a ghost then we don't know what the real ejected mass is as we

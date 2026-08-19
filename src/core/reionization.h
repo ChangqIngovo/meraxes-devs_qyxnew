@@ -58,6 +58,7 @@ extern "C"
   void assign_slabs(void);
   void call_find_HII_bubbles(int snapshot, int nout_gals, timer_info* timer);
   void call_ComputeTs(int snapshot, int nout_gals, timer_info* timer);
+  double integrate_tau_e_postEoR(double zmax);
   void init_reion_grids(void);
   void malloc_reionization_grids(void);
   void free_reionization_grids(void);
@@ -65,7 +66,6 @@ extern "C"
   void assign_Mvir_crit_to_galaxies(int ngals_in_slabs, int flag_feed);
   void construct_baryon_grids(int snapshot, int ngals);
   void gen_grids_fname(const int snapshot, char* name, const bool relative);
-  void create_reion_input_dummy(int snapshot);
   void save_reion_input_grids(int snapshot);
   void load_reion_sfr_grids(int snapshot_counter_backwards, float weight, const int new_load);
   void save_reion_output_attributes(int snapshot);

@@ -21,6 +21,7 @@
 #include "stellar_feedback.h"
 #include "virial_properties.h"
 #include "physics/emission_lines.h"
+#include "physics/blackhole_feedback.h"
 #if USE_MINI_HALOS
 #include "PopIII.h"
 #include "metal_evo.h"
@@ -272,6 +273,8 @@ void init_meraxes()
     run_globals.LTTime[i] = time_to_present(run_globals.ZZ[i]);
     run_globals.rhocrit[i] = 3 * pow(hubble_at_snapshot(i), 2) / (8 * M_PI * run_globals.G);
   }
+  run_globals.tau_e_postEoR = (run_globals.NOutputSnaps > 0) ? integrate_tau_e_postEoR(run_globals.ZZ[run_globals.LastOutputSnap]) : 0.0;
+
   // validation checks
   if (run_globals.params.Flag_IncludeSpinTemp) {
     if (run_globals.params.physics.ReionMaxHeatingRedshift > run_globals.ZZ[0]) {
@@ -312,6 +315,10 @@ void init_meraxes()
 
   set_ReionEfficiency();
   set_quasar_fobs();
+
+  // Build the AGN NH-obscuration transmission tables once here, rather
+  // than lazily (with a guard check) on every single AGN every snapshot.
+  init_xray_obscuration_tables();
 
   if (run_globals.params.Flag_IncludeSpinTemp){
     run_globals.NstoreSnapshots_SFR = set_sfr_history();

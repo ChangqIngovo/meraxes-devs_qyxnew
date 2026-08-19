@@ -77,10 +77,14 @@ static int read_swift(const enum grid_prop property, const int snapshot, float* 
   char fname[STRLEN];
   sprintf(dirname, "%s/grids/resampled/N%d", params->SimulationDir, run_globals.params.ReionGridDim);
   DIR* dir = opendir(dirname);
-  if (dir)
+  bool use_resampled_file = (dir != NULL);
+  if (use_resampled_file)
     sprintf(fname, "%s/snap_%04d.hdf5", dirname, snapshot);
   else
     sprintf(fname, "%s/grids/snap_%04d.hdf5", params->SimulationDir, snapshot);
+
+  if (dir)
+    closedir(dir);
 
   hid_t file_id = H5Fopen(fname, H5F_ACC_RDONLY, plist_id);
   H5Pclose(plist_id);
@@ -90,10 +94,15 @@ static int read_swift(const enum grid_prop property, const int snapshot, float* 
   double box_size[3] = { 0 };
 
   if (run_globals.mpi_rank == 0) {
-    grid_dim = run_globals.params.ReionGridDim;
-    if (dir)
-      closedir(dir);
-  
+    if (use_resampled_file) {
+      grid_dim = run_globals.params.ReionGridDim;
+    } else {
+      char data[20] = { '\0' };
+      status = H5LTget_attribute_string(file_id, "/Parameters", "DensityGrids:grid_dim", data);
+      assert(status >= 0);
+      grid_dim = atoi(data);
+    }
+
     status = H5LTget_attribute_double(file_id, "/Header", "BoxSize", box_size);
     assert(status >= 0);
   }
@@ -361,10 +370,19 @@ static int read_vr_multi(const enum grid_prop property, const int snapshot, floa
       recvcounts[ii] = sizeof(ptrdiff_t);
       displs[ii] = ii * sizeof(ptrdiff_t);
     }
-    MPI_Allgatherv(&rank_nx[mpi_rank], 1, MPI_BYTE, rank_nx, recvcounts, displs, MPI_BYTE, run_globals.mpi_comm);
     MPI_Allgatherv(
-      &rank_ix_start[mpi_rank], 1, MPI_BYTE, rank_ix_start, recvcounts, displs, MPI_BYTE, run_globals.mpi_comm);
-    MPI_Allgatherv(&rank_nI[mpi_rank], 1, MPI_BYTE, rank_nI, recvcounts, displs, MPI_BYTE, run_globals.mpi_comm);
+      &rank_nx[mpi_rank], sizeof(ptrdiff_t), MPI_BYTE, rank_nx, recvcounts, displs, MPI_BYTE, run_globals.mpi_comm);
+    MPI_Allgatherv(
+      &rank_ix_start[mpi_rank],
+      sizeof(ptrdiff_t),
+      MPI_BYTE,
+      rank_ix_start,
+      recvcounts,
+      displs,
+      MPI_BYTE,
+      run_globals.mpi_comm);
+    MPI_Allgatherv(
+      &rank_nI[mpi_rank], sizeof(ptrdiff_t), MPI_BYTE, rank_nI, recvcounts, displs, MPI_BYTE, run_globals.mpi_comm);
   }
 
   fftwf_complex* rank_slab = fftwf_alloc_complex((size_t)rank_nI[mpi_rank]);
@@ -374,7 +392,7 @@ static int read_vr_multi(const enum grid_prop property, const int snapshot, floa
     rank_slab[ii] = 0 + 0 * I;
 
   MPI_Group run_group;
-  MPI_Comm_group(MPI_COMM_WORLD, &run_group);
+  MPI_Comm_group(run_globals.mpi_comm, &run_group);
 
   // We are currently assuming the grids to be float, but the VELOCIraptor
   // grids are doubles.  For the moment, let's just read the doubles into a
@@ -439,7 +457,7 @@ static int read_vr_multi(const enum grid_prop property, const int snapshot, floa
       MPI_Group_incl(run_group, n_required_ranks[ii], required_ranks + rr_index(ii, 0), &file_group);
 
       MPI_Comm file_comm;
-      MPI_Comm_create_group(MPI_COMM_WORLD, file_group, ii, &file_comm);
+      MPI_Comm_create_group(run_globals.mpi_comm, file_group, ii, &file_comm);
 
       // There must be a tidier work out these indices...
       int file_start = 0;
@@ -464,7 +482,7 @@ static int read_vr_multi(const enum grid_prop property, const int snapshot, floa
 
       // create the memspace
       hid_t memspace_id =
-        H5Screate_simple(1, (hsize_t[1]){ (hsize_t)(rank_nx[mpi_rank] * file_n_cell[1] * file_n_cell[1]) }, NULL);
+        H5Screate_simple(1, (hsize_t[1]){ (hsize_t)(rank_nx[mpi_rank] * file_n_cell[1] * file_n_cell[2]) }, NULL);
       H5Sselect_hyperslab(memspace_id,
                           H5S_SELECT_SET,
                           (hsize_t[1]){ (hsize_t)(rank_start * file_n_cell[1] * file_n_cell[2]) },

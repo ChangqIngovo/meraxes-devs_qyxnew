@@ -566,6 +566,22 @@ void init_magnitudes(void)
     int n_rest = 0;
     double *rest_bands = parse_bands(params->RestBands, &n_rest, "RestBands");
 
+    run_globals.loiii_rest_band_mag_index = -1;
+    for (int i_band = 0; i_band < n_rest; ++i_band) {
+      const double band_lo = fmin(rest_bands[2 * i_band], rest_bands[2 * i_band + 1]);
+      const double band_hi = fmax(rest_bands[2 * i_band], rest_bands[2 * i_band + 1]);
+
+      if (5008.0 >= band_lo && 5008.0 <= band_hi) {
+        run_globals.loiii_rest_band_mag_index = n_beta + i_band;
+        break;
+      }
+    }
+
+    if ((run_globals.params.Flag_OutputOIIILF == 1) && (run_globals.loiii_rest_band_mag_index < 0)) {
+      mlog("Warning: Flag_OutputOIIILF=1 but RestBands does not include 5008A; LOIII_dusty attenuation will not be applied.",
+           MLOG_MESG);
+    }
+
 #ifdef DEBUG
     mlog("# Rest-frame filters:", MLOG_MESG);
     for (int i_band = 0; i_band < n_rest; ++i_band)
@@ -751,12 +767,14 @@ void get_output_magnitudes(float* mags, float* dusty_mags, galaxy_t* gal, int sn
     }
 
     // Best fit dust--gas model from Qiu, Mutch, da Cunha et al. 2019, MNRAS, 489, 1357
-    double factor = pow(calc_metallicity(gal->ColdGas, gal->MetalsColdGas) / 0.02, 1.2) * gal->ColdGas *
-                    pow(gal->DiskScaleLength * 1e3, -2.0) * exp(-0.35 * redshift);
-    dust_params_t dust_params = { .tauUV_ISM = 13.5 * factor,
-                                  .nISM = -1.6,
-                                  .tauUV_BC = 381.3 * factor,
-                                  .nBC = -1.6,
+    double factor = pow(calc_metallicity(gal->ColdGas, gal->MetalsColdGas) / 0.02,
+              run_globals.params.DustMetallicityScale) *
+            gal->ColdGas *
+                    pow(gal->DiskScaleLength * 1e3, -2.0) * exp(run_globals.params.DustAZ * redshift);
+    dust_params_t dust_params = { .tauUV_ISM = run_globals.params.DustTauUVISM * factor,
+                    .nISM = run_globals.params.DustNISM,
+                    .tauUV_BC = run_globals.params.DustTauUVBC * factor,
+                    .nBC = run_globals.params.DustNBC,
                                   .tBC = run_globals.mag_params.tBC };
 
     double local_InBCFlux[MAGS_N_BANDS], local_OutBCFlux[MAGS_N_BANDS];
