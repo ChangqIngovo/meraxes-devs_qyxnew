@@ -46,6 +46,13 @@ galaxy_t* new_galaxy(int snapshot, unsigned long halo_ID)
   gal->Rcool = 0.0;
   gal->StellarMass = 0.0;
   gal->GrossStellarMass = 0.0;
+#if USE_SCATTERS
+  gal->GrossStellarMassNoScatter = 0.0;
+  gal->FescWeightedGSMNoScatter = 0.0;
+  gal->SfrNoScatter = 0.0;
+  gal->TargetFescWeightedGSM = 0.0;
+  gal->TargetFescWeightedSfr = 0.0;
+#endif
   gal->Fesc = 1.0;
   gal->FescWeightedGSM = 0.0;
   gal->MetalsStellarMass = 0.0;
@@ -89,6 +96,13 @@ galaxy_t* new_galaxy(int snapshot, unsigned long halo_ID)
   gal->FescIII = 1.0;
   gal->FescIIIWeightedGSM = 0.0;
   gal->FescIIIWeightedSfr = 0.0;
+#if USE_SCATTERS
+  gal->GrossStellarMassIIINoScatter = 0.0;
+  gal->FescIIIWeightedGSMNoScatter = 0.0;
+  gal->SfrIIINoScatter = 0.0;
+  gal->TargetFescIIIWeightedGSM = 0.0;
+  gal->TargetFescIIIWeightedSfr = 0.0;
+#endif
   gal->Remnant_Mass = 0.;
   gal->Metal_Probability = 0.0;
   gal->Metals_IGM = 0.0;
@@ -183,10 +197,12 @@ void reset_galaxy_properties(galaxy_t* gal, int snapshot)
   gal->LOIII = 0.0;
   gal->ionization_param = 0.0;
   gal->FescWeightedSfr = 0.0;
+#if USE_SCATTERS
+  gal->TargetFescWeightedSfr = 0.0;
+  gal->SfrNoScatter = 0.0;
+#endif
   gal->Mcool = 0.0;
   gal->Rcool = 0.0;
-  gal->MvirCrit = 0.0;
-  gal->MvirCrit_MC = 0.0;
   gal->tau_cgm = 0.0;
   gal->cumulative_ionization = 0.0;
   gal->BHemissivity = 0.0;
@@ -202,9 +218,23 @@ void reset_galaxy_properties(galaxy_t* gal, int snapshot)
   gal->BlackHoleAccretedHotMass = 0.0;
   gal->BlackHoleAccretedColdMass = 0.0;
   gal->t_resp = 1e30;
+  // MvirCrit is assigned from the reionization grid before the physics step
+  // and is consumed by gas_infall() through reionization_modifier(). Keep
+  // that value while patchy UVB feedback is active; otherwise clear it so a
+  // stale value cannot leak into a later branch or diagnostic.
+  if (!(run_globals.params.ReionUVBFlag &&
+        run_globals.params.Flag_PatchyReion &&
+        run_globals.params.physics.Flag_ReionizationModifier != 0)) {
+    gal->MvirCrit = 0.0;
+    gal->MvirCrit_MC = 0.0;
+  }
 #if USE_MINI_HALOS
   gal->SfrIII = 0.0;
   gal->FescIIIWeightedSfr = 0.0;
+#if USE_SCATTERS
+  gal->TargetFescIIIWeightedSfr = 0.0;
+  gal->SfrIIINoScatter = 0.0;
+#endif
 #endif
 
   // Update the stellar mass weighted mean age values.  This only needs to be

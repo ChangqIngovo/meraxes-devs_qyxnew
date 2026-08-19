@@ -9,6 +9,9 @@
 #include "magnitudes.h"
 #include "meraxes.h"
 #include "misc_tools.h"
+#if USE_SCATTERS
+#include "no_shmr_sources.h"
+#endif
 #include "parse_paramfile.h"
 #include "read_halos.h"
 #include "recombinations.h"
@@ -247,6 +250,20 @@ void init_meraxes()
   // read the input snaps list
   read_snap_list();
 
+#if USE_SCATTERS
+  // Initialise runtime SHMR/SFR source tables.
+  run_globals.SourceTableNSnaps =
+      run_globals.params.SnaplistLength;
+
+  run_globals.SHMRs = NULL;
+  run_globals.SFRs = NULL;
+#if USE_MINI_HALOS
+  run_globals.SHMRsIII = NULL;
+  run_globals.SFRsIII = NULL;
+#endif
+
+  init_reion_source_tables();
+#endif
   // parse the requested output snaps
   parse_output_snaps(run_globals.params.OutputSnapsString);
 

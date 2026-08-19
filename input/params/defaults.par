@@ -26,6 +26,7 @@ Flag_ConstructLightcone    : 0   # Construct reionization light cones
 Flag_IncludeLymanWerner    : 0   # if 1 Meraxes computes Lyman-Werner background (crucial for Minihalos)
 Flag_IncludeMetalEvo       : 0   # if 1 Meraxes computes the metal enrichment of the IGM.
 Flag_IncludeStreamVel      : 0   # if 1 Meraxes computes Streaming Velocities (relevant only for Minihalos)
+Flag_RemoveSHMRScatter     : 0
 
 
 #--------------------------------------------------------
@@ -248,6 +249,8 @@ EscapeFracRedshiftScaling  : 0.5  # N.B. use EscapeFracDependency>1 and this = 0
 EscapeFracPropScaling      : 0.5
 EscapeFracBHNorm           : 1
 EscapeFracBHScaling        : 0
+EscapeFracScatterDex       : 0.0
+Flag_SourceRecalibration   : 0
 
 FescCGMSuppressionNorm     : 0.00008 # CGM suppression normalization
 FescCGMSuppressionScaling  : 0.2 # scaling index with column density

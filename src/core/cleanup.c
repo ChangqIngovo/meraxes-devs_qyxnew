@@ -2,6 +2,10 @@
 
 #include "magnitudes.h"
 #include "meraxes.h"
+#if USE_SCATTERS
+#include "fesc_recalibration.h"
+#include "no_shmr_sources.h"
+#endif
 #include "parse_paramfile.h"
 #include "read_grids.h"
 #include "read_halos.h"
@@ -36,6 +40,11 @@ void cleanup()
     free_reionization_grids();
     fftwf_mpi_cleanup();
   }
+
+#if USE_SCATTERS
+  fesc_recalibration_free();
+  no_shmr_sources_free();
+#endif
 
   if (run_globals.params.Flag_IncludeRecombinations) {
     free_MHR();
@@ -72,7 +81,6 @@ void cleanup()
   free(run_globals.LTTime);
   free(run_globals.ZZ);
   free(run_globals.AA);
-
   if (run_globals.gpu != NULL)
     free(run_globals.gpu);
 
