@@ -1914,8 +1914,13 @@ void construct_baryon_grids(int snapshot, int local_ngals)
 
             case prop_sfrIII:
 #if USE_STOCHASTICITY
-              buffer[ind] +=
-                  no_shmr_sources_grid_sfr_source_popIII(gal);
+              buffer[ind] += run_globals.params.Flag_InstantaneousSFR
+                       ? (run_globals.params.physics.Flag_RemoveSHMRScatter == 1
+                          ? gal->SfrIIINoScatter
+                          : gal->SfrIII)
+                       : (run_globals.params.physics.Flag_RemoveSHMRScatter == 1
+                          ? gal->GrossStellarMassIIINoScatter
+                          : gal->GrossStellarMassIII);
 #else
               buffer[ind] +=
                   run_globals.params.Flag_InstantaneousSFR
@@ -1936,17 +1941,23 @@ void construct_baryon_grids(int snapshot, int local_ngals)
               }
               break;
 
-            case prop_sfr:
+              case prop_sfr: {
 #if USE_STOCHASTICITY
               buffer[ind] +=
-                  no_shmr_sources_grid_sfr_source(gal);
-#else
-              buffer[ind] +=
                   run_globals.params.Flag_InstantaneousSFR
-                      ? gal->Sfr
-                      : gal->GrossStellarMass;
+                 ? (run_globals.params.physics.Flag_RemoveSHMRScatter == 1
+                   ? gal->SfrNoScatter
+                   : gal->Sfr)
+                 : (run_globals.params.physics.Flag_RemoveSHMRScatter == 1
+                   ? gal->GrossStellarMassNoScatter
+                   : gal->GrossStellarMass);
+#else
+              buffer[ind] += run_globals.params.Flag_InstantaneousSFR
+                        ? gal->Sfr
+                        : gal->GrossStellarMass;
 #endif
               break;
+                 }
 
             default:
               mlog_error("Unrecognised property in slab creation.");
