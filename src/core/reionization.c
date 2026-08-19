@@ -986,83 +986,101 @@ void malloc_reionization_grids()
                                                                    plan_flags);
 
 
-      if (run_globals.params.physics.Flag_IncludeAGNXray) {
-        grids->BHXrayEmissivity  = fftwf_alloc_real((size_t)slab_n_complex * 2);
-        grids->bh_xray_histories = fftwf_alloc_real((size_t)slab_n_complex * 2 * run_globals.NstoreSnapshots_Heating);
-        grids->BHXrayEmissivity_soft  = fftwf_alloc_real((size_t)slab_n_complex * 2);
-        grids->bh_xray_histories_soft = fftwf_alloc_real((size_t)slab_n_complex * 2 * run_globals.NstoreSnapshots_Heating);
-
+      {
         /*
-         * Spatial (k-space, radius-R) smoothing buffers/plans for
-         * BHXrayEmissivity(_soft) — same shell-filtering pipeline as
-         * sfr/sfr_filtered, mirroring effective_bhm/effective_bhar above.
+         * Flag_IncludeAGNXray: 0=off, 1=soft+hard, 2=hard only, 3=soft only.
+         * Allocate each band's grids/histories/FFT buffers/plans only when
+         * that band is actually selected — mode 2/3 shouldn't pay for the
+         * band it never uses.
          */
-        grids->BHXrayEmissivity_unfiltered = fftwf_alloc_complex((size_t)slab_n_complex);
-        grids->BHXrayEmissivity_filtered = fftwf_alloc_complex((size_t)slab_n_complex);
-        grids->BHXrayEmissivity_forward_plan = fftwf_mpi_plan_dft_r2c_3d(ReionGridDim,
-                                                                         ReionGridDim,
-                                                                         ReionGridDim,
-                                                                         grids->BHXrayEmissivity,
-                                                                         grids->BHXrayEmissivity_unfiltered,
-                                                                         run_globals.mpi_comm,
-                                                                         plan_flags);
-        grids->BHXrayEmissivity_filtered_reverse_plan = fftwf_mpi_plan_dft_c2r_3d(ReionGridDim,
-                                                                                  ReionGridDim,
-                                                                                  ReionGridDim,
-                                                                                  grids->BHXrayEmissivity_filtered,
-                                                                                  (float*)grids->BHXrayEmissivity_filtered,
-                                                                                  run_globals.mpi_comm,
-                                                                                  plan_flags);
+        int flag_agn = run_globals.params.physics.Flag_IncludeAGNXray;
+        bool agn_hard_needed = (flag_agn == 1 || flag_agn == 2);
+        bool agn_soft_needed = (flag_agn == 1 || flag_agn == 3);
 
-        grids->BHXrayEmissivity_soft_unfiltered = fftwf_alloc_complex((size_t)slab_n_complex);
-        grids->BHXrayEmissivity_soft_filtered = fftwf_alloc_complex((size_t)slab_n_complex);
-        grids->BHXrayEmissivity_soft_forward_plan = fftwf_mpi_plan_dft_r2c_3d(ReionGridDim,
-                                                                              ReionGridDim,
-                                                                              ReionGridDim,
-                                                                              grids->BHXrayEmissivity_soft,
-                                                                              grids->BHXrayEmissivity_soft_unfiltered,
-                                                                              run_globals.mpi_comm,
-                                                                              plan_flags);
-        grids->BHXrayEmissivity_soft_filtered_reverse_plan =
-          fftwf_mpi_plan_dft_c2r_3d(ReionGridDim,
-                                    ReionGridDim,
-                                    ReionGridDim,
-                                    grids->BHXrayEmissivity_soft_filtered,
-                                    (float*)grids->BHXrayEmissivity_soft_filtered,
-                                    run_globals.mpi_comm,
-                                    plan_flags);
+        if (agn_hard_needed) {
+          grids->BHXrayEmissivity  = fftwf_alloc_real((size_t)slab_n_complex * 2);
+          grids->bh_xray_histories = fftwf_alloc_real((size_t)slab_n_complex * 2 * run_globals.NstoreSnapshots_Heating);
 
-        /*
-         * Fail loudly here if allocation ever fails, rather than leaving a
-         * NULL pointer for downstream code to silently work around. Nothing
-         * else in this function checks its fftwf_alloc_* calls either, but
-         * these are the only ones that are conditionally allocated, so
-         * a NULL here is the one case worth telling apart from "feature off".
-         */
-        if (grids->BHXrayEmissivity == NULL || grids->bh_xray_histories == NULL ||
-            grids->BHXrayEmissivity_soft == NULL || grids->bh_xray_histories_soft == NULL ||
-            grids->BHXrayEmissivity_unfiltered == NULL || grids->BHXrayEmissivity_filtered == NULL ||
-            grids->BHXrayEmissivity_soft_unfiltered == NULL || grids->BHXrayEmissivity_soft_filtered == NULL) {
-          mlog_error("Failed to allocate AGN X-ray emissivity grids.");
-          ABORT(EXIT_FAILURE);
+          /*
+           * Spatial (k-space, radius-R) smoothing buffers/plans for
+           * BHXrayEmissivity — same shell-filtering pipeline as
+           * sfr/sfr_filtered, mirroring effective_bhm/effective_bhar above.
+           */
+          grids->BHXrayEmissivity_unfiltered = fftwf_alloc_complex((size_t)slab_n_complex);
+          grids->BHXrayEmissivity_filtered = fftwf_alloc_complex((size_t)slab_n_complex);
+          grids->BHXrayEmissivity_forward_plan = fftwf_mpi_plan_dft_r2c_3d(ReionGridDim,
+                                                                           ReionGridDim,
+                                                                           ReionGridDim,
+                                                                           grids->BHXrayEmissivity,
+                                                                           grids->BHXrayEmissivity_unfiltered,
+                                                                           run_globals.mpi_comm,
+                                                                           plan_flags);
+          grids->BHXrayEmissivity_filtered_reverse_plan = fftwf_mpi_plan_dft_c2r_3d(ReionGridDim,
+                                                                                    ReionGridDim,
+                                                                                    ReionGridDim,
+                                                                                    grids->BHXrayEmissivity_filtered,
+                                                                                    (float*)grids->BHXrayEmissivity_filtered,
+                                                                                    run_globals.mpi_comm,
+                                                                                    plan_flags);
+
+          /*
+           * Fail loudly here if allocation ever fails, rather than leaving a
+           * NULL pointer for downstream code to silently work around. Nothing
+           * else in this function checks its fftwf_alloc_* calls either, but
+           * these are the only ones that are conditionally allocated, so
+           * a NULL here is the one case worth telling apart from "feature off".
+           */
+          if (grids->BHXrayEmissivity == NULL || grids->bh_xray_histories == NULL ||
+              grids->BHXrayEmissivity_unfiltered == NULL || grids->BHXrayEmissivity_filtered == NULL) {
+            mlog_error("Failed to allocate AGN X-ray (hard band) emissivity grids.");
+            ABORT(EXIT_FAILURE);
+          }
+          for (size_t ii = 0; ii < (size_t)slab_n_complex * 2; ii++)
+            grids->BHXrayEmissivity[ii] = 0.0f;
+          for (size_t ii = 0; ii < (size_t)slab_n_complex * 2 * run_globals.NstoreSnapshots_Heating; ii++)
+            grids->bh_xray_histories[ii] = 0.0f;
+
+          /*
+           * THIS ADDITION IS MADE TO ADD THE X-RAY CONTRIBUTION BY AGN
+           * Same size as SMOOTHED_SFR_GAL. calloc ensures zeroed on allocation.
+           */
+          grids->SMOOTHED_AGN = calloc((size_t)slab_n_real_smoothedSFR, sizeof(double));
         }
-        for (size_t ii = 0; ii < (size_t)slab_n_complex * 2; ii++) {
-          grids->BHXrayEmissivity[ii]      = 0.0f;
-          grids->BHXrayEmissivity_soft[ii] = 0.0f;
+
+        if (agn_soft_needed) {
+          grids->BHXrayEmissivity_soft  = fftwf_alloc_real((size_t)slab_n_complex * 2);
+          grids->bh_xray_histories_soft = fftwf_alloc_real((size_t)slab_n_complex * 2 * run_globals.NstoreSnapshots_Heating);
+
+          grids->BHXrayEmissivity_soft_unfiltered = fftwf_alloc_complex((size_t)slab_n_complex);
+          grids->BHXrayEmissivity_soft_filtered = fftwf_alloc_complex((size_t)slab_n_complex);
+          grids->BHXrayEmissivity_soft_forward_plan = fftwf_mpi_plan_dft_r2c_3d(ReionGridDim,
+                                                                                ReionGridDim,
+                                                                                ReionGridDim,
+                                                                                grids->BHXrayEmissivity_soft,
+                                                                                grids->BHXrayEmissivity_soft_unfiltered,
+                                                                                run_globals.mpi_comm,
+                                                                                plan_flags);
+          grids->BHXrayEmissivity_soft_filtered_reverse_plan =
+            fftwf_mpi_plan_dft_c2r_3d(ReionGridDim,
+                                      ReionGridDim,
+                                      ReionGridDim,
+                                      grids->BHXrayEmissivity_soft_filtered,
+                                      (float*)grids->BHXrayEmissivity_soft_filtered,
+                                      run_globals.mpi_comm,
+                                      plan_flags);
+
+          if (grids->BHXrayEmissivity_soft == NULL || grids->bh_xray_histories_soft == NULL ||
+              grids->BHXrayEmissivity_soft_unfiltered == NULL || grids->BHXrayEmissivity_soft_filtered == NULL) {
+            mlog_error("Failed to allocate AGN X-ray (soft band) emissivity grids.");
+            ABORT(EXIT_FAILURE);
+          }
+          for (size_t ii = 0; ii < (size_t)slab_n_complex * 2; ii++)
+            grids->BHXrayEmissivity_soft[ii] = 0.0f;
+          for (size_t ii = 0; ii < (size_t)slab_n_complex * 2 * run_globals.NstoreSnapshots_Heating; ii++)
+            grids->bh_xray_histories_soft[ii] = 0.0f;
+
+          grids->SMOOTHED_AGN_soft = calloc((size_t)slab_n_real_smoothedSFR, sizeof(double));
         }
-        for (size_t ii = 0; ii < (size_t)slab_n_complex * 2 * run_globals.NstoreSnapshots_Heating; ii++) {
-          grids->bh_xray_histories[ii]      = 0.0f;
-          grids->bh_xray_histories_soft[ii] = 0.0f;
-        }
-        /*
-         * THIS ADDITION IS MADE TO ADD THE X-RAY CONTRIBUTION BY AGN
-         * Same size as SMOOTHED_SFR_GAL. calloc ensures zeroed on allocation.
-         * _soft is the equivalent buffer for the soft-band AGN emissivity.
-         * Gated on Flag_IncludeAGNXray (with the other AGN X-ray buffers
-         * above) so we don't waste RAM when the feature is not enabled.
-         */
-        grids->SMOOTHED_AGN      = calloc((size_t)slab_n_real_smoothedSFR, sizeof(double));
-        grids->SMOOTHED_AGN_soft = calloc((size_t)slab_n_real_smoothedSFR, sizeof(double));
       }
 
       grids->x_e_box = fftwf_alloc_real((size_t)slab_n_complex * 2);
@@ -1299,20 +1317,24 @@ void free_reionization_grids()
      */
     free(grids->SMOOTHED_AGN);
     free(grids->SMOOTHED_AGN_soft);
-    if (run_globals.params.physics.Flag_IncludeAGNXray) {
-      fftwf_destroy_plan(grids->BHXrayEmissivity_filtered_reverse_plan);
-      fftwf_destroy_plan(grids->BHXrayEmissivity_forward_plan);
-      fftwf_free(grids->BHXrayEmissivity_filtered);
-      fftwf_free(grids->BHXrayEmissivity_unfiltered);
-      fftwf_free(grids->BHXrayEmissivity);
-      fftwf_free(grids->bh_xray_histories);
-
-      fftwf_destroy_plan(grids->BHXrayEmissivity_soft_filtered_reverse_plan);
-      fftwf_destroy_plan(grids->BHXrayEmissivity_soft_forward_plan);
-      fftwf_free(grids->BHXrayEmissivity_soft_filtered);
-      fftwf_free(grids->BHXrayEmissivity_soft_unfiltered);
-      fftwf_free(grids->BHXrayEmissivity_soft);
-      fftwf_free(grids->bh_xray_histories_soft);
+    {
+      int flag_agn = run_globals.params.physics.Flag_IncludeAGNXray;
+      if (flag_agn == 1 || flag_agn == 2) {
+        fftwf_destroy_plan(grids->BHXrayEmissivity_filtered_reverse_plan);
+        fftwf_destroy_plan(grids->BHXrayEmissivity_forward_plan);
+        fftwf_free(grids->BHXrayEmissivity_filtered);
+        fftwf_free(grids->BHXrayEmissivity_unfiltered);
+        fftwf_free(grids->BHXrayEmissivity);
+        fftwf_free(grids->bh_xray_histories);
+      }
+      if (flag_agn == 1 || flag_agn == 3) {
+        fftwf_destroy_plan(grids->BHXrayEmissivity_soft_filtered_reverse_plan);
+        fftwf_destroy_plan(grids->BHXrayEmissivity_soft_forward_plan);
+        fftwf_free(grids->BHXrayEmissivity_soft_filtered);
+        fftwf_free(grids->BHXrayEmissivity_soft_unfiltered);
+        fftwf_free(grids->BHXrayEmissivity_soft);
+        fftwf_free(grids->bh_xray_histories_soft);
+      }
     }
 
 #if USE_MINI_HALOS
@@ -1864,13 +1886,13 @@ void construct_baryon_grids(int snapshot, int local_ngals)
       for (int snap = run_globals.NstoreSnapshots_Heating - 2; snap >= 0; snap--)
           sfrIII_histories_grid[(snap+1)*local_n_complex * 2+ii] = sfrIII_histories_grid[snap*local_n_complex * 2+ii];
 #endif
-      if (run_globals.params.physics.Flag_IncludeAGNXray) {
+      if (run_globals.params.physics.Flag_IncludeAGNXray == 1 || run_globals.params.physics.Flag_IncludeAGNXray == 2) {
         bh_xray_grid[ii] = 0.0f;
         for (int snap = run_globals.NstoreSnapshots_Heating - 2; snap >= 0; snap--)
           bh_xray_hist_grid[(snap+1)*local_n_complex * 2 + ii] =
               bh_xray_hist_grid[snap*local_n_complex * 2 + ii];
       }
-      if (run_globals.params.physics.Flag_IncludeAGNXray) {
+      if (run_globals.params.physics.Flag_IncludeAGNXray == 1 || run_globals.params.physics.Flag_IncludeAGNXray == 3) {
         bh_xray_grid_soft[ii] = 0.0f;
         for (int snap = run_globals.NstoreSnapshots_Heating - 2; snap >= 0; snap--)
           bh_xray_hist_grid_soft[(snap+1)*local_n_complex * 2 + ii] =
@@ -1914,13 +1936,19 @@ void construct_baryon_grids(int snapshot, int local_ngals)
       continue;
 
     /*
-     * Skip the AGN emissivity properties if SpinTemp or AGN X-ray heating is
-     * off. Matches the effective_bhm/effective_bhar pattern below: trust the
-     * flags, not a NULL check — the grids are guaranteed allocated whenever
-     * these flags are on (see the allocation abort in construct_baryon_grids).
+     * Skip the AGN emissivity properties if SpinTemp is off, or if the band
+     * in question isn't selected by Flag_IncludeAGNXray (1=soft+hard,
+     * 2=hard only, 3=soft only) — each band's grid is only guaranteed
+     * allocated when its own band is selected (see the allocation abort in
+     * malloc_reionization_grids). Trust the flags, not a NULL check.
      */
-    if ((prop == prop_bh_xray_emissivity || prop == prop_bh_xray_emissivity_soft) &&
-        (!run_globals.params.Flag_IncludeSpinTemp || !run_globals.params.physics.Flag_IncludeAGNXray))
+    if (prop == prop_bh_xray_emissivity &&
+        (!run_globals.params.Flag_IncludeSpinTemp ||
+         !(run_globals.params.physics.Flag_IncludeAGNXray == 1 || run_globals.params.physics.Flag_IncludeAGNXray == 2)))
+      continue;
+    if (prop == prop_bh_xray_emissivity_soft &&
+        (!run_globals.params.Flag_IncludeSpinTemp ||
+         !(run_globals.params.physics.Flag_IncludeAGNXray == 1 || run_globals.params.physics.Flag_IncludeAGNXray == 3)))
       continue;
 
     // no need to bh grids if not using BHFeedback
@@ -2355,12 +2383,12 @@ void load_reion_sfr_grids(int snapshot_counter_backwards, float weight, const in
             (grids->sfrIII)[grid_index(ii, jj, kk, ReionGridDim, INDEX_PADDED)] = grids->sfrIII_histories[snapshot_counter_backwards * local_n_complex * 2+grid_index(ii, jj, kk, ReionGridDim, INDEX_REAL)]  * weight;
 #endif
 
-            if (run_globals.params.physics.Flag_IncludeAGNXray)
+            if (run_globals.params.physics.Flag_IncludeAGNXray == 1 || run_globals.params.physics.Flag_IncludeAGNXray == 2)
               (grids->BHXrayEmissivity)[grid_index(ii, jj, kk, ReionGridDim, INDEX_PADDED)] =
                   grids->bh_xray_histories[snapshot_counter_backwards * local_n_complex * 2 +
                                            grid_index(ii, jj, kk, ReionGridDim, INDEX_REAL)] * weight;
             /* Same as above, independently, for the soft-band grid/history. */
-            if (run_globals.params.physics.Flag_IncludeAGNXray)
+            if (run_globals.params.physics.Flag_IncludeAGNXray == 1 || run_globals.params.physics.Flag_IncludeAGNXray == 3)
               (grids->BHXrayEmissivity_soft)[grid_index(ii, jj, kk, ReionGridDim, INDEX_PADDED)] =
                   grids->bh_xray_histories_soft[snapshot_counter_backwards * local_n_complex * 2 +
                                                 grid_index(ii, jj, kk, ReionGridDim, INDEX_REAL)] * weight;
@@ -2375,12 +2403,12 @@ void load_reion_sfr_grids(int snapshot_counter_backwards, float weight, const in
             (grids->sfrIII)[grid_index(ii, jj, kk, ReionGridDim, INDEX_PADDED)] += grids->sfrIII_histories[snapshot_counter_backwards * local_n_complex * 2+grid_index(ii, jj, kk, ReionGridDim, INDEX_REAL)]  * weight;
 #endif
 
-            if (run_globals.params.physics.Flag_IncludeAGNXray)
+            if (run_globals.params.physics.Flag_IncludeAGNXray == 1 || run_globals.params.physics.Flag_IncludeAGNXray == 2)
               (grids->BHXrayEmissivity)[grid_index(ii, jj, kk, ReionGridDim, INDEX_PADDED)] +=
                   grids->bh_xray_histories[snapshot_counter_backwards * local_n_complex * 2 +
                                            grid_index(ii, jj, kk, ReionGridDim, INDEX_REAL)] * weight;
             /* Same as above, independently, for the soft-band grid/history. */
-            if (run_globals.params.physics.Flag_IncludeAGNXray)
+            if (run_globals.params.physics.Flag_IncludeAGNXray == 1 || run_globals.params.physics.Flag_IncludeAGNXray == 3)
               (grids->BHXrayEmissivity_soft)[grid_index(ii, jj, kk, ReionGridDim, INDEX_PADDED)] +=
                   grids->bh_xray_histories_soft[snapshot_counter_backwards * local_n_complex * 2 +
                                                 grid_index(ii, jj, kk, ReionGridDim, INDEX_REAL)] * weight;
