@@ -2,9 +2,8 @@
 
 #include "magnitudes.h"
 #include "meraxes.h"
-#if USE_SCATTERS
-#include "fesc_recalibration.h"
-#include "no_shmr_sources.h"
+#if USE_STOCHASTICITY
+#include "Stochasticity.h"
 #endif
 #include "parse_paramfile.h"
 #include "read_grids.h"
@@ -41,7 +40,7 @@ void cleanup()
     fftwf_mpi_cleanup();
   }
 
-#if USE_SCATTERS
+#if USE_STOCHASTICITY
   no_shmr_sources_free();
 #endif
 

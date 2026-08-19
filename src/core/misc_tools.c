@@ -1,7 +1,7 @@
 #include <assert.h>
 #include <math.h>
 
-#if USE_SCATTERS
+#if USE_STOCHASTICITY
 #include <gsl/gsl_cdf.h>
 #include <gsl/gsl_rng.h>
 #endif
@@ -52,7 +52,7 @@ double calc_metallicity(double total_gas, double metals)
   return Z;
 }
 
-#if USE_SCATTERS
+#if USE_STOCHASTICITY
 double apply_lognormal_scatter(double mean_esc, double scatter_dex)
 {
   double sigma_ln;

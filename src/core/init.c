@@ -9,8 +9,8 @@
 #include "magnitudes.h"
 #include "meraxes.h"
 #include "misc_tools.h"
-#if USE_SCATTERS
-#include "no_shmr_sources.h"
+#if USE_STOCHASTICITY
+#include "Stochasticity.h"
 #endif
 #include "parse_paramfile.h"
 #include "read_halos.h"
@@ -250,7 +250,7 @@ void init_meraxes()
   // read the input snaps list
   read_snap_list();
 
-#if USE_SCATTERS
+#if USE_STOCHASTICITY
   // Initialise runtime SHMR/SFR source tables.
   run_globals.SHMRs = NULL;
   run_globals.SFRs = NULL;

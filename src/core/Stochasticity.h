@@ -1,9 +1,11 @@
-#ifndef NO_SHMR_SOURCES_H
-#define NO_SHMR_SOURCES_H
+#ifndef STOCHASTICITY_H
+#define STOCHASTICITY_H
 
 struct galaxy_t;
 
-#if USE_SCATTERS
+#if USE_STOCHASTICITY
+void fesc_recalibration(int snapshot);
+
 void no_shmr_sources_prepare(int snapshot);
 double no_shmr_sources_grid_gsm(const struct galaxy_t* gal);
 double no_shmr_sources_grid_sfr(const struct galaxy_t* gal);

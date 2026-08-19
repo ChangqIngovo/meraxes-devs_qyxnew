@@ -186,7 +186,7 @@ void merge_with_target(galaxy_t* gal, int* dead_gals, int snapshot)
   parent->GrossStellarMassIII += gal->GrossStellarMassIII;
   parent->FescIIIWeightedGSM += gal->FescIIIWeightedGSM;
   parent->FescIIIWeightedSfr += gal->FescIIIWeightedSfr;
-#if USE_SCATTERS
+#if USE_STOCHASTICITY
   parent->GrossStellarMassIIINoScatter +=
       gal->GrossStellarMassIIINoScatter;
   parent->FescIIIWeightedGSMNoScatter +=
@@ -197,7 +197,7 @@ void merge_with_target(galaxy_t* gal, int* dead_gals, int snapshot)
 #endif
   parent->GrossStellarMass += gal->GrossStellarMass;
   parent->FescWeightedGSM += gal->FescWeightedGSM;
-#if USE_SCATTERS
+#if USE_STOCHASTICITY
   // Cumulative no-scatter source histories.
   parent->GrossStellarMassNoScatter += gal->GrossStellarMassNoScatter;
   parent->FescWeightedGSMNoScatter += gal->FescWeightedGSMNoScatter;

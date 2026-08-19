@@ -10,7 +10,7 @@ static void check_problem_params(run_params_t* run_params)
     ABORT(EXIT_FAILURE);
   }
 
-#if USE_SCATTERS
+#if USE_STOCHASTICITY
   if (run_params->physics.EscapeFracScatterDex > ABS_TOL &&
       run_params->physics.Flag_RemoveSHMRScatter != 0) {
       mlog_error(
@@ -34,7 +34,7 @@ static void check_problem_params(run_params_t* run_params)
       run_params->physics.Flag_SourceRecalibration != 0) {
     mlog_error(
         "A scatter prescription was requested, but Meraxes was compiled "
-        "with USE_SCATTERS=OFF."
+        "with USE_STOCHASTICITY=OFF."
     );
     ABORT(EXIT_FAILURE);
   }

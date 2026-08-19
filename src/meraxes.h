@@ -61,7 +61,7 @@
 #define ABS_TOL (float)1e-8
 // ======================================================
 
-#if USE_SCATTERS
+#if USE_STOCHASTICITY
 // Parameters for removing stellar-source--halo scatter.
 // Both the stellar-mass and SFR tables use this halo-mass grid.
 #define SHMR_NTYPES 3
@@ -695,7 +695,7 @@ typedef struct galaxy_t
   double Fesc;
   double FescWeightedGSM;
   double FescWeightedSfr;
-#if USE_SCATTERS
+#if USE_STOCHASTICITY
   // These are reference budgets for fesc recalibration, or final prepared
   // grid sources when the mutually exclusive no-SHMR prescription is active.
   double TargetFescWeightedGSM;
@@ -731,7 +731,7 @@ typedef struct galaxy_t
   double t_resp;                //!< Local relaxation timescale (in Myr)
   int Galaxy_Population; // You need it also if you are not disentangling PopIII/PopII (when Mini_halos is off, this is
                          // = 2)
-#if USE_SCATTERS
+#if USE_STOCHASTICITY
   // Alternative stellar sources with the stellar--halo scatter removed.
   // The GSM quantities are cumulative; SfrNoScatter is snapshot-local.
   double GrossStellarMassNoScatter;
@@ -747,7 +747,7 @@ typedef struct galaxy_t
   double FescIII;
   double FescIIIWeightedGSM;
   double FescIIIWeightedSfr;
-#if USE_SCATTERS
+#if USE_STOCHASTICITY
   double GrossStellarMassIIINoScatter;
   double FescIIIWeightedGSMNoScatter;
   double SfrIIINoScatter;
@@ -961,7 +961,7 @@ typedef struct run_globals_t
   float* Mass_Values;
   float* Time_Values;
 
-#if USE_SCATTERS
+#if USE_STOCHASTICITY
   // Both source tables have size SnaplistLength * SHMR_NTYPES * SHMR_NX.
   float* SHMRs;
   float* SFRs;

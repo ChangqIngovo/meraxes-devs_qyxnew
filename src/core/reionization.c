@@ -17,9 +17,8 @@
 #include "read_grids.h"
 #include "reionization.h"
 #include "virial_properties.h"
-#if USE_SCATTERS
-#include "fesc_recalibration.h"
-#include "no_shmr_sources.h"
+#if USE_STOCHASTICITY
+#include "Stochasticity.h"
 #endif
 
 static hid_t create_reion_grid(const int snapshot, const bool parallel);
@@ -220,7 +219,7 @@ void update_galaxy_fesc_vals(galaxy_t* gal, double new_stars, int snapshot)
   CLAMP_0_1(fescIII);
 #endif
 
-#if USE_SCATTERS
+#if USE_STOCHASTICITY
   const double fesc_target = fesc;
 
 #if USE_MINI_HALOS
@@ -263,7 +262,7 @@ void update_galaxy_fesc_vals(galaxy_t* gal, double new_stars, int snapshot)
     gal->FescWeightedGSM += new_stars * fesc;
     gal->FescWeightedSfr += gal->Sfr * fesc;
 
-#if USE_SCATTERS
+#if USE_STOCHASTICITY
   if (params->Flag_SourceRecalibration && params->EscapeFracScatterDex > ABS_TOL) {
     gal->TargetFescWeightedGSM += new_stars * fesc_target;
     gal->TargetFescWeightedSfr += gal->Sfr * fesc_target;
@@ -276,7 +275,7 @@ void update_galaxy_fesc_vals(galaxy_t* gal, double new_stars, int snapshot)
     gal->FescIIIWeightedGSM += new_stars * fescIII;
     gal->FescIIIWeightedSfr += gal->SfrIII * fescIII;
 
-#if USE_SCATTERS
+#if USE_STOCHASTICITY
   if (params->Flag_SourceRecalibration && params->EscapeFracScatterDex > ABS_TOL){
     gal->TargetFescIIIWeightedGSM += new_stars * fescIII_target;
     gal->TargetFescIIIWeightedSfr += gal->SfrIII * fescIII_target;
@@ -288,7 +287,7 @@ void update_galaxy_fesc_vals(galaxy_t* gal, double new_stars, int snapshot)
   gal->FescWeightedGSM += new_stars * fesc;
   gal->FescWeightedSfr += gal->Sfr * fesc;
 
-#if USE_SCATTERS
+#if USE_STOCHASTICITY
   if (params->Flag_SourceRecalibration && params->EscapeFracScatterDex > ABS_TOL){
     gal->TargetFescWeightedGSM += new_stars * fesc_target;
     gal->TargetFescWeightedSfr += gal->Sfr * fesc_target;
@@ -1783,7 +1782,7 @@ void construct_baryon_grids(int snapshot, int local_ngals)
   ptrdiff_t* slab_ix_start = run_globals.reion_grids.slab_ix_start;
   int local_n_complex = (int)(run_globals.reion_grids.slab_n_complex[run_globals.mpi_rank]);
 
-#if USE_SCATTERS
+#if USE_STOCHASTICITY
   if (run_globals.params.physics.Flag_SourceRecalibration)
     fesc_recalibration(snapshot);
   no_shmr_sources_prepare(snapshot);
@@ -1914,7 +1913,7 @@ void construct_baryon_grids(int snapshot, int local_ngals)
               break;
 
             case prop_sfrIII:
-#if USE_SCATTERS
+#if USE_STOCHASTICITY
               buffer[ind] +=
                   no_shmr_sources_grid_sfr_source_popIII(gal);
 #else
@@ -1938,7 +1937,7 @@ void construct_baryon_grids(int snapshot, int local_ngals)
               break;
 
             case prop_sfr:
-#if USE_SCATTERS
+#if USE_STOCHASTICITY
               buffer[ind] +=
                   no_shmr_sources_grid_sfr_source(gal);
 #else

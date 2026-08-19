@@ -20,7 +20,7 @@ extern "C"
 #endif
 
   double calc_metallicity(double total_gas, double metals);
-#if USE_SCATTERS
+#if USE_STOCHASTICITY
   double apply_lognormal_scatter(double mean_esc, double scatter_dex);
 #endif
   int compare_ints(const void* a, const void* b);
