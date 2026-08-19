@@ -924,6 +924,13 @@ void _ComputeTs(int snapshot)
 
     // Conversion of the input bolometric luminosity (new) to a ZETA_X (old) to be consistent with Ts.c from 21cmFAST
     // Conversion here means the code otherwise remains the same as the original Ts.c
+
+    /*
+     * L(nu) = L0*(nu/nu_th)^(Γ-1) on [nu_lo,nu_hi], Γ = photon index = 1 - alpha (alpha = SpecIndexXray*), nu_th = NuXrayThreshold.
+     * L_band = int L(nu)dnu = L0*nu_th^(Γ-1)/Γ * (nu_hi^Γ - nu_lo^Γ)  =>  C = L0/L_band = Γ*nu_th^(Γ-1)/(nu_hi^Γ-nu_lo^Γ).
+     * [nu_lo,nu_hi] must equal the input's calibration band: GAL/III/AGN-soft -> [NuXrayThreshold,NuXraySoftCut],
+     * AGN-hard -> [NuXraySoftCut,NuXrayMax] (same reason integrate_over_nu splits soft/hard). Γ==0: C = 1/(nu_th*ln(nu_hi/nu_lo)).
+     */
     if (fabs(run_globals.params.physics.SpecIndexXrayGal - 1.0) < REL_TOL) {
       Luminosity_converstion_factor_GAL =
         (run_globals.params.physics.NuXrayThreshold * NU_over_EV) *
@@ -968,18 +975,24 @@ void _ComputeTs(int snapshot)
      * SMOOTHED_AGN is already a luminosity density in erg/s/cm^3. (from gal->BHXrayEmissivity, an actual X-ray luminosity. */
     Luminosity_converstion_factor_AGN_soft /= (PLANCK);
 
-    /* --- Hard component: nu_break to nu_hard_cut --- */
+    /* --- Hard component: nu_break to nu_hard_cut ---
+     * Band is [NuXraySoftCut, NuXrayMax] here (unlike soft/GAL/III above,
+     * which integrate [NuXrayThreshold, NuXraySoftCut]) — quasar_lx (hard)
+     * is calibrated over the hard band, so the conversion factor has to be
+     * derived over that same band or the pivot amplitude L0 comes out wrong.
+     * The pivot frequency itself stays at NuXrayThreshold, matching
+     * const_zp_prefactor_AGN_hard's division by NuXrayThreshold below. */
     if (fabs(run_globals.params.physics.SpecIndexXrayAGNHard - 1.0) < REL_TOL) {
       Luminosity_converstion_factor_AGN_hard =
         (run_globals.params.physics.NuXrayThreshold * NU_over_EV) *
-        log(run_globals.params.physics.NuXraySoftCut /
-            run_globals.params.physics.NuXrayThreshold);
+        log(run_globals.params.physics.NuXrayMax /
+            run_globals.params.physics.NuXraySoftCut);
       Luminosity_converstion_factor_AGN_hard = 1.0 / Luminosity_converstion_factor_AGN_hard;
     } else {
       Luminosity_converstion_factor_AGN_hard =
-        pow(run_globals.params.physics.NuXraySoftCut * NU_over_EV,
+        pow(run_globals.params.physics.NuXrayMax * NU_over_EV,
             1.0 - run_globals.params.physics.SpecIndexXrayAGNHard) -
-        pow(run_globals.params.physics.NuXrayThreshold * NU_over_EV,
+        pow(run_globals.params.physics.NuXraySoftCut * NU_over_EV,
             1.0 - run_globals.params.physics.SpecIndexXrayAGNHard);
       Luminosity_converstion_factor_AGN_hard = 1.0 / Luminosity_converstion_factor_AGN_hard;
       Luminosity_converstion_factor_AGN_hard *=
