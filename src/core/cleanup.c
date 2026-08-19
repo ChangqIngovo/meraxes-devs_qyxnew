@@ -42,7 +42,6 @@ void cleanup()
   }
 
 #if USE_SCATTERS
-  fesc_recalibration_free();
   no_shmr_sources_free();
 #endif
 

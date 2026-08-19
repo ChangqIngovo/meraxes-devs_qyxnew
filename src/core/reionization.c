@@ -502,9 +502,6 @@ void call_ComputeTs(int snapshot, int nout_gals, timer_info* timer)
 
 void init_reion_grids()
 {
-#if USE_SCATTERS
-  fesc_recalibration_init();
-#endif
 
   reion_grids_t* grids = &(run_globals.reion_grids);
   int ReionGridDim = run_globals.params.ReionGridDim;
@@ -1787,7 +1784,8 @@ void construct_baryon_grids(int snapshot, int local_ngals)
   int local_n_complex = (int)(run_globals.reion_grids.slab_n_complex[run_globals.mpi_rank]);
 
 #if USE_SCATTERS
-  fesc_recalibration_prepare(snapshot);
+  if (run_globals.params.physics.Flag_SourceRecalibration)
+    fesc_recalibration(snapshot);
   no_shmr_sources_prepare(snapshot);
 #endif
 

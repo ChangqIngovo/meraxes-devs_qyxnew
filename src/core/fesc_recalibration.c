@@ -41,45 +41,12 @@ static double fesc_correction_popII_sfr = 1.0;
 static double fesc_correction_popIII_gsm = 1.0;
 static double fesc_correction_popIII_sfr = 1.0;
 #endif
-static int fesc_recalibration_initialized = 0;
 static int fesc_recalibration_active = 0;
-static int fesc_recalibration_snapshot = -1;
-
-static int fesc_recalibration_enabled(void)
-{
-  physics_params_t* params = &(run_globals.params.physics);
-
-  return params->Flag_SourceRecalibration &&
-         !params->Flag_RemoveSHMRScatter &&
-         params->EscapeFracScatterDex > 0.0;
-}
 
 static int fesc_recalibration_source_eligible(const galaxy_t* gal)
 {
   return gal->Type >= 0 && gal->Type <= 2;
 }
-
-void fesc_recalibration_init(void)
-{
-  if (fesc_recalibration_initialized)
-    return;
-
-  fesc_correction_popII_gsm = 1.0;
-  fesc_correction_popII_sfr = 1.0;
-#if USE_MINI_HALOS
-  fesc_correction_popIII_gsm = 1.0;
-  fesc_correction_popIII_sfr = 1.0;
-#endif
-  fesc_recalibration_active = 0;
-  fesc_recalibration_snapshot = -1;
-  fesc_recalibration_initialized = 1;
-
-  if (run_globals.mpi_rank == 0) {
-    mlog("Global fesc source recalibration is %s.", MLOG_MESG,
-         fesc_recalibration_enabled() ? "active" : "inactive");
-  }
-}
-
 
 static double fesc_get_global_correction(double target,
                                          double source,
@@ -130,22 +97,8 @@ static double fesc_get_global_correction(double target,
   return correction;
 }
 
-void fesc_recalibration_prepare(int snapshot)
+void fesc_recalibration(int snapshot)
 {
-  if (!fesc_recalibration_initialized)
-    fesc_recalibration_init();
-
-  fesc_recalibration_snapshot = snapshot;
-  fesc_recalibration_active = 0;
-  fesc_correction_popII_gsm = 1.0;
-  fesc_correction_popII_sfr = 1.0;
-#if USE_MINI_HALOS
-  fesc_correction_popIII_gsm = 1.0;
-  fesc_correction_popIII_sfr = 1.0;
-#endif
-
-  if (!fesc_recalibration_enabled())
-    return;
 
   double local[FESC_GLOBAL_NSUM] = {0.0};
   double global[FESC_GLOBAL_NSUM] = {0.0};
@@ -299,17 +252,4 @@ double fesc_recalibration_grid_sfr_popIII(const galaxy_t* gal)
   return gal->FescIIIWeightedSfr;
 }
 #endif
-
-void fesc_recalibration_free(void)
-{
-  fesc_correction_popII_gsm = 1.0;
-  fesc_correction_popII_sfr = 1.0;
-#if USE_MINI_HALOS
-  fesc_correction_popIII_gsm = 1.0;
-  fesc_correction_popIII_sfr = 1.0;
-#endif
-  fesc_recalibration_initialized = 0;
-  fesc_recalibration_active = 0;
-  fesc_recalibration_snapshot = -1;
-}
 #endif

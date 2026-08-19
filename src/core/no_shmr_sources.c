@@ -1436,7 +1436,6 @@ void no_shmr_sources_free(void)
 void init_reion_source_tables(void)
 {
   no_shmr_sources_init();
-  fesc_recalibration_init();
 }
 
 #endif
