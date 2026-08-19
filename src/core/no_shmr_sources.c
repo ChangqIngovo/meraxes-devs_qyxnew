@@ -1357,14 +1357,14 @@ double no_shmr_sources_grid_gsm(const galaxy_t* gal)
 {
   return no_shmr_enabled()
       ? gal->TargetFescWeightedGSM
-      : fesc_recalibration_grid_gsm(gal);
+      : gal->FescWeightedGSM;
 }
 
 double no_shmr_sources_grid_sfr(const galaxy_t* gal)
 {
   return no_shmr_enabled()
       ? gal->TargetFescWeightedSfr
-      : fesc_recalibration_grid_sfr(gal);
+      : gal->FescWeightedSfr;
 }
 
 double no_shmr_sources_grid_sfr_source(const galaxy_t* gal)
@@ -1385,14 +1385,14 @@ double no_shmr_sources_grid_gsm_popIII(const galaxy_t* gal)
 {
   return no_shmr_enabled()
       ? gal->TargetFescIIIWeightedGSM
-      : fesc_recalibration_grid_gsm_popIII(gal);
+      : gal->FescIIIWeightedGSM;
 }
 
 double no_shmr_sources_grid_sfr_popIII(const galaxy_t* gal)
 {
   return no_shmr_enabled()
       ? gal->TargetFescIIIWeightedSfr
-      : fesc_recalibration_grid_sfr_popIII(gal);
+      : gal->FescIIIWeightedSfr;
 }
 
 double no_shmr_sources_grid_sfr_source_popIII(const galaxy_t* gal)

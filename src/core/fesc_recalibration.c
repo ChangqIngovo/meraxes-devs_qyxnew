@@ -35,14 +35,6 @@ enum fesc_correction_index
   FESC_CORRECTION_N
 };
 
-static double fesc_correction_popII_gsm = 1.0;
-static double fesc_correction_popII_sfr = 1.0;
-#if USE_MINI_HALOS
-static double fesc_correction_popIII_gsm = 1.0;
-static double fesc_correction_popIII_sfr = 1.0;
-#endif
-static int fesc_recalibration_active = 0;
-
 static int fesc_recalibration_source_eligible(const galaxy_t* gal)
 {
   return gal->Type >= 0 && gal->Type <= 2;
@@ -176,15 +168,6 @@ void fesc_recalibration(int snapshot)
       run_globals.mpi_comm
   );
 
-  fesc_correction_popII_gsm = corrections[FESC_CORRECTION_POPII_GSM];
-  fesc_correction_popII_sfr = corrections[FESC_CORRECTION_POPII_SFR];
-#if USE_MINI_HALOS
-  fesc_correction_popIII_gsm = corrections[FESC_CORRECTION_POPIII_GSM];
-  fesc_correction_popIII_sfr = corrections[FESC_CORRECTION_POPIII_SFR];
-#endif
-
-  fesc_recalibration_active = 1;
-
   if (run_globals.mpi_rank == 0) {
 #if USE_MINI_HALOS
     mlog(
@@ -193,10 +176,10 @@ void fesc_recalibration(int snapshot)
         "C_GSM_III=%.12g C_SFR_III=%.12g.",
         MLOG_MESG,
         snapshot,
-        fesc_correction_popII_gsm,
-        fesc_correction_popII_sfr,
-        fesc_correction_popIII_gsm,
-        fesc_correction_popIII_sfr
+        corrections[FESC_CORRECTION_POPII_GSM],
+        corrections[FESC_CORRECTION_POPII_SFR],
+        corrections[FESC_CORRECTION_POPIII_GSM],
+        corrections[FESC_CORRECTION_POPIII_SFR]
     );
 #else
     mlog(
@@ -204,52 +187,26 @@ void fesc_recalibration(int snapshot)
         "C_GSM=%.12g C_SFR=%.12g.",
         MLOG_MESG,
         snapshot,
-        fesc_correction_popII_gsm,
-        fesc_correction_popII_sfr
+        corrections[FESC_CORRECTION_POPII_GSM],
+        corrections[FESC_CORRECTION_POPII_SFR]
     );
 #endif
   }
-}
 
-double fesc_recalibration_grid_gsm(const galaxy_t* gal)
-{
-  if (fesc_recalibration_active &&
-      fesc_recalibration_source_eligible(gal)) {
-    return fesc_correction_popII_gsm * gal->FescWeightedGSM;
-  }
-
-  return gal->FescWeightedGSM;
-}
-
-double fesc_recalibration_grid_sfr(const galaxy_t* gal)
-{
-  if (fesc_recalibration_active &&
-      fesc_recalibration_source_eligible(gal)) {
-    return fesc_correction_popII_sfr * gal->FescWeightedSfr;
-  }
-
-  return gal->FescWeightedSfr;
-}
-
+  // Apply the global corrections to all galaxies in this snapshot.
+  gal = run_globals.FirstGal;
+  while (gal != NULL) {
+    if (fesc_recalibration_source_eligible(gal)) {
+      gal->FescWeightedGSM *= corrections[FESC_CORRECTION_POPII_GSM];
+      gal->FescWeightedSfr *= corrections[FESC_CORRECTION_POPII_SFR];
 #if USE_MINI_HALOS
-double fesc_recalibration_grid_gsm_popIII(const galaxy_t* gal)
-{
-  if (fesc_recalibration_active &&
-      fesc_recalibration_source_eligible(gal)) {
-    return fesc_correction_popIII_gsm * gal->FescIIIWeightedGSM;
+      gal->FescIIIWeightedGSM *= corrections[FESC_CORRECTION_POPIII_GSM];
+      gal->FescIIIWeightedSfr *= corrections[FESC_CORRECTION_POPIII_SFR];
+#endif  
+    }
+
+    gal = gal->Next;
   }
-
-  return gal->FescIIIWeightedGSM;
+  
 }
-
-double fesc_recalibration_grid_sfr_popIII(const galaxy_t* gal)
-{
-  if (fesc_recalibration_active &&
-      fesc_recalibration_source_eligible(gal)) {
-    return fesc_correction_popIII_sfr * gal->FescIIIWeightedSfr;
-  }
-
-  return gal->FescIIIWeightedSfr;
-}
-#endif
 #endif
