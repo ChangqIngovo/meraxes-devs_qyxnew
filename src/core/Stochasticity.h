@@ -19,7 +19,7 @@
 void fesc_recalibration(void);
 
 void no_shmr_apply_fixed_bin_recalibration(int population);
-void no_shmr_build_source_tables(void);
+void no_shmr_build_source_tables(int population);
 void no_shmr_prepare_sources(int snapshot);
 
 void no_shmr_sources_init(void);
