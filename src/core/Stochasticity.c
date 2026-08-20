@@ -213,191 +213,8 @@ void fesc_recalibration(int snapshot)
   
 }
 
-// SHMR stochasticity related 
-typedef enum no_shmr_population_t
-{
-  NO_SHMR_POPII = 2,
-#if USE_MINI_HALOS
-  NO_SHMR_POPIII = 3,
-#endif
-} no_shmr_population_t;
-
-static size_t no_shmr_population_slot(no_shmr_population_t population)
-{
-  return (size_t)(population - NO_SHMR_POPII);
-}
-
-static no_shmr_population_t no_shmr_current_population(const galaxy_t* gal)
-{
-#if USE_MINI_HALOS
-  return (no_shmr_population_t)gal->Galaxy_Population;
-#else
-  (void)gal;
-  return NO_SHMR_POPII;
-#endif
-}
-
-static float* no_shmr_shmr_table(no_shmr_population_t population)
-{
-#if USE_MINI_HALOS
-  if (population == NO_SHMR_POPIII)
-    return run_globals.SHMRsIII;
-#else
-  (void)population;
-#endif
-
-  return run_globals.SHMRs;
-}
-
-static float* no_shmr_sfr_table(no_shmr_population_t population)
-{
-#if USE_MINI_HALOS
-  if (population == NO_SHMR_POPIII)
-    return run_globals.SFRsIII;
-#else
-  (void)population;
-#endif
-
-  return run_globals.SFRs;
-}
-
-static double no_shmr_gross_stellar_mass(const galaxy_t* gal,
-                                         no_shmr_population_t population)
-{
-#if USE_MINI_HALOS
-  if (population == NO_SHMR_POPIII)
-    return gal->GrossStellarMassIII;
-#else
-  (void)population;
-#endif
-
-  return gal->GrossStellarMass;
-}
-
-static double no_shmr_sfr(const galaxy_t* gal,
-                          no_shmr_population_t population)
-{
-#if USE_MINI_HALOS
-  if (population == NO_SHMR_POPIII)
-    return gal->SfrIII;
-#else
-  (void)population;
-#endif
-
-  return gal->Sfr;
-}
-
-static double no_shmr_raw_gsm(const galaxy_t* gal,
-                              no_shmr_population_t population)
-{
-#if USE_MINI_HALOS
-  if (population == NO_SHMR_POPIII)
-    return gal->FescIIIWeightedGSM;
-#else
-  (void)population;
-#endif
-
-  return gal->FescWeightedGSM;
-}
-
-static double no_shmr_raw_sfr(const galaxy_t* gal,
-                              no_shmr_population_t population)
-{
-#if USE_MINI_HALOS
-  if (population == NO_SHMR_POPIII)
-    return gal->FescIIIWeightedSfr;
-#else
-  (void)population;
-#endif
-
-  return gal->FescWeightedSfr;
-}
-
-static double no_shmr_gross_stellar_mass_no_scatter(
-    const galaxy_t* gal,
-    no_shmr_population_t population)
-{
-#if USE_MINI_HALOS
-  if (population == NO_SHMR_POPIII)
-    return gal->GrossStellarMassIIINoScatter;
-#else
-  (void)population;
-#endif
-
-  return gal->GrossStellarMassNoScatter;
-}
-
-static double no_shmr_weighted_gsm_no_scatter(
-    const galaxy_t* gal,
-    no_shmr_population_t population)
-{
-#if USE_MINI_HALOS
-  if (population == NO_SHMR_POPIII)
-    return gal->FescIIIWeightedGSMNoScatter;
-#else
-  (void)population;
-#endif
-
-  return gal->FescWeightedGSMNoScatter;
-}
-
-static double no_shmr_grid_gsm(const galaxy_t* gal,
-                               no_shmr_population_t population)
-{
-#if USE_MINI_HALOS
-  if (population == NO_SHMR_POPIII)
-    return gal->TargetFescIIIWeightedGSM;
-#else
-  (void)population;
-#endif
-
-  return gal->TargetFescWeightedGSM;
-}
-
-static double no_shmr_grid_sfr(const galaxy_t* gal,
-                               no_shmr_population_t population)
-{
-#if USE_MINI_HALOS
-  if (population == NO_SHMR_POPIII)
-    return gal->TargetFescIIIWeightedSfr;
-#else
-  (void)population;
-#endif
-
-  return gal->TargetFescWeightedSfr;
-}
-
-static void no_shmr_set_grid_gsm(galaxy_t* gal,
-                                 no_shmr_population_t population,
-                                 double value)
-{
-#if USE_MINI_HALOS
-  if (population == NO_SHMR_POPIII) {
-    gal->TargetFescIIIWeightedGSM = value;
-    return;
-  }
-#else
-  (void)population;
-#endif
-
-  gal->TargetFescWeightedGSM = value;
-}
-
-static void no_shmr_set_grid_sfr(galaxy_t* gal,
-                                 no_shmr_population_t population,
-                                 double value)
-{
-#if USE_MINI_HALOS
-  if (population == NO_SHMR_POPIII) {
-    gal->TargetFescIIIWeightedSfr = value;
-    return;
-  }
-#else
-  (void)population;
-#endif
-
-  gal->TargetFescWeightedSfr = value;
-}
+// SHMR stochasticity related. Population is the raw Galaxy_Population
+// value: 2 for Pop II, 3 for Pop III (Pop III only exists under USE_MINI_HALOS).
 
 static int no_shmr_mvir_bin_clamped(const galaxy_t* gal)
 {
@@ -532,10 +349,14 @@ static double no_shmr_get_log10_table_value(const float* table,
 
 static double no_shmr_get_log10_mstar(const galaxy_t* gal,
                                       int snapshot,
-                                      no_shmr_population_t population)
+                                      int population)
 {
   return no_shmr_get_log10_table_value(
-      no_shmr_shmr_table(population),
+#if USE_MINI_HALOS
+      population == 3 ? run_globals.SHMRsIII : run_globals.SHMRs,
+#else
+      run_globals.SHMRs,
+#endif
       gal,
       snapshot
   );
@@ -543,23 +364,28 @@ static double no_shmr_get_log10_mstar(const galaxy_t* gal,
 
 static double no_shmr_get_sfr(const galaxy_t* gal,
                               int snapshot,
-                              no_shmr_population_t population)
+                              int population)
 {
   return no_shmr_log10_sfr_to_linear(
       no_shmr_get_log10_table_value(
-          no_shmr_sfr_table(population),
+#if USE_MINI_HALOS
+          population == 3 ? run_globals.SFRsIII : run_globals.SFRs,
+#else
+          run_globals.SFRs,
+#endif
           gal,
           snapshot
       )
   );
 }
 
-static size_t no_shmr_sample_cell(no_shmr_population_t population,
+// Population slot for cell indexing: 0 for Pop II, 1 for Pop III.
+static size_t no_shmr_sample_cell(int population,
                                   int type,
                                   int bin)
 {
   return
-      ((no_shmr_population_slot(population) * (size_t)SHMR_NTYPES) +
+      (((size_t)population - 2) * (size_t)SHMR_NTYPES +
        (size_t)type) * (size_t)SHMR_NX +
       (size_t)bin;
 }
@@ -568,7 +394,7 @@ static void no_shmr_count_population_samples(
     size_t* gsm_offsets,
     size_t* sfr_offsets,
     const galaxy_t* gal,
-    no_shmr_population_t population,
+    int population,
     int bin)
 {
   size_t cell = no_shmr_sample_cell(
@@ -577,8 +403,13 @@ static void no_shmr_count_population_samples(
       bin
   );
 
-  double mstar = no_shmr_gross_stellar_mass(gal, population);
-  double sfr = no_shmr_sfr(gal, population);
+#if USE_MINI_HALOS
+  double mstar = population == 3 ? gal->GrossStellarMassIII : gal->GrossStellarMass;
+  double sfr = population == 3 ? gal->SfrIII : gal->Sfr;
+#else
+  double mstar = gal->GrossStellarMass;
+  double sfr = gal->Sfr;
+#endif
 
   if (mstar > 0.0 && mstar <= DBL_MAX)
     gsm_offsets[cell + 1]++;
@@ -593,7 +424,7 @@ static void no_shmr_store_population_samples(
     size_t* gsm_cursors,
     size_t* sfr_cursors,
     const galaxy_t* gal,
-    no_shmr_population_t population,
+    int population,
     int bin)
 {
   size_t cell = no_shmr_sample_cell(
@@ -602,8 +433,13 @@ static void no_shmr_store_population_samples(
       bin
   );
 
-  double mstar = no_shmr_gross_stellar_mass(gal, population);
-  double sfr = no_shmr_sfr(gal, population);
+#if USE_MINI_HALOS
+  double mstar = population == 3 ? gal->GrossStellarMassIII : gal->GrossStellarMass;
+  double sfr = population == 3 ? gal->SfrIII : gal->Sfr;
+#else
+  double mstar = gal->GrossStellarMass;
+  double sfr = gal->Sfr;
+#endif
 
   if (mstar > 0.0 && mstar <= DBL_MAX)
     gsm_values[gsm_cursors[cell]++] = log10(mstar);
@@ -831,7 +667,7 @@ static void no_shmr_global_bin_medians(
 static void no_shmr_store_median_table(
     float* table,
     int snapshot,
-  no_shmr_population_t population,
+    int population,
     const double* medians,
     const unsigned char* valid,
     double floor_value)
@@ -879,12 +715,19 @@ static void no_shmr_store_median_table(
 // ranks use identical noSHMR source grids in later steps.
 static void no_shmr_broadcast_population_tables(
     int snapshot,
-  no_shmr_population_t population)
+    int population)
 {
   int n_values = SHMR_NTYPES * SHMR_NX;
+#if USE_MINI_HALOS
+  float* shmr_table = population == 3 ? run_globals.SHMRsIII : run_globals.SHMRs;
+  float* sfr_table = population == 3 ? run_globals.SFRsIII : run_globals.SFRs;
+#else
+  float* shmr_table = run_globals.SHMRs;
+  float* sfr_table = run_globals.SFRs;
+#endif
 
   MPI_Bcast(
-      no_shmr_shmr_table(population) + SHMR_INDEX(snapshot, 0, 0),
+      shmr_table + SHMR_INDEX(snapshot, 0, 0),
       n_values,
       MPI_FLOAT,
       0,
@@ -892,7 +735,7 @@ static void no_shmr_broadcast_population_tables(
   );
 
   MPI_Bcast(
-      no_shmr_sfr_table(population) + SHMR_INDEX(snapshot, 0, 0),
+      sfr_table + SHMR_INDEX(snapshot, 0, 0),
       n_values,
       MPI_FLOAT,
       0,
@@ -954,8 +797,11 @@ void no_shmr_build_source_tables(int snapshot)
   while (gal != NULL) {
     if (stochasticity_source_eligible(gal)) {
       int bin = no_shmr_mvir_bin_clamped(gal);
-      no_shmr_population_t population =
-          no_shmr_current_population(gal);
+#if USE_MINI_HALOS
+      int population = gal->Galaxy_Population;
+#else
+      int population = 2;
+#endif
 
       no_shmr_count_population_samples(
           gsm_offsets,
@@ -1019,8 +865,11 @@ void no_shmr_build_source_tables(int snapshot)
   while (gal != NULL) {
     if (stochasticity_source_eligible(gal)) {
       int bin = no_shmr_mvir_bin_clamped(gal);
-      no_shmr_population_t population =
-          no_shmr_current_population(gal);
+#if USE_MINI_HALOS
+      int population = gal->Galaxy_Population;
+#else
+      int population = 2;
+#endif
 
       no_shmr_store_population_samples(
           gsm_values,
@@ -1061,7 +910,7 @@ void no_shmr_build_source_tables(int snapshot)
     no_shmr_store_median_table(
         run_globals.SHMRs,
         snapshot,
-        NO_SHMR_POPII,
+        2,
         gsm_medians,
         gsm_valid,
         NO_SHMR_LOG10_MSTAR_FLOOR
@@ -1070,7 +919,7 @@ void no_shmr_build_source_tables(int snapshot)
     no_shmr_store_median_table(
         run_globals.SFRs,
         snapshot,
-        NO_SHMR_POPII,
+        2,
         sfr_medians,
         sfr_valid,
         NO_SHMR_LOG10_SFR_FLOOR
@@ -1080,7 +929,7 @@ void no_shmr_build_source_tables(int snapshot)
     no_shmr_store_median_table(
         run_globals.SHMRsIII,
         snapshot,
-        NO_SHMR_POPIII,
+        3,
         gsm_medians,
         gsm_valid,
         NO_SHMR_LOG10_MSTAR_FLOOR
@@ -1089,7 +938,7 @@ void no_shmr_build_source_tables(int snapshot)
     no_shmr_store_median_table(
         run_globals.SFRsIII,
         snapshot,
-        NO_SHMR_POPIII,
+        3,
         sfr_medians,
         sfr_valid,
         NO_SHMR_LOG10_SFR_FLOOR
@@ -1097,10 +946,10 @@ void no_shmr_build_source_tables(int snapshot)
 #endif
   }
 
-  no_shmr_broadcast_population_tables(snapshot, NO_SHMR_POPII);
+  no_shmr_broadcast_population_tables(snapshot, 2);
 
 #if USE_MINI_HALOS
-  no_shmr_broadcast_population_tables(snapshot, NO_SHMR_POPIII);
+  no_shmr_broadcast_population_tables(snapshot, 3);
 #endif
 
   free(gsm_values);
@@ -1118,18 +967,24 @@ void no_shmr_build_source_tables(int snapshot)
 // resulting no-scatter and target weighted fields back to the real galaxy.
 static void no_shmr_evaluate_active_source(
     galaxy_t* gal,
-  no_shmr_population_t population,
+    int population,
     double mstar_source,
     double sfr_source,
     int snapshot)
 {
   galaxy_t source_view = *gal;
 
+#if USE_MINI_HALOS
   double previous_mstar =
-      no_shmr_gross_stellar_mass_no_scatter(gal, population);
+      population == 3 ? gal->GrossStellarMassIIINoScatter : gal->GrossStellarMassNoScatter;
 
   double previous_weighted_gsm =
-      no_shmr_weighted_gsm_no_scatter(gal, population);
+      population == 3 ? gal->FescIIIWeightedGSMNoScatter : gal->FescWeightedGSMNoScatter;
+#else
+  double previous_mstar = gal->GrossStellarMassNoScatter;
+
+  double previous_weighted_gsm = gal->FescWeightedGSMNoScatter;
+#endif
 
   if (mstar_source < previous_mstar)
     mstar_source = previous_mstar;
@@ -1139,7 +994,7 @@ static void no_shmr_evaluate_active_source(
   source_view.StellarMass = mstar_source;
 
 #if USE_MINI_HALOS
-  if (population == NO_SHMR_POPIII) {
+  if (population == 3) {
     gal->SfrIIINoScatter = sfr_source;
     source_view.GrossStellarMassIII = mstar_source;
     source_view.StellarMass_III = mstar_source;
@@ -1169,7 +1024,7 @@ static void no_shmr_evaluate_active_source(
   );
 
 #if USE_MINI_HALOS
-  if (population == NO_SHMR_POPIII) {
+  if (population == 3) {
     gal->GrossStellarMassIIINoScatter = mstar_source;
     gal->FescIIIWeightedGSMNoScatter =
         source_view.FescIIIWeightedGSM;
@@ -1199,14 +1054,21 @@ void no_shmr_prepare_sources(int snapshot)
 
   while (gal != NULL) {
     if (stochasticity_source_eligible(gal)) {
-      no_shmr_population_t population =
-          no_shmr_current_population(gal);
+#if USE_MINI_HALOS
+      int population = gal->Galaxy_Population;
 
       double raw_mstar =
-          no_shmr_gross_stellar_mass(gal, population);
+          population == 3 ? gal->GrossStellarMassIII : gal->GrossStellarMass;
 
       double raw_sfr =
-          no_shmr_sfr(gal, population);
+          population == 3 ? gal->SfrIII : gal->Sfr;
+#else
+      int population = 2;
+
+      double raw_mstar = gal->GrossStellarMass;
+
+      double raw_sfr = gal->Sfr;
+#endif
 
       gal->TargetFescWeightedGSM =
           gal->FescWeightedGSMNoScatter;
@@ -1249,28 +1111,44 @@ void no_shmr_prepare_sources(int snapshot)
 
 static int no_shmr_has_gsm_recalibration_source(
     const galaxy_t* gal,
-    no_shmr_population_t population)
+    int population)
 {
+#if USE_MINI_HALOS
+  double raw_gsm = population == 3 ? gal->FescIIIWeightedGSM : gal->FescWeightedGSM;
+  double grid_gsm = population == 3 ? gal->TargetFescIIIWeightedGSM : gal->TargetFescWeightedGSM;
+#else
+  double raw_gsm = gal->FescWeightedGSM;
+  double grid_gsm = gal->TargetFescWeightedGSM;
+#endif
+
   return stochasticity_source_eligible(gal) &&
-         (no_shmr_raw_gsm(gal, population) > 0.0 ||
-          no_shmr_grid_gsm(gal, population) > 0.0);
+         (raw_gsm > 0.0 || grid_gsm > 0.0);
 }
 
 static int no_shmr_has_sfr_recalibration_source(
     const galaxy_t* gal,
-    no_shmr_population_t population)
+    int population)
 {
+#if USE_MINI_HALOS
+  int current_population = gal->Galaxy_Population;
+  double raw_sfr = population == 3 ? gal->FescIIIWeightedSfr : gal->FescWeightedSfr;
+  double grid_sfr = population == 3 ? gal->TargetFescIIIWeightedSfr : gal->TargetFescWeightedSfr;
+#else
+  int current_population = 2;
+  double raw_sfr = gal->FescWeightedSfr;
+  double grid_sfr = gal->TargetFescWeightedSfr;
+#endif
+
   return stochasticity_source_eligible(gal) &&
-         no_shmr_current_population(gal) == population &&
-         (no_shmr_raw_sfr(gal, population) > 0.0 ||
-          no_shmr_grid_sfr(gal, population) > 0.0);
+         current_population == population &&
+         (raw_sfr > 0.0 || grid_sfr > 0.0);
 }
 
 // Apply fixed-bin global recalibration factors: reduce per-bin raw/source
 // budgets across MPI ranks, compute correction ratios for bins with support,
 // and scale galaxy target weighted GSM/SFR in the corresponding bin.
 void no_shmr_apply_fixed_bin_recalibration(
-  int population)
+    int population)
 {
   size_t n_bins =
       (size_t)SHMR_NTYPES * (size_t)SHMR_NX;
@@ -1314,24 +1192,40 @@ void no_shmr_apply_fixed_bin_recalibration(
           (size_t)no_shmr_mvir_bin_clamped(gal);
 
       if (has_gsm) {
+#if USE_MINI_HALOS
         double raw_gsm =
-            no_shmr_raw_gsm(gal, population);
+            population == 3 ? gal->FescIIIWeightedGSM : gal->FescWeightedGSM;
+#else
+        double raw_gsm = gal->FescWeightedGSM;
+#endif
 
         local_target_gsm[index] += raw_gsm;
+#if USE_MINI_HALOS
         local_source_gsm[index] +=
-            no_shmr_grid_gsm(gal, population);
+            population == 3 ? gal->TargetFescIIIWeightedGSM : gal->TargetFescWeightedGSM;
+#else
+        local_source_gsm[index] += gal->TargetFescWeightedGSM;
+#endif
 
         if (raw_gsm > 0.0)
           local_target_gsm_count[index]++;
       }
 
       if (has_sfr) {
+#if USE_MINI_HALOS
         double raw_sfr =
-            no_shmr_raw_sfr(gal, population);
+            population == 3 ? gal->FescIIIWeightedSfr : gal->FescWeightedSfr;
+#else
+        double raw_sfr = gal->FescWeightedSfr;
+#endif
 
         local_target_sfr[index] += raw_sfr;
+#if USE_MINI_HALOS
         local_source_sfr[index] +=
-            no_shmr_grid_sfr(gal, population);
+            population == 3 ? gal->TargetFescIIIWeightedSfr : gal->TargetFescWeightedSfr;
+#else
+        local_source_sfr[index] += gal->TargetFescWeightedSfr;
+#endif
 
         if (raw_sfr > 0.0)
           local_target_sfr_count[index]++;
@@ -1414,69 +1308,91 @@ void no_shmr_apply_fixed_bin_recalibration(
         (size_t)no_shmr_mvir_bin_clamped(gal);
 
     if (has_gsm) {
+#if USE_MINI_HALOS
       double raw_gsm =
-          no_shmr_raw_gsm(gal, population);
+          population == 3 ? gal->FescIIIWeightedGSM : gal->FescWeightedGSM;
 
       double source_gsm =
-          no_shmr_grid_gsm(gal, population);
+          population == 3 ? gal->TargetFescIIIWeightedGSM : gal->TargetFescWeightedGSM;
+#else
+      double raw_gsm = gal->FescWeightedGSM;
+
+      double source_gsm = gal->TargetFescWeightedGSM;
+#endif
+
+      double new_grid_gsm;
 
       if (global_source_gsm[index] <=
               ABS_TOL &&
           global_target_gsm[index] >
               ABS_TOL) {
-        no_shmr_set_grid_gsm(
-            gal,
-            population,
+        new_grid_gsm =
             raw_gsm > 0.0
                 ? global_target_gsm[index] /
                       (double)global_target_gsm_count[index]
-                : 0.0
-        );
+                : 0.0;
       } else {
-        no_shmr_set_grid_gsm(
-            gal,
-            population,
+        new_grid_gsm =
             global_source_gsm[index] >
                     ABS_TOL
                 ? source_gsm *
                       (global_target_gsm[index] /
                        global_source_gsm[index])
-                : source_gsm
-        );
+                : source_gsm;
       }
+
+#if USE_MINI_HALOS
+      if (population == 3)
+        gal->TargetFescIIIWeightedGSM = new_grid_gsm;
+      else
+        gal->TargetFescWeightedGSM = new_grid_gsm;
+#else
+      gal->TargetFescWeightedGSM = new_grid_gsm;
+#endif
     }
 
     if (has_sfr) {
+#if USE_MINI_HALOS
       double raw_sfr =
-          no_shmr_raw_sfr(gal, population);
+          population == 3 ? gal->FescIIIWeightedSfr : gal->FescWeightedSfr;
 
       double source_sfr =
-          no_shmr_grid_sfr(gal, population);
+          population == 3 ? gal->TargetFescIIIWeightedSfr : gal->TargetFescWeightedSfr;
+#else
+      double raw_sfr = gal->FescWeightedSfr;
+
+      double source_sfr = gal->TargetFescWeightedSfr;
+#endif
+
+      double new_grid_sfr;
 
       if (global_source_sfr[index] <=
               ABS_TOL &&
           global_target_sfr[index] >
               ABS_TOL) {
-        no_shmr_set_grid_sfr(
-            gal,
-            population,
+        new_grid_sfr =
             raw_sfr > 0.0
                 ? global_target_sfr[index] /
                       (double)global_target_sfr_count[index]
-                : 0.0
-        );
+                : 0.0;
       } else {
-        no_shmr_set_grid_sfr(
-            gal,
-            population,
+        new_grid_sfr =
             global_source_sfr[index] >
                     ABS_TOL
                 ? source_sfr *
                       (global_target_sfr[index] /
                        global_source_sfr[index])
-                : source_sfr
-        );
+                : source_sfr;
       }
+
+#if USE_MINI_HALOS
+      if (population == 3)
+        gal->TargetFescIIIWeightedSfr = new_grid_sfr;
+      else
+        gal->TargetFescWeightedSfr = new_grid_sfr;
+#else
+      gal->TargetFescWeightedSfr = new_grid_sfr;
+#endif
     }
 
     gal = gal->Next;
