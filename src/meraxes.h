@@ -36,6 +36,11 @@
 #define TCMB 2.728
 #define NU_LL (double)(3.29e15)
 #define NU_LW (double)(2.71e15)
+/* AGN UV/LW SED break frequency at 1200A (eq. A2, Qin et al. 2017,
+ * arXiv:1703.04895) — shortward of this, the AGN continuum follows
+ * ReionAlphaUVBH rather than SpecIndexUVAGN. The entire LW band
+ * (NU_LW-NU_LL) sits shortward of NU_1200. */
+#define NU_1200 (double)(2.49825e15)
 #define PLANCK_EV (double)(4.1357e-15)
 #define T_RE 1e4
 #define EDDINGTON_TIME_SCALE 450.514890  // Eddington timescale in Megayears

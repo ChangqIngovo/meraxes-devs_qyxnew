@@ -53,6 +53,7 @@ int init_heat()
   if (run_globals.params.Flag_IncludeLymanWerner) {
     sum_lyn_LW = calloc(TsNumFilterSteps, sizeof(double));
     sum_lyn_LW_III = calloc(TsNumFilterSteps, sizeof(double));
+    sum_lyn_LW_AGN = calloc(TsNumFilterSteps, sizeof(double));
   }
 #endif
 
@@ -93,6 +94,7 @@ void destruct_heat()
   if (run_globals.params.Flag_IncludeLymanWerner) {
     free(sum_lyn_LW);
     free(sum_lyn_LW_III);
+    free(sum_lyn_LW_AGN);
   }
 #endif
 }
@@ -1260,7 +1262,7 @@ void evolveInt(float zp,
                const double SFR_III[],
                const double XAGN_soft[],
                const double XAGN_hard[],
-               const double XAGN_LW[],
+               const double AGN_LW[],
                const double freq_int_heat_GAL[],
                const double freq_int_ion_GAL[],
                const double freq_int_lya_GAL[],
@@ -1322,9 +1324,12 @@ void evolveInt(float zp,
   double dxion_source_dt_AGN_hard = 0.0;
   double dxlya_dt_AGN_hard       = 0.0;
   double zpp_integrand_AGN_hard;
-  /* AGN contribution to Lyman-Werner flux, same role as dstarlyLW_dt_GAL/_III
-   * but sourced from XAGN_LW (QuasarLuv extrapolated via SpecIndexUVAGN),
-   * only meaningful under USE_MINI_HALOS + Flag_IncludeLymanWerner. */
+  /* AGN contribution to Lyman-Werner flux, same role as dstarlyLW_dt_GAL/_III:
+   * AGN_LW carries the amplitude (QuasarLuv extrapolated to the SED's 1200A
+   * break via SpecIndexUVAGN — see calculate_BHemissivity), sum_lyn_LW_AGN
+   * carries the picket-fence window shape (double power law, break at
+   * NU_1200, eq. A2 of Qin et al. 2017/1703.04895). Only meaningful under
+   * USE_MINI_HALOS + Flag_IncludeLymanWerner. */
   double dstarlyLW_dt_AGN = 0.0;
 
   x_e = y[0];
@@ -1389,9 +1394,12 @@ void evolveInt(float zp,
       if (run_globals.params.Flag_IncludeLymanWerner) {
         dstarlyLW_dt_GAL += SFR_GAL[zpp_ct] * pow(1 + zp, 2) * (1 + zpp) * sum_lyn_LW[zpp_ct] * dt_dzpp * dzpp;
         dstarlyLW_dt_III += SFR_III[zpp_ct] * pow(1 + zp, 2) * (1 + zpp) * sum_lyn_LW_III[zpp_ct] * dt_dzpp * dzpp;
-        /* XAGN_LW is a per-shell luminosity amplitude, not an SFR — no sum_lyn_LW lookup needed.
-         * const_zp_prefactor_AGN_LW (applied after this loop) carries the full band normalisation. */
-        dstarlyLW_dt_AGN += XAGN_LW[zpp_ct] * pow(1 + zp, 2) * (1 + zpp) * dt_dzpp * dzpp;
+        /* AGN_LW[zpp_ct] is the specific luminosity at the SED's 1200A break
+         * (the amplitude); sum_lyn_LW_AGN[zpp_ct] is the picket-fence,
+         * window-by-window shape weight built alongside sum_lyn_LW — same
+         * role as SFR_GAL*sum_lyn_LW above, just with an AGN amplitude
+         * instead of an SFR-driven one. */
+        dstarlyLW_dt_AGN += AGN_LW[zpp_ct] * pow(1 + zp, 2) * (1 + zpp) * sum_lyn_LW_AGN[zpp_ct] * dt_dzpp * dzpp;
       }
 #endif
 

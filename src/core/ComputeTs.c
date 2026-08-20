@@ -188,7 +188,7 @@ void _ComputeTs(int snapshot)
   double XAGN_soft[TsNumFilterSteps];
   double XAGN_hard[TsNumFilterSteps];
 #if USE_MINI_HALOS
-  double XAGN_LW[TsNumFilterSteps];
+  double AGN_LW[TsNumFilterSteps];
 #endif
 
 #if USE_MINI_HALOS
@@ -827,7 +827,7 @@ void _ComputeTs(int snapshot)
       XAGN_soft[R_ct]  = 0.0;
       XAGN_hard[R_ct]  = 0.0;
 #if USE_MINI_HALOS
-      XAGN_LW[R_ct] = 0.0;
+      AGN_LW[R_ct] = 0.0;
 #endif
 
       for (x_e_ct = 0; x_e_ct < x_int_NXHII; x_e_ct++) {
@@ -883,7 +883,7 @@ void _ComputeTs(int snapshot)
         XAGN_soft[R_ct] = 0.0;
         XAGN_hard[R_ct] = 0.0;
 #if USE_MINI_HALOS
-        XAGN_LW[R_ct] = 0.0;
+        AGN_LW[R_ct] = 0.0;
 #endif
       }
 
@@ -894,6 +894,7 @@ void _ComputeTs(int snapshot)
       if (run_globals.params.Flag_IncludeLymanWerner) {
         sum_lyn_LW[R_ct] = 0;
         sum_lyn_LW_III[R_ct] = 0;
+        sum_lyn_LW_AGN[R_ct] = 0;
       }
 #endif
 
@@ -912,6 +913,16 @@ void _ComputeTs(int snapshot)
             continue;
           sum_lyn_LW[R_ct] += spectral_emissivity(nuprime, 2, 2);
           sum_lyn_LW_III[R_ct] += spectral_emissivity(nuprime, 2, 3);
+
+          /* AGN continuum shape at this same redshifted window: nuprime is
+           * in Ly-alpha units, so nuprime*Ly_alpha_HZ is the actual
+           * frequency; (nu/NU_1200)^-ReionAlphaUVBH is the double-power-law
+           * shape (eq. A2, Qin et al. 2017) relative to AGN_LW's amplitude
+           * at the 1200A break — the entire LW band sits shortward of
+           * NU_1200, so ReionAlphaUVBH (not SpecIndexUVAGN) always applies
+           * here. */
+          sum_lyn_LW_AGN[R_ct] +=
+            pow(nuprime * Ly_alpha_HZ / NU_1200, -run_globals.params.physics.ReionAlphaUVBH);
         }
 
 #endif
@@ -961,8 +972,10 @@ void _ComputeTs(int snapshot)
         sum_lyn[R_ct] = weight * sum_lyn[R_ct - 1];
 #if USE_MINI_HALOS
         sum_lyn_III[R_ct] = weight * sum_lyn_III[R_ct - 1]; // I am not really sure about this line!
-        if (run_globals.params.Flag_IncludeLymanWerner)
+        if (run_globals.params.Flag_IncludeLymanWerner) {
           sum_lyn_LW[R_ct] = weight * sum_lyn_LW[R_ct - 1];
+          sum_lyn_LW_AGN[R_ct] = weight * sum_lyn_LW_AGN[R_ct - 1];
+        }
 #endif
         first_radii = false;
       }
@@ -1054,10 +1067,12 @@ void _ComputeTs(int snapshot)
 
 #if USE_MINI_HALOS
     /*
-     * AGN LW prefactor: BHLWEmissivity is already band-integrated (no
-     * Luminosity_converstion_factor step needed) — this just converts its
-     * erg/s/cm^3 units to the photon-flux convention dstarlyLW_dt_GAL uses.
-     * Not yet validated against the stellar LW pathway's magnitude.
+     * AGN LW prefactor: AGN_LW*sum_lyn_LW_AGN is still an erg/s/cm^3-like
+     * density (sum_lyn_LW_AGN is a dimensionless shape weight — see the
+     * Lyman-window loop above), so no Luminosity_converstion_factor step is
+     * needed here either — this just converts to the photon-flux convention
+     * dstarlyLW_dt_GAL uses. Not yet validated against the stellar LW
+     * pathway's magnitude.
      */
     const_zp_prefactor_AGN_LW = run_globals.params.Flag_IncludeLymanWerner
       ? SPEED_OF_LIGHT / (4.0 * M_PI) / (PLANCK * NU_LW)
@@ -1155,7 +1170,7 @@ void _ComputeTs(int snapshot)
             }
 #if USE_MINI_HALOS
             SFR_III[R_ct] = SMOOTHED_SFR_III[i_smoothed_heating];
-            XAGN_LW[R_ct] = run_globals.params.Flag_IncludeLymanWerner ? SMOOTHED_AGN_LW[i_smoothed_heating] : 0.0;
+            AGN_LW[R_ct] = run_globals.params.Flag_IncludeLymanWerner ? SMOOTHED_AGN_LW[i_smoothed_heating] : 0.0;
 #endif
             xHII_call = x_e_box_prev[i_padded];
 
@@ -1278,7 +1293,7 @@ void _ComputeTs(int snapshot)
                     SFR_III,
                     XAGN_soft,
                     XAGN_hard,
-                    XAGN_LW,
+                    AGN_LW,
                     freq_int_heat_GAL,
                     freq_int_ion_GAL,
                     freq_int_lya_GAL,

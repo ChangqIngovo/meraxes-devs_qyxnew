@@ -62,6 +62,12 @@ double* sum_lyn;
 double* sum_lyn_LW;
 double* sum_lyn_III;
 double* sum_lyn_LW_III;
+// Per-shell AGN LW shape weight: (nu/NU_1200)^-ReionAlphaUVBH evaluated at
+// each redshifted Lyman window, same picket-fence treatment as sum_lyn_LW
+// but for the AGN's double power-law continuum instead of the tabulated
+// stellar SED. AGN_LW[R_ct] carries the amplitude (L_nu at NU_1200); this
+// carries the per-window shape.
+double* sum_lyn_LW_AGN;
 double growth_factor_zp;
 double dgrowth_factor_dzp;
 double const_zp_prefactor_GAL;
@@ -86,6 +92,7 @@ extern double* sum_lyn;
 extern double* sum_lyn_LW;
 extern double* sum_lyn_III;
 extern double* sum_lyn_LW_III;
+extern double* sum_lyn_LW_AGN;
 extern double growth_factor_zp;
 extern double dgrowth_factor_dzp;
 extern double const_zp_prefactor_GAL;
@@ -207,7 +214,7 @@ extern "C"
                  const double SFR_III[],
                  const double XAGN_soft[],
                  const double XAGN_hard[],
-                 const double XAGN_LW[],
+                 const double AGN_LW[],
                  const double freq_int_heat_GAL[],
                  const double freq_int_ion_GAL[],
                  const double freq_int_lya_GAL[],

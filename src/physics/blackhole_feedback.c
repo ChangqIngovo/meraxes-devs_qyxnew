@@ -224,15 +224,18 @@ void calculate_BHemissivity(double BlackHoleMass, double accreted_mass,
                * *accretion_time * run_globals.units.UnitTime_in_s
                / run_globals.params.Hubble_h;
 
-  /* Lyman-Werner luminosity: power law L_nu = quasar_luv*(nu/NU_1450)^-SpecIndexUVAGN,
-   * integrated over [NU_LW, NU_LL]. Only meaningful under Flag_IncludeLymanWerner. */
-  if (fabs(physics->SpecIndexUVAGN - 1.0) < REL_TOL) {
-    *quasar_lw = *quasar_luv * NU_1450 * log(NU_LL / NU_LW);
-  } else {
-    *quasar_lw = *quasar_luv * pow(NU_1450, physics->SpecIndexUVAGN) *
-                 (pow(NU_LL, 1.0 - physics->SpecIndexUVAGN) - pow(NU_LW, 1.0 - physics->SpecIndexUVAGN)) /
-                 (1.0 - physics->SpecIndexUVAGN);
-  }
+  /* Lyman-Werner: the AGN continuum is a double power law with a break at
+   * 1200A (eq. A2, Qin et al. 2017, arXiv:1703.04895) — L_nu =
+   * quasar_luv*(nu/NU_1450)^-SpecIndexUVAGN redward of 1200A, steepening to
+   * ReionAlphaUVBH (the same ionizing-continuum index already used for the
+   * UV background elsewhere) shortward of it. The whole LW band sits
+   * shortward of NU_1200, so quasar_lw here is just the specific luminosity
+   * AT the break — L_nu(NU_1200) = quasar_luv*(NU_1200/NU_1450)^-SpecIndexUVAGN.
+   * The actual band integral, window-by-window across the redshifted Lyman
+   * series (picket-fence absorption, same treatment as sum_lyn_LW for
+   * stars), happens later in ComputeTs.c's sum_lyn_LW_AGN loop, which
+   * evaluates (nu/NU_1200)^-ReionAlphaUVBH relative to this amplitude. */
+  *quasar_lw = *quasar_luv * pow(NU_1200 / NU_1450, -physics->SpecIndexUVAGN);
   /* AGNLWEfficiency scales quasar_lw only — QuasarLuv/QuasarMag/QuasarLF are
    * untouched, so this is a clean off-switch for AGN's LW contribution alone. */
   *quasar_lw *= physics->AGNLWEfficiency;
