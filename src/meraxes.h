@@ -173,6 +173,7 @@ typedef struct physics_params_t
   double SpecIndexXrayAGNSoft;
   double SpecIndexXrayAGNHard;
   double SpecIndexUVAGN;        /* AGN NUV/FUV continuum slope (Lusso et al. 2015), QuasarLuv (1450A) extrapolated into the LW band */
+  double AGNLWEfficiency;       /* Scales quasar_lw only (not QuasarLuv/QuasarMag/QuasarLF) — set to 0 to turn off AGN's LW contribution */
 
   double ReionMaxHeatingRedshift;
 

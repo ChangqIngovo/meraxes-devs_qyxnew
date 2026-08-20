@@ -233,6 +233,9 @@ void calculate_BHemissivity(double BlackHoleMass, double accreted_mass,
                  (pow(NU_LL, 1.0 - physics->SpecIndexUVAGN) - pow(NU_LW, 1.0 - physics->SpecIndexUVAGN)) /
                  (1.0 - physics->SpecIndexUVAGN);
   }
+  /* AGNLWEfficiency scales quasar_lw only — QuasarLuv/QuasarMag/QuasarLF are
+   * untouched, so this is a clean off-switch for AGN's LW contribution alone. */
+  *quasar_lw *= physics->AGNLWEfficiency;
 }
 
 static double get_vvir(galaxy_t* gal) {

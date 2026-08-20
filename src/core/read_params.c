@@ -1203,6 +1203,11 @@ void read_parameter_file(char* fname, int mode)
       required_tag[n_param] = 1;
       params_type[n_param++] = PARAM_TYPE_DOUBLE;
 
+      strcpy(params_tag[n_param], "AGNLWEfficiency");
+      params_addr[n_param] = &(run_params->physics).AGNLWEfficiency;
+      required_tag[n_param] = 1;
+      params_type[n_param++] = PARAM_TYPE_DOUBLE;
+
       strcpy(params_tag[n_param], "LXrayGalIII");
       params_addr[n_param] = &(run_params->physics).LXrayGalIII;
 #if USE_MINI_HALOS
