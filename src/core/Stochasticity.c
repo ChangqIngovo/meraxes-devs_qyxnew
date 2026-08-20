@@ -214,59 +214,6 @@ void fesc_recalibration(int snapshot)
 }
 
 // SHMR stochasticity related. Population is the raw Galaxy_Population
-// value: 2 for Pop II, 3 for Pop III (Pop III only exists under USE_MINI_HALOS).
-
-static int no_shmr_mvir_bin_clamped(const galaxy_t* gal)
-{
-  double log10_mvir;
-  int bin;
-
-  if (!(gal->Mvir > 0.0) || gal->Mvir > DBL_MAX) {
-    mlog_error("Cannot bin a noSHMR source with Mvir=%g.", gal->Mvir);
-    ABORT(EXIT_FAILURE);
-  }
-
-  log10_mvir = log10(gal->Mvir);
-  bin = (int)floor((log10_mvir - SHMR_XMIN) / SHMR_DX);
-
-  if (bin < 0)
-    bin = 0;
-
-  if (bin >= SHMR_NX)
-    bin = SHMR_NX - 1;
-
-  return bin;
-}
-
-static double no_shmr_log10_mstar_to_linear(double value)
-{
-  if (value <= NO_SHMR_LOG10_MSTAR_FLOOR)
-    return 0.0;
-
-  return pow(10.0, value);
-}
-
-static double no_shmr_log10_sfr_to_linear(double value)
-{
-  if (value <= NO_SHMR_LOG10_SFR_FLOOR)
-    return 0.0;
-
-  return pow(10.0, value);
-}
-
-static int no_shmr_count_valid_entries(const unsigned char* valid,
-                                       int n_values)
-{
-  int count = 0;
-
-  for (int ii = 0; ii < n_values; ii++) {
-    if (valid[ii])
-      count++;
-  }
-
-  return count;
-}
-
 static void no_shmr_fill_inside_only_with_floor(double* values,
                                                 const unsigned char* valid,
                                                 int n_values,
@@ -316,9 +263,9 @@ static void no_shmr_fill_inside_only_with_floor(double* values,
   }
 }
 
-static double no_shmr_get_log10_table_value(const float* table,
-                                            const galaxy_t* gal,
-                                            int snapshot)
+static double no_shmr_get_table_value(const float* table,
+                                      const galaxy_t* gal,
+						    		  double floor_value)
 {
   double log10_mvir;
   double y0;
@@ -331,81 +278,37 @@ static double no_shmr_get_log10_table_value(const float* table,
   log10_mvir = log10(gal->Mvir);
 
   if (log10_mvir <= SHMR_XMIN)
-    return table[SHMR_INDEX(snapshot, gal->Type, 0)];
+    return table[SHMR_INDEX(gal->Type, 0)];
 
   if (log10_mvir >= SHMR_XMAX)
-    return table[SHMR_INDEX(snapshot, gal->Type, SHMR_NX - 1)];
+    return table[SHMR_INDEX(gal->Type, SHMR_NX - 1)];
 
   position = (log10_mvir - SHMR_XMIN) / SHMR_DX;
   index_left = (int)floor(position);
   index_right = index_left + 1;
   fraction = position - (double)index_left;
 
-  y0 = table[SHMR_INDEX(snapshot, gal->Type, index_left)];
-  y1 = table[SHMR_INDEX(snapshot, gal->Type, index_right)];
+  y0 = table[SHMR_INDEX(gal->Type, index_left)];
+  y1 = table[SHMR_INDEX(gal->Type, index_right)];
 
-  return y0 + fraction * (y1 - y0);
-}
+  y0 += fraction * (y1 - y0);
+  if (y0 < floor_value)
+	y0 = floor_value;
 
-static double no_shmr_get_log10_mstar(const galaxy_t* gal,
-                                      int snapshot,
-                                      int population)
-{
-  return no_shmr_get_log10_table_value(
-#if USE_MINI_HALOS
-      population == 3 ? run_globals.SHMRsIII : run_globals.SHMRs,
-#else
-      run_globals.SHMRs,
-#endif
-      gal,
-      snapshot
-  );
-}
-
-static double no_shmr_get_sfr(const galaxy_t* gal,
-                              int snapshot,
-                              int population)
-{
-  return no_shmr_log10_sfr_to_linear(
-      no_shmr_get_log10_table_value(
-#if USE_MINI_HALOS
-          population == 3 ? run_globals.SFRsIII : run_globals.SFRs,
-#else
-          run_globals.SFRs,
-#endif
-          gal,
-          snapshot
-      )
-  );
-}
-
-// Population slot for cell indexing: 0 for Pop II, 1 for Pop III.
-static size_t no_shmr_sample_cell(int population,
-                                  int type,
-                                  int bin)
-{
-  return
-      (((size_t)population - 2) * (size_t)SHMR_NTYPES +
-       (size_t)type) * (size_t)SHMR_NX +
-      (size_t)bin;
+  return pow(10.0, y0);
 }
 
 static void no_shmr_count_population_samples(
     size_t* gsm_offsets,
     size_t* sfr_offsets,
     const galaxy_t* gal,
-    int population,
     int bin)
 {
-  size_t cell = no_shmr_sample_cell(
-      population,
-      gal->Type,
-      bin
-  );
+  size_t cell = (size_t)gal->Type * (size_t)SHMR_NX + (size_t)bin;
 
 #if USE_MINI_HALOS
-  double mstar = population == 3 ? gal->GrossStellarMassIII : gal->GrossStellarMass;
-  double sfr = population == 3 ? gal->SfrIII : gal->Sfr;
+  double mstar = gal->Galaxy_Population == 3 ? gal->GrossStellarMassIII : gal->GrossStellarMass;
+  double sfr = gal->Galaxy_Population == 3 ? gal->SfrIII : gal->Sfr;
 #else
   double mstar = gal->GrossStellarMass;
   double sfr = gal->Sfr;
@@ -424,18 +327,13 @@ static void no_shmr_store_population_samples(
     size_t* gsm_cursors,
     size_t* sfr_cursors,
     const galaxy_t* gal,
-    int population,
     int bin)
 {
-  size_t cell = no_shmr_sample_cell(
-      population,
-      gal->Type,
-      bin
-  );
+  size_t cell = (size_t)gal->Type * (size_t)SHMR_NX + (size_t)bin;
 
 #if USE_MINI_HALOS
-  double mstar = population == 3 ? gal->GrossStellarMassIII : gal->GrossStellarMass;
-  double sfr = population == 3 ? gal->SfrIII : gal->Sfr;
+  double mstar = gal->Galaxy_Population == 3 ? gal->GrossStellarMassIII : gal->GrossStellarMass;
+  double sfr = gal->Galaxy_Population == 3 ? gal->SfrIII : gal->Sfr;
 #else
   double mstar = gal->GrossStellarMass;
   double sfr = gal->Sfr;
@@ -666,32 +564,30 @@ static void no_shmr_global_bin_medians(
 // are filled with the supplied floor value.
 static void no_shmr_store_median_table(
     float* table,
-    int snapshot,
     int population,
     const double* medians,
     const unsigned char* valid,
     double floor_value)
 {
+  int count;
   for (int type = 0; type < SHMR_NTYPES; type++) {
     double values[SHMR_NX];
     unsigned char type_valid[SHMR_NX];
+	count = 0;
 
     for (int bin = 0; bin < SHMR_NX; bin++) {
-      size_t cell = no_shmr_sample_cell(
-          population,
-          type,
-          bin
-      );
+      size_t cell = (size_t)type * (size_t)SHMR_NX + (size_t)bin;
 
       values[bin] = medians[cell];
       type_valid[bin] = valid[cell];
+	  if (type_valid[bin])
+	    count++;
     }
 
-    if (type > 0 &&
-        no_shmr_count_valid_entries(type_valid, SHMR_NX) < 2) {
+    if (type > 0 && count < 2) {
       for (int bin = 0; bin < SHMR_NX; bin++) {
         values[bin] = table[
-            SHMR_INDEX(snapshot, 0, bin)
+            SHMR_INDEX(0, bin)
         ];
       }
     } else {
@@ -705,7 +601,7 @@ static void no_shmr_store_median_table(
 
     for (int bin = 0; bin < SHMR_NX; bin++) {
       table[
-          SHMR_INDEX(snapshot, type, bin)
+          SHMR_INDEX(type, bin)
       ] = (float)values[bin];
     }
   }
@@ -714,7 +610,6 @@ static void no_shmr_store_median_table(
 // Broadcast the SHMR and SFR tables for one population from rank 0 so all
 // ranks use identical noSHMR source grids in later steps.
 static void no_shmr_broadcast_population_tables(
-    int snapshot,
     int population)
 {
   int n_values = SHMR_NTYPES * SHMR_NX;
@@ -727,7 +622,7 @@ static void no_shmr_broadcast_population_tables(
 #endif
 
   MPI_Bcast(
-      shmr_table + SHMR_INDEX(snapshot, 0, 0),
+      shmr_table,
       n_values,
       MPI_FLOAT,
       0,
@@ -735,7 +630,7 @@ static void no_shmr_broadcast_population_tables(
   );
 
   MPI_Bcast(
-      sfr_table + SHMR_INDEX(snapshot, 0, 0),
+      sfr_table,
       n_values,
       MPI_FLOAT,
       0,
@@ -743,19 +638,20 @@ static void no_shmr_broadcast_population_tables(
   );
 }
 
-void no_shmr_build_source_tables(int snapshot)
+// Build the SHMR/SFR source tables for one population's [type x halo-mass
+// bin] grid, using only galaxies belonging to that population.
+static void no_shmr_build_source_tables_for_population(int population)
 {
   size_t n_cells =
-      (size_t)NO_SHMR_NPOPULATIONS *
       (size_t)SHMR_NTYPES *
       (size_t)SHMR_NX;
 
-    size_t* gsm_offsets = calloc(
+  size_t* gsm_offsets = calloc(
       n_cells + 1,
       sizeof(*gsm_offsets)
   );
 
-    size_t* sfr_offsets = calloc(
+  size_t* sfr_offsets = calloc(
       n_cells + 1,
       sizeof(*sfr_offsets)
   );
@@ -765,49 +661,45 @@ void no_shmr_build_source_tables(int snapshot)
   double* gsm_values = NULL;
   double* sfr_values = NULL;
 
-    double* gsm_medians = calloc(
+  double* gsm_medians = calloc(
       n_cells,
       sizeof(*gsm_medians)
   );
 
-    double* sfr_medians = calloc(
+  double* sfr_medians = calloc(
       n_cells,
       sizeof(*sfr_medians)
   );
 
-    unsigned char* gsm_valid = calloc(
+  unsigned char* gsm_valid = calloc(
       n_cells,
       sizeof(*gsm_valid)
   );
 
-    unsigned char* sfr_valid = calloc(
+  unsigned char* sfr_valid = calloc(
       n_cells,
       sizeof(*sfr_valid)
   );
 
-    if (gsm_offsets == NULL || sfr_offsets == NULL ||
+  if (gsm_offsets == NULL || sfr_offsets == NULL ||
       gsm_medians == NULL || sfr_medians == NULL ||
       gsm_valid == NULL || sfr_valid == NULL) {
     mlog_error("Failed to allocate noSHMR memory.");
     ABORT(EXIT_FAILURE);
-    }
+  }
 
   galaxy_t* gal = run_globals.FirstGal;
-
+  double log10_mvir;
+  int bin;
   while (gal != NULL) {
-    if (stochasticity_source_eligible(gal)) {
-      int bin = no_shmr_mvir_bin_clamped(gal);
-#if USE_MINI_HALOS
-      int population = gal->Galaxy_Population;
-#else
-      int population = 2;
-#endif
+    if (stochasticity_source_eligible(gal) && gal->Galaxy_Population == population) {
+	  log10_mvir = log10(gal->Mvir);
+      bin = log10_mvir < SHMR_XMIN ? 0 : log10_mvir > SHMR_XMAX ? SHMR_NX - 1 : (int)floor((log10_mvir - SHMR_XMIN) / SHMR_DX);
 
       no_shmr_count_population_samples(
           gsm_offsets,
           sfr_offsets,
           gal,
-          population,
           bin
       );
     }
@@ -861,15 +753,11 @@ void no_shmr_build_source_tables(int snapshot)
   }
 
   gal = run_globals.FirstGal;
-
+  
   while (gal != NULL) {
-    if (stochasticity_source_eligible(gal)) {
-      int bin = no_shmr_mvir_bin_clamped(gal);
-#if USE_MINI_HALOS
-      int population = gal->Galaxy_Population;
-#else
-      int population = 2;
-#endif
+    if (stochasticity_source_eligible(gal) && gal->Galaxy_Population == population) {
+      log10_mvir = log10(gal->Mvir);
+      bin = log10_mvir < SHMR_XMIN ? 0 : log10_mvir > SHMR_XMAX ? SHMR_NX - 1 : (int)floor((log10_mvir - SHMR_XMIN) / SHMR_DX);
 
       no_shmr_store_population_samples(
           gsm_values,
@@ -877,7 +765,6 @@ void no_shmr_build_source_tables(int snapshot)
           gsm_cursors,
           sfr_cursors,
           gal,
-          population,
           bin
       );
     }
@@ -908,49 +795,31 @@ void no_shmr_build_source_tables(int snapshot)
 
   if (run_globals.mpi_rank == 0) {
     no_shmr_store_median_table(
-        run_globals.SHMRs,
-        snapshot,
-        2,
-        gsm_medians,
-        gsm_valid,
-        NO_SHMR_LOG10_MSTAR_FLOOR
-    );
-
-    no_shmr_store_median_table(
-        run_globals.SFRs,
-        snapshot,
-        2,
-        sfr_medians,
-        sfr_valid,
-        NO_SHMR_LOG10_SFR_FLOOR
-    );
-
 #if USE_MINI_HALOS
-    no_shmr_store_median_table(
-        run_globals.SHMRsIII,
-        snapshot,
-        3,
+        population == 3 ? run_globals.SHMRsIII : run_globals.SHMRs,
+#else
+        run_globals.SHMRs,
+#endif
+        population,
         gsm_medians,
         gsm_valid,
         NO_SHMR_LOG10_MSTAR_FLOOR
     );
 
     no_shmr_store_median_table(
-        run_globals.SFRsIII,
-        snapshot,
-        3,
+#if USE_MINI_HALOS
+        population == 3 ? run_globals.SFRsIII : run_globals.SFRs,
+#else
+        run_globals.SFRs,
+#endif
+        population,
         sfr_medians,
         sfr_valid,
         NO_SHMR_LOG10_SFR_FLOOR
     );
-#endif
   }
 
-  no_shmr_broadcast_population_tables(snapshot, 2);
-
-#if USE_MINI_HALOS
-  no_shmr_broadcast_population_tables(snapshot, 3);
-#endif
+  no_shmr_broadcast_population_tables(population);
 
   free(gsm_values);
   free(sfr_values);
@@ -962,12 +831,20 @@ void no_shmr_build_source_tables(int snapshot)
   free(sfr_valid);
 }
 
+void no_shmr_build_source_tables(void)
+{
+  no_shmr_build_source_tables_for_population(2);
+
+#if USE_MINI_HALOS
+  no_shmr_build_source_tables_for_population(3);
+#endif
+}
+
 // Evaluate one galaxy against the selected source model values, run the
 // existing fesc update path on a temporary source view, then commit the
 // resulting no-scatter and target weighted fields back to the real galaxy.
 static void no_shmr_evaluate_active_source(
     galaxy_t* gal,
-    int population,
     double mstar_source,
     double sfr_source,
     int snapshot)
@@ -976,10 +853,10 @@ static void no_shmr_evaluate_active_source(
 
 #if USE_MINI_HALOS
   double previous_mstar =
-      population == 3 ? gal->GrossStellarMassIIINoScatter : gal->GrossStellarMassNoScatter;
+      gal->Galaxy_Population == 3 ? gal->GrossStellarMassIIINoScatter : gal->GrossStellarMassNoScatter;
 
   double previous_weighted_gsm =
-      population == 3 ? gal->FescIIIWeightedGSMNoScatter : gal->FescWeightedGSMNoScatter;
+      gal->Galaxy_Population == 3 ? gal->FescIIIWeightedGSMNoScatter : gal->FescWeightedGSMNoScatter;
 #else
   double previous_mstar = gal->GrossStellarMassNoScatter;
 
@@ -994,7 +871,7 @@ static void no_shmr_evaluate_active_source(
   source_view.StellarMass = mstar_source;
 
 #if USE_MINI_HALOS
-  if (population == 3) {
+  if (gal->Galaxy_Population == 3) {
     gal->SfrIIINoScatter = sfr_source;
     source_view.GrossStellarMassIII = mstar_source;
     source_view.StellarMass_III = mstar_source;
@@ -1024,7 +901,7 @@ static void no_shmr_evaluate_active_source(
   );
 
 #if USE_MINI_HALOS
-  if (population == 3) {
+  if (gal->Galaxy_Population == 3) {
     gal->GrossStellarMassIIINoScatter = mstar_source;
     gal->FescIIIWeightedGSMNoScatter =
         source_view.FescIIIWeightedGSM;
@@ -1055,16 +932,12 @@ void no_shmr_prepare_sources(int snapshot)
   while (gal != NULL) {
     if (stochasticity_source_eligible(gal)) {
 #if USE_MINI_HALOS
-      int population = gal->Galaxy_Population;
-
       double raw_mstar =
-          population == 3 ? gal->GrossStellarMassIII : gal->GrossStellarMass;
+          gal->Galaxy_Population == 3 ? gal->GrossStellarMassIII : gal->GrossStellarMass;
 
       double raw_sfr =
-          population == 3 ? gal->SfrIII : gal->Sfr;
+          gal->Galaxy_Population == 3 ? gal->SfrIII : gal->Sfr;
 #else
-      int population = 2;
-
       double raw_mstar = gal->GrossStellarMass;
 
       double raw_sfr = gal->Sfr;
@@ -1083,21 +956,30 @@ void no_shmr_prepare_sources(int snapshot)
 #endif
 
       if (raw_mstar > 0.0 || raw_sfr > 0.0) {
-        double mstar_source = no_shmr_log10_mstar_to_linear(
-            no_shmr_get_log10_mstar(
-                gal,
-                snapshot,
-                population
-            )
+        double mstar_source = no_shmr_get_table_value(
+#if USE_MINI_HALOS
+            gal->Galaxy_Population == 3 ? run_globals.SHMRsIII : run_globals.SHMRs,
+#else
+            run_globals.SHMRs,
+#endif
+            gal,
+			NO_SHMR_LOG10_MSTAR_FLOOR
         );
 
         double sfr_source = raw_sfr > 0.0
-            ? no_shmr_get_sfr(gal, snapshot, population)
+            ? no_shmr_get_table_value(
+#if USE_MINI_HALOS
+                  gal->Galaxy_Population == 3 ? run_globals.SFRsIII : run_globals.SFRs,
+#else
+                  run_globals.SFRs,
+#endif
+                  gal,
+				  NO_SHMR_LOG10_SFR_FLOOR
+              )
             : 0.0;
 
         no_shmr_evaluate_active_source(
             gal,
-            population,
             mstar_source,
             sfr_source,
             snapshot
@@ -1130,25 +1012,22 @@ static int no_shmr_has_sfr_recalibration_source(
     int population)
 {
 #if USE_MINI_HALOS
-  int current_population = gal->Galaxy_Population;
   double raw_sfr = population == 3 ? gal->FescIIIWeightedSfr : gal->FescWeightedSfr;
   double grid_sfr = population == 3 ? gal->TargetFescIIIWeightedSfr : gal->TargetFescWeightedSfr;
 #else
-  int current_population = 2;
   double raw_sfr = gal->FescWeightedSfr;
   double grid_sfr = gal->TargetFescWeightedSfr;
 #endif
 
   return stochasticity_source_eligible(gal) &&
-         current_population == population &&
+         gal->Galaxy_Population == population &&
          (raw_sfr > 0.0 || grid_sfr > 0.0);
 }
 
 // Apply fixed-bin global recalibration factors: reduce per-bin raw/source
 // budgets across MPI ranks, compute correction ratios for bins with support,
 // and scale galaxy target weighted GSM/SFR in the corresponding bin.
-void no_shmr_apply_fixed_bin_recalibration(
-    int population)
+void no_shmr_apply_fixed_bin_recalibration(int population)
 {
   size_t n_bins =
       (size_t)SHMR_NTYPES * (size_t)SHMR_NX;
@@ -1178,7 +1057,10 @@ void no_shmr_apply_fixed_bin_recalibration(
     }
 
   galaxy_t* gal = run_globals.FirstGal;
-
+  double log10_mvir;
+  int bin;
+  size_t index; 
+  
   while (gal != NULL) {
     int has_gsm =
         no_shmr_has_gsm_recalibration_source(gal, population);
@@ -1187,9 +1069,9 @@ void no_shmr_apply_fixed_bin_recalibration(
         no_shmr_has_sfr_recalibration_source(gal, population);
 
     if (has_gsm || has_sfr) {
-      size_t index =
-          (size_t)gal->Type * (size_t)SHMR_NX +
-          (size_t)no_shmr_mvir_bin_clamped(gal);
+	  log10_mvir = log10(gal->Mvir);
+      bin = log10_mvir < SHMR_XMIN ? 0 : log10_mvir > SHMR_XMAX ? SHMR_NX - 1 : (int)floor((log10_mvir - SHMR_XMIN) / SHMR_DX);
+      index = (size_t) (gal->Type * SHMR_NX + bin);
 
       if (has_gsm) {
 #if USE_MINI_HALOS
@@ -1303,9 +1185,9 @@ void no_shmr_apply_fixed_bin_recalibration(
       continue;
     }
 
-    size_t index =
-        (size_t)gal->Type * (size_t)SHMR_NX +
-        (size_t)no_shmr_mvir_bin_clamped(gal);
+	log10_mvir = log10(gal->Mvir);
+    bin = log10_mvir < SHMR_XMIN ? 0 : log10_mvir > SHMR_XMAX ? SHMR_NX - 1 : (int)floor((log10_mvir - SHMR_XMIN) / SHMR_DX);
+    index = (size_t) (gal->Type * SHMR_NX + bin);
 
     if (has_gsm) {
 #if USE_MINI_HALOS
@@ -1424,17 +1306,7 @@ void no_shmr_sources_init(void)
   run_globals.SFRsIII = NULL;
 #endif
 
-  if (run_globals.params.SnaplistLength <= 0) {
-    mlog_error(
-        "Cannot initialise noSHMR source tables with "
-        "SourceTableNSnaps=%d.",
-        run_globals.params.SnaplistLength
-    );
-    ABORT(EXIT_FAILURE);
-  }
-
   n_shmr =
-      (size_t)run_globals.params.SnaplistLength *
       (size_t)SHMR_NTYPES *
       (size_t)SHMR_NX;
 

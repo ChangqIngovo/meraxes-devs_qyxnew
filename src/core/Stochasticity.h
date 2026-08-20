@@ -14,19 +14,14 @@
 #define SHMR_XMAX   (4.00)
 #define SHMR_DX     ((SHMR_XMAX - SHMR_XMIN) / ((double)(SHMR_NX - 1)))
 
-#define SHMR_INDEX(s,t,i) \
-  ((((size_t)(s) * (size_t)SHMR_NTYPES) + (size_t)(t)) * (size_t)SHMR_NX + (size_t)(i))
+#define SHMR_INDEX(t,i) \
+  ((size_t)(t) * (size_t)SHMR_NX + (size_t)(i))
 void fesc_recalibration(int snapshot);
 
 void no_shmr_apply_fixed_bin_recalibration(int population);
-void no_shmr_build_source_tables(int snapshot);
+void no_shmr_build_source_tables(void);
 void no_shmr_prepare_sources(int snapshot);
 
-#if USE_MINI_HALOS
-#define NO_SHMR_NPOPULATIONS 2
-#else
-#define NO_SHMR_NPOPULATIONS 1
-#endif
 void no_shmr_sources_init(void);
 void no_shmr_sources_free(void);
 #endif

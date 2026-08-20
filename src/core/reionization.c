@@ -1784,7 +1784,7 @@ void construct_baryon_grids(int snapshot, int local_ngals)
 
 #if USE_STOCHASTICITY
   if (run_globals.params.physics.Flag_RemoveSHMRScatter == 1){
-    no_shmr_build_source_tables(snapshot);
+    no_shmr_build_source_tables();
     no_shmr_prepare_sources(snapshot);
   }
     
