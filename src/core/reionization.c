@@ -1783,17 +1783,19 @@ void construct_baryon_grids(int snapshot, int local_ngals)
   int local_n_complex = (int)(run_globals.reion_grids.slab_n_complex[run_globals.mpi_rank]);
 
 #if USE_STOCHASTICITY
+  // this builds the SHMR tables before resetting the properties
   if (run_globals.params.physics.Flag_RemoveSHMRScatter == 1){
     no_shmr_build_source_tables(2);
 #if USE_MINI_HALOS
     no_shmr_build_source_tables(3);
 #endif
+    // this does the resetting and prepares for recalibration on SHMR
     no_shmr_prepare_sources(snapshot);
   }
     
   if (run_globals.params.physics.Flag_SourceRecalibration)
     if (run_globals.params.physics.Flag_RemoveSHMRScatter == 0) // SHMR and fesc recalibration are mutually exclusive
-      fesc_recalibration();
+      fesc_recalibration(); // fesc resetting and prepartion for recalibration are done in update_galaxy_fesc_vals
     else{
       no_shmr_apply_fixed_bin_recalibration(2);
 #if USE_MINI_HALOS
