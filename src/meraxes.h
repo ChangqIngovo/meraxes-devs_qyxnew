@@ -61,19 +61,6 @@
 #define ABS_TOL (float)1e-8
 // ======================================================
 
-#if USE_STOCHASTICITY
-// Parameters for removing stellar-source--halo scatter.
-// Both the stellar-mass and SFR tables use this halo-mass grid.
-#define SHMR_NTYPES 3
-#define SHMR_NX     376
-#define SHMR_XMIN   (-3.50)
-#define SHMR_XMAX   (4.00)
-#define SHMR_DX     ((SHMR_XMAX - SHMR_XMIN) / ((double)(SHMR_NX - 1)))
-
-#define SHMR_INDEX(s,t,i) \
-  ((((size_t)(s) * (size_t)SHMR_NTYPES) + (size_t)(t)) * (size_t)SHMR_NX + (size_t)(i))
-#endif
-
 // Define things used for aborting exceptions
 #ifdef __cplusplus
 extern "C"

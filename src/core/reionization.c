@@ -1783,9 +1783,20 @@ void construct_baryon_grids(int snapshot, int local_ngals)
   int local_n_complex = (int)(run_globals.reion_grids.slab_n_complex[run_globals.mpi_rank]);
 
 #if USE_STOCHASTICITY
+  if (run_globals.params.physics.Flag_RemoveSHMRScatter == 1){
+    no_shmr_build_source_tables(snapshot);
+    no_shmr_prepare_sources(snapshot);
+  }
+    
   if (run_globals.params.physics.Flag_SourceRecalibration)
-    fesc_recalibration(snapshot);
-  no_shmr_sources_prepare(snapshot);
+    if (run_globals.params.physics.Flag_RemoveSHMRScatter == 0) // SHMR and fesc recalibration are mutually exclusive
+      fesc_recalibration(snapshot);
+    else{
+      no_shmr_apply_fixed_bin_recalibration(2);
+#if USE_MINI_HALOS
+      no_shmr_apply_fixed_bin_recalibration(3);
+#endif
+    }
 #endif
 
   mlog("Constructing stellar mass and sfr grids...", MLOG_OPEN | MLOG_TIMERSTART);
@@ -1889,7 +1900,7 @@ void construct_baryon_grids(int snapshot, int local_ngals)
 
           assert((ind >= 0) && (ind < slab_nix[i_r] * ReionGridDim * ReionGridDim));
 
-        switch (prop) {
+          switch (prop) {
             case prop_stellar:
               buffer[ind] += gal->FescWeightedGSM;
               break;

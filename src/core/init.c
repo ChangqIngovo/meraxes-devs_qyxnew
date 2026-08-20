@@ -251,15 +251,8 @@ void init_meraxes()
   read_snap_list();
 
 #if USE_STOCHASTICITY
-  // Initialise runtime SHMR/SFR source tables.
-  run_globals.SHMRs = NULL;
-  run_globals.SFRs = NULL;
-#if USE_MINI_HALOS
-  run_globals.SHMRsIII = NULL;
-  run_globals.SFRsIII = NULL;
-#endif
-
-  init_reion_source_tables();
+  if (run_globals.params.physics.Flag_RemoveSHMRScatter == 1)
+    no_shmr_sources_init();
 #endif
   // parse the requested output snaps
   parse_output_snaps(run_globals.params.OutputSnapsString);
