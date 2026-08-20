@@ -1790,7 +1790,7 @@ void construct_baryon_grids(int snapshot, int local_ngals)
     
   if (run_globals.params.physics.Flag_SourceRecalibration)
     if (run_globals.params.physics.Flag_RemoveSHMRScatter == 0) // SHMR and fesc recalibration are mutually exclusive
-      fesc_recalibration(snapshot);
+      fesc_recalibration();
     else{
       no_shmr_apply_fixed_bin_recalibration(2);
 #if USE_MINI_HALOS

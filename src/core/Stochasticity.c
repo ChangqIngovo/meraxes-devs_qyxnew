@@ -45,15 +45,13 @@ static int stochasticity_source_eligible(const galaxy_t* gal)
 
 static double fesc_get_global_correction(double target,
                                          double source,
-                                         const char* name,
-                                         int snapshot)
+                                         const char* name)
 {
   if (!isfinite(target) || target < 0.0 ||
       !isfinite(source) || source < 0.0) {
     mlog_error(
-        "Invalid global fesc budget at snapshot %d: "
+        "Invalid global fesc budget: "
         "%s target=%g source=%g.",
-        snapshot,
         name,
         target,
         source
@@ -66,10 +64,9 @@ static double fesc_get_global_correction(double target,
       return 1.0;
 
     mlog_error(
-        "Cannot recalibrate %s at snapshot %d: "
+        "Cannot recalibrate %s: "
         "target=%g but source=%g.",
         name,
-        snapshot,
         target,
         source
     );
@@ -80,9 +77,8 @@ static double fesc_get_global_correction(double target,
 
   if (!isfinite(correction) || correction < 0.0) {
     mlog_error(
-        "Invalid global fesc correction at snapshot %d: "
+        "Invalid global fesc correction: "
         "%s C=%g.",
-        snapshot,
         name,
         correction
     );
@@ -92,7 +88,7 @@ static double fesc_get_global_correction(double target,
   return correction;
 }
 
-void fesc_recalibration(int snapshot)
+void fesc_recalibration(void)
 {
 
   double local[FESC_GLOBAL_NSUM] = {0.0};
@@ -136,29 +132,25 @@ void fesc_recalibration(int snapshot)
     corrections[FESC_CORRECTION_POPII_GSM] = fesc_get_global_correction(
         global[FESC_POPII_GSM_TARGET],
         global[FESC_POPII_GSM_RAW],
-        "PopII FescWeightedGSM",
-        snapshot
+        "PopII FescWeightedGSM"
     );
 
     corrections[FESC_CORRECTION_POPII_SFR] = fesc_get_global_correction(
         global[FESC_POPII_SFR_TARGET],
         global[FESC_POPII_SFR_RAW],
-        "PopII FescWeightedSfr",
-        snapshot
+        "PopII FescWeightedSfr"
     );
 #if USE_MINI_HALOS
     corrections[FESC_CORRECTION_POPIII_GSM] = fesc_get_global_correction(
         global[FESC_POPIII_GSM_TARGET],
         global[FESC_POPIII_GSM_RAW],
-        "PopIII FescWeightedGSM",
-        snapshot
+        "PopIII FescWeightedGSM"
     );
 
     corrections[FESC_CORRECTION_POPIII_SFR] = fesc_get_global_correction(
         global[FESC_POPIII_SFR_TARGET],
         global[FESC_POPIII_SFR_RAW],
-        "PopIII FescWeightedSfr",
-        snapshot
+        "PopIII FescWeightedSfr"
     );
 #endif
   }
@@ -174,11 +166,10 @@ void fesc_recalibration(int snapshot)
   if (run_globals.mpi_rank == 0) {
 #if USE_MINI_HALOS
     mlog(
-        "Global fesc recalibration snapshot=%d: "
+        "Global fesc recalibration: "
         "C_GSM_II=%.12g C_SFR_II=%.12g "
         "C_GSM_III=%.12g C_SFR_III=%.12g.",
         MLOG_MESG,
-        snapshot,
         corrections[FESC_CORRECTION_POPII_GSM],
         corrections[FESC_CORRECTION_POPII_SFR],
         corrections[FESC_CORRECTION_POPIII_GSM],
@@ -186,10 +177,9 @@ void fesc_recalibration(int snapshot)
     );
 #else
     mlog(
-        "Global fesc recalibration snapshot=%d: "
+        "Global fesc recalibration: "
         "C_GSM=%.12g C_SFR=%.12g.",
         MLOG_MESG,
-        snapshot,
         corrections[FESC_CORRECTION_POPII_GSM],
         corrections[FESC_CORRECTION_POPII_SFR]
     );

@@ -16,7 +16,7 @@
 
 #define SHMR_INDEX(t,i) \
   ((size_t)(t) * (size_t)SHMR_NX + (size_t)(i))
-void fesc_recalibration(int snapshot);
+void fesc_recalibration(void);
 
 void no_shmr_apply_fixed_bin_recalibration(int population);
 void no_shmr_build_source_tables(void);
