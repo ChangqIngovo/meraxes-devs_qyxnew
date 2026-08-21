@@ -682,12 +682,6 @@ typedef struct galaxy_t
   double Fesc;
   double FescWeightedGSM;
   double FescWeightedSfr;
-#if USE_STOCHASTICITY
-  // These are reference budgets for fesc recalibration, or final prepared
-  // grid sources when the mutually exclusive no-SHMR prescription is active.
-  double TargetFescWeightedGSM;
-  double TargetFescWeightedSfr;
-#endif
   double MetalsStellarMass;
   double DiskScaleLength;
   double Sfr;
@@ -722,8 +716,10 @@ typedef struct galaxy_t
   // Alternative stellar sources with the stellar--halo scatter removed.
   // The GSM quantities are cumulative; SfrNoScatter is snapshot-local.
   double GrossStellarMassNoScatter;
-  double FescWeightedGSMNoScatter;
   double SfrNoScatter;
+  // StochasticityTreated means adding scatter to Fesc or removing scatter from GSM & SFR
+  double StochasticityTreatedFescWeightedGSM;
+  double StochasticityTreatedFescWeightedSfr;
 #endif
 #if USE_MINI_HALOS
   // Differentiation Pop III / Pop II
@@ -739,8 +735,8 @@ typedef struct galaxy_t
   double FescIIIWeightedGSMNoScatter;
   double SfrIIINoScatter;
   // Pop III prepared/reference sources mirror the Pop II Target fields.
-  double TargetFescIIIWeightedGSM;
-  double TargetFescIIIWeightedSfr;
+  double StochasticityTreatedFescIIIWeightedGSM;
+  double StochasticityTreatedFescIIIWeightedSfr;
 #endif
 
   double Remnant_Mass; // Coming from Pop III with M between 40 and 140 and larger than 260 Msol and remnant of CCSN
@@ -952,10 +948,15 @@ typedef struct run_globals_t
   // Both source tables hold only the current snapshot: size SHMR_NTYPES * SHMR_NX.
   float* SHMRs;
   float* SFRs;
+  double *fesc_stochasticity_calibrations;
+  double *no_shmr_gsm_stochasticity_calibrations;
+  double *no_shmr_sfr_stochasticity_calibrations;
 #if USE_MINI_HALOS
   // Independent Pop III tables with the same halo-mass layout.
   float* SHMRsIII;
   float* SFRsIII;
+  double *no_shmr_gsm_stochasticity_calibrationsIII;
+  double *no_shmr_sfr_stochasticity_calibrationsIII;
 #endif
 #endif
 #ifdef CALC_MAGS

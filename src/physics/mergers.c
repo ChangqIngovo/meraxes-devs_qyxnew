@@ -187,22 +187,21 @@ void merge_with_target(galaxy_t* gal, int* dead_gals, int snapshot)
   parent->FescIIIWeightedGSM += gal->FescIIIWeightedGSM;
   parent->FescIIIWeightedSfr += gal->FescIIIWeightedSfr;
 #if USE_STOCHASTICITY
+  parent->SfrIIINoScatter += gal->SfrIIINoScatter;
   parent->GrossStellarMassIIINoScatter +=
       gal->GrossStellarMassIIINoScatter;
-  parent->FescIIIWeightedGSMNoScatter +=
-      gal->FescIIIWeightedGSMNoScatter;
-  parent->TargetFescIIIWeightedGSM += gal->TargetFescIIIWeightedGSM;
-  parent->TargetFescIIIWeightedSfr += gal->TargetFescIIIWeightedSfr;
+  parent->StochasticityTreatedFescIIIWeightedGSM += gal->StochasticityTreatedFescIIIWeightedGSM;
+  parent->StochasticityTreatedFescIIIWeightedSfr += gal->StochasticityTreatedFescIIIWeightedSfr;
 #endif
 #endif
   parent->GrossStellarMass += gal->GrossStellarMass;
   parent->FescWeightedGSM += gal->FescWeightedGSM;
 #if USE_STOCHASTICITY
   // Cumulative no-scatter source histories.
+  parent->SfrNoScatter += gal->SfrNoScatter;
   parent->GrossStellarMassNoScatter += gal->GrossStellarMassNoScatter;
-  parent->FescWeightedGSMNoScatter += gal->FescWeightedGSMNoScatter;
-  parent->TargetFescWeightedGSM += gal->TargetFescWeightedGSM;
-  parent->TargetFescWeightedSfr += gal->TargetFescWeightedSfr;
+  parent->StochasticityTreatedFescWeightedGSM += gal->StochasticityTreatedFescWeightedGSM;
+  parent->StochasticityTreatedFescWeightedSfr += gal->StochasticityTreatedFescWeightedSfr;
 #endif
   parent->MetalsStellarMass += gal->MetalsStellarMass;
   parent->Sfr += gal->Sfr;

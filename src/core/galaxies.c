@@ -48,10 +48,9 @@ galaxy_t* new_galaxy(int snapshot, unsigned long halo_ID)
   gal->GrossStellarMass = 0.0;
 #if USE_STOCHASTICITY
   gal->GrossStellarMassNoScatter = 0.0;
-  gal->FescWeightedGSMNoScatter = 0.0;
   gal->SfrNoScatter = 0.0;
-  gal->TargetFescWeightedGSM = 0.0;
-  gal->TargetFescWeightedSfr = 0.0;
+  gal->StochasticityTreatedFescWeightedGSM = 0.0;
+  gal->StochasticityTreatedFescWeightedSfr = 0.0;
 #endif
   gal->Fesc = 1.0;
   gal->FescWeightedGSM = 0.0;
@@ -100,8 +99,8 @@ galaxy_t* new_galaxy(int snapshot, unsigned long halo_ID)
   gal->GrossStellarMassIIINoScatter = 0.0;
   gal->FescIIIWeightedGSMNoScatter = 0.0;
   gal->SfrIIINoScatter = 0.0;
-  gal->TargetFescIIIWeightedGSM = 0.0;
-  gal->TargetFescIIIWeightedSfr = 0.0;
+  gal->StochasticityTreatedFescIIIWeightedGSM = 0.0;
+  gal->StochasticityTreatedFescIIIWeightedSfr = 0.0;
 #endif
   gal->Remnant_Mass = 0.;
   gal->Metal_Probability = 0.0;
@@ -198,7 +197,7 @@ void reset_galaxy_properties(galaxy_t* gal, int snapshot)
   gal->ionization_param = 0.0;
   gal->FescWeightedSfr = 0.0;
 #if USE_STOCHASTICITY
-  gal->TargetFescWeightedSfr = 0.0;
+  gal->StochasticityTreatedFescWeightedSfr = 0.0;
   gal->SfrNoScatter = 0.0;
 #endif
   gal->Mcool = 0.0;
@@ -232,7 +231,7 @@ void reset_galaxy_properties(galaxy_t* gal, int snapshot)
   gal->SfrIII = 0.0;
   gal->FescIIIWeightedSfr = 0.0;
 #if USE_STOCHASTICITY
-  gal->TargetFescIIIWeightedSfr = 0.0;
+  gal->StochasticityTreatedFescIIIWeightedSfr = 0.0;
   gal->SfrIIINoScatter = 0.0;
 #endif
 #endif

@@ -1,6 +1,7 @@
 #ifndef STOCHASTICITY_H
 #define STOCHASTICITY_H
 
+#include "meraxes.h"
 #define NO_SHMR_SHMR_MIN_COUNT 3
 #define NO_SHMR_SFR_MIN_COUNT 10
 #define NO_SHMR_LOG10_MSTAR_FLOOR (-10.0)
@@ -16,12 +17,18 @@
 
 #define SHMR_INDEX(t,i) \
   ((size_t)(t) * (size_t)SHMR_NX + (size_t)(i))
+
+int stochasticity_source_eligible(const galaxy_t* gal);
+void compute_fesc_recalibration_factors(void);
 void fesc_recalibration(void);
 
-void no_shmr_apply_fixed_bin_recalibration(int population);
-void no_shmr_build_source_tables(int population);
-void no_shmr_prepare_sources(int snapshot);
+void build_no_shmr_tables(int population);
+void apply_no_shmr_treatment(void);
+void compute_no_shmr_recalibration_factors(int population);
+
+double extract_recalibration_factors(galaxy_t* gal, int population, bool GSM);
 
 void no_shmr_sources_init(void);
 void no_shmr_sources_free(void);
+
 #endif

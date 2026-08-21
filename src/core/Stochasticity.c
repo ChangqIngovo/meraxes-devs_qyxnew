@@ -27,18 +27,18 @@ enum fesc_global_sum_index
   FESC_GLOBAL_NSUM
 };
 
-enum fesc_correction_index
+enum stochasticity_calibration_index
 {
-  FESC_CORRECTION_POPII_GSM = 0,
-  FESC_CORRECTION_POPII_SFR,
+  GSM = 0,
+  SFR,
 #if USE_MINI_HALOS
-  FESC_CORRECTION_POPIII_GSM,
-  FESC_CORRECTION_POPIII_SFR,
+  POPIII_GSM,
+  POPIII_SFR,
 #endif
-  FESC_CORRECTION_N
+  CAL_N
 };
 
-static int stochasticity_source_eligible(const galaxy_t* gal)
+int stochasticity_source_eligible(const galaxy_t* gal)
 {
   return gal->Type >= 0 && gal->Type <= 2;
 }
@@ -88,30 +88,31 @@ static double fesc_get_global_correction(double target,
   return correction;
 }
 
-void fesc_recalibration(void)
+void compute_fesc_recalibration_factors(void)
 {
 
   double local[FESC_GLOBAL_NSUM] = {0.0};
   double global[FESC_GLOBAL_NSUM] = {0.0};
-  double corrections[FESC_CORRECTION_N];
   galaxy_t* gal = run_globals.FirstGal;
 
-  for (int ii = 0; ii < FESC_CORRECTION_N; ii++)
-    corrections[ii] = 1.0;
+  run_globals.fesc_stochasticity_calibrations = 
+      calloc(CAL_N, sizeof(double));
+  for (int ii = 0; ii < CAL_N; ii++)
+    run_globals.fesc_stochasticity_calibrations[ii] = 1.0;
 
   while (gal != NULL) {
     //Galaxies retain cumulative Pop III source history after transitioning 
     // to Pop II, and mergers can transfer that history to a Pop II parent.
     if (stochasticity_source_eligible(gal)) {
-      local[FESC_POPII_GSM_RAW] += gal->FescWeightedGSM;
-      local[FESC_POPII_GSM_TARGET] += gal->TargetFescWeightedGSM;
-      local[FESC_POPII_SFR_RAW] += gal->FescWeightedSfr;
-      local[FESC_POPII_SFR_TARGET] += gal->TargetFescWeightedSfr;
+      local[FESC_POPII_GSM_RAW] += gal->StochasticityTreatedFescWeightedGSM;
+      local[FESC_POPII_GSM_TARGET] += gal->FescWeightedGSM;
+      local[FESC_POPII_SFR_RAW] += gal->StochasticityTreatedFescWeightedSfr;
+      local[FESC_POPII_SFR_TARGET] += gal->FescWeightedSfr;
 #if USE_MINI_HALOS
-      local[FESC_POPIII_GSM_RAW] += gal->FescIIIWeightedGSM;
-      local[FESC_POPIII_GSM_TARGET] += gal->TargetFescIIIWeightedGSM;
-      local[FESC_POPIII_SFR_RAW] += gal->FescIIIWeightedSfr;
-      local[FESC_POPIII_SFR_TARGET] += gal->TargetFescIIIWeightedSfr;
+      local[FESC_POPIII_GSM_RAW] += gal->StochasticityTreatedFescIIIWeightedGSM;
+      local[FESC_POPIII_GSM_TARGET] += gal->FescIIIWeightedGSM;
+      local[FESC_POPIII_SFR_RAW] += gal->StochasticityTreatedFescIIIWeightedSfr;
+      local[FESC_POPIII_SFR_TARGET] += gal->FescIIIWeightedSfr;
 #endif
     }
 
@@ -128,40 +129,31 @@ void fesc_recalibration(void)
       run_globals.mpi_comm
   );
 
-  if (run_globals.mpi_rank == 0) {
-    corrections[FESC_CORRECTION_POPII_GSM] = fesc_get_global_correction(
-        global[FESC_POPII_GSM_TARGET],
-        global[FESC_POPII_GSM_RAW],
-        "PopII FescWeightedGSM"
-    );
-
-    corrections[FESC_CORRECTION_POPII_SFR] = fesc_get_global_correction(
-        global[FESC_POPII_SFR_TARGET],
-        global[FESC_POPII_SFR_RAW],
-        "PopII FescWeightedSfr"
-    );
-#if USE_MINI_HALOS
-    corrections[FESC_CORRECTION_POPIII_GSM] = fesc_get_global_correction(
-        global[FESC_POPIII_GSM_TARGET],
-        global[FESC_POPIII_GSM_RAW],
-        "PopIII FescWeightedGSM"
-    );
-
-    corrections[FESC_CORRECTION_POPIII_SFR] = fesc_get_global_correction(
-        global[FESC_POPIII_SFR_TARGET],
-        global[FESC_POPIII_SFR_RAW],
-        "PopIII FescWeightedSfr"
-    );
-#endif
-  }
-
-  MPI_Bcast(
-      corrections,
-      FESC_CORRECTION_N,
-      MPI_DOUBLE,
-      0,
-      run_globals.mpi_comm
+  run_globals.fesc_stochasticity_calibrations[GSM] = fesc_get_global_correction(
+      global[FESC_POPII_GSM_TARGET],
+      global[FESC_POPII_GSM_RAW],
+      "PopII FescWeightedGSM"
   );
+
+  run_globals.fesc_stochasticity_calibrations[SFR] = fesc_get_global_correction(
+      global[FESC_POPII_SFR_TARGET],
+      global[FESC_POPII_SFR_RAW],
+      "PopII FescWeightedSfr"
+  );
+#if USE_MINI_HALOS
+  run_globals.fesc_stochasticity_calibrations[POPIII_GSM] = fesc_get_global_correction(
+      global[FESC_POPIII_GSM_TARGET],
+      global[FESC_POPIII_GSM_RAW],
+      "PopIII FescWeightedGSM"
+  );
+
+  run_globals.fesc_stochasticity_calibrations[POPIII_SFR] = fesc_get_global_correction(
+      global[FESC_POPIII_SFR_TARGET],
+      global[FESC_POPIII_SFR_RAW],
+      "PopIII FescWeightedSfr"
+  );
+#endif
+  
 
   if (run_globals.mpi_rank == 0) {
 #if USE_MINI_HALOS
@@ -170,37 +162,21 @@ void fesc_recalibration(void)
         "C_GSM_II=%.12g C_SFR_II=%.12g "
         "C_GSM_III=%.12g C_SFR_III=%.12g.",
         MLOG_MESG,
-        corrections[FESC_CORRECTION_POPII_GSM],
-        corrections[FESC_CORRECTION_POPII_SFR],
-        corrections[FESC_CORRECTION_POPIII_GSM],
-        corrections[FESC_CORRECTION_POPIII_SFR]
+        run_globals.fesc_stochasticity_calibrations[GSM],
+        run_globals.fesc_stochasticity_calibrations[SFR],
+        run_globals.fesc_stochasticity_calibrations[POPIII_GSM],
+        run_globals.fesc_stochasticity_calibrations[POPIII_SFR]
     );
 #else
     mlog(
         "Global fesc recalibration: "
         "C_GSM=%.12g C_SFR=%.12g.",
         MLOG_MESG,
-        corrections[FESC_CORRECTION_POPII_GSM],
-        corrections[FESC_CORRECTION_POPII_SFR]
+        run_globals.fesc_stochasticity_calibrations[GSM],
+        run_globals.fesc_stochasticity_calibrations[SFR]
     );
 #endif
-  }
-
-  // Apply the global corrections to all galaxies in this snapshot.
-  gal = run_globals.FirstGal;
-  while (gal != NULL) {
-    if (stochasticity_source_eligible(gal)) {
-      gal->FescWeightedGSM *= corrections[FESC_CORRECTION_POPII_GSM];
-      gal->FescWeightedSfr *= corrections[FESC_CORRECTION_POPII_SFR];
-#if USE_MINI_HALOS
-      gal->FescIIIWeightedGSM *= corrections[FESC_CORRECTION_POPIII_GSM];
-      gal->FescIIIWeightedSfr *= corrections[FESC_CORRECTION_POPIII_SFR];
-#endif  
-    }
-
-    gal = gal->Next;
-  }
-  
+  }  
 }
 
 // SHMR stochasticity related. Population is the raw Galaxy_Population
@@ -503,7 +479,7 @@ static void no_shmr_global_bin_medians(
       }
     }
 
-	// Write one type median table for a snapshot. Sparse non-central
+	// Write one type median table. Sparse non-central
 	// types fall back to type 0, and interior gaps are interpolated while edges
 	// are filled with the supplied floor value.
 	int count;
@@ -567,7 +543,7 @@ static void no_shmr_global_bin_medians(
 
 // Build the SHMR/SFR source tables for one population's [type x halo-mass
 // bin] grid, using only galaxies belonging to that population.
-void no_shmr_build_source_tables(int population)
+void build_no_shmr_tables(int population)
 {
   size_t n_cells =
       (size_t)SHMR_NTYPES *
@@ -727,13 +703,12 @@ void no_shmr_build_source_tables(int population)
 
 }
 
-// Initialize per-galaxy noSHMR source targets from the snapshot tables,
+// Initialize per-galaxy noSHMR source targets from the tables,
 // resetting target accumulators first and only evaluating galaxies with
 // active stellar-mass or SFR source content.
-void no_shmr_prepare_sources(int snapshot)
+void apply_no_shmr_treatment()
 {
   galaxy_t* gal = run_globals.FirstGal;
-  galaxy_t source_view; 
   double raw_mstar, raw_sfr, mstar_source, sfr_source, previous_mstar;
   
   while (gal != NULL) {
@@ -745,16 +720,8 @@ void no_shmr_prepare_sources(int snapshot)
       raw_mstar = gal->GrossStellarMass;
       raw_sfr = gal->Sfr;
 #endif
-      gal->TargetFescWeightedGSM = gal->FescWeightedGSMNoScatter;
-      gal->TargetFescWeightedSfr = 0.0;
-      gal->SfrNoScatter = 0.0;
-#if USE_MINI_HALOS
-      gal->TargetFescIIIWeightedGSM = gal->FescIIIWeightedGSMNoScatter;
-      gal->TargetFescIIIWeightedSfr = 0.0;
-      gal->SfrIIINoScatter = 0.0;
-#endif
 
-      if (raw_mstar > 0.0 || raw_sfr > 0.0) {
+      if (raw_mstar > 0.0) {
         mstar_source = no_shmr_get_table_value(
 #if USE_MINI_HALOS
             gal->Galaxy_Population == 3 ? run_globals.SHMRsIII : run_globals.SHMRs,
@@ -762,98 +729,49 @@ void no_shmr_prepare_sources(int snapshot)
             run_globals.SHMRs,
 #endif
             gal,
-			NO_SHMR_LOG10_MSTAR_FLOOR
+			      NO_SHMR_LOG10_MSTAR_FLOOR
         );
 
-        sfr_source = raw_sfr > 0.0
-            ? no_shmr_get_table_value(
 #if USE_MINI_HALOS
-                  gal->Galaxy_Population == 3 ? run_globals.SFRsIII : run_globals.SFRs,
+        if (gal->Galaxy_Population == 3) {
+          if (mstar_source > gal->GrossStellarMassIIINoScatter)
+            gal->StochasticityTreatedFescWeightedGSM += gal->FescIII * (mstar_source - gal->GrossStellarMassIIINoScatter);
+          gal->GrossStellarMassIIINoScatter = mstar_source;
+        }
+        else {
+          if (mstar_source > gal->GrossStellarMassNoScatter)
+            gal->StochasticityTreatedFescWeightedGSM += gal->Fesc * (mstar_source - gal->GrossStellarMassNoScatter);
+          gal->GrossStellarMassNoScatter = mstar_source;
+        }
 #else
-                  run_globals.SFRs,
+        if (mstar_source > gal->GrossStellarMassNoScatter)
+          gal->StochasticityTreatedFescWeightedGSM += gal->Fesc * (mstar_source - gal->GrossStellarMassNoScatter);
+        gal->GrossStellarMassNoScatter = mstar_source;
 #endif
-                  gal,
-				  NO_SHMR_LOG10_SFR_FLOOR
-              )
-            : 0.0;
+      }
 
-		// Evaluate one galaxy against the selected source model values, run the
-		// existing fesc update path on a temporary source view, then commit the
-		// resulting no-scatter and target weighted fields back to the real galaxy.
-		source_view = *gal;
-
-		// these haven't been updated yet, so we can use them to determine the new stars formed in this snapshot
+      if (raw_sfr > 0.0) {
+        sfr_source = no_shmr_get_table_value(
 #if USE_MINI_HALOS
-		previous_mstar =
-			gal->Galaxy_Population == 3 ? gal->GrossStellarMassIIINoScatter : gal->GrossStellarMassNoScatter;
+                gal->Galaxy_Population == 3 ? run_globals.SFRsIII : run_globals.SFRs,
 #else
-  		previous_mstar = gal->GrossStellarMassNoScatter;
+                run_globals.SFRs,
 #endif
-
-		if (mstar_source < previous_mstar)
-			mstar_source = previous_mstar;
-
-		// this is mostly for the fesc update function, when using StellarMass to compute the escape fraction
-		// NOTE: but now it's actually using the new GrossStellarMassNoScatter!
-		source_view.StellarMass = mstar_source; 
-
+                gal,
+				        NO_SHMR_LOG10_SFR_FLOOR
+            );
 #if USE_MINI_HALOS
-		if (gal->Galaxy_Population == 3) {
-			source_view.GrossStellarMassIII = mstar_source;
-			source_view.StellarMass_III = mstar_source;
-			source_view.SfrIII = sfr_source;
-			source_view.FescIIIWeightedGSM = gal->FescIIIWeightedGSMNoScatter;
-			source_view.FescIIIWeightedSfr = 0.0;
-		} else {
-			source_view.GrossStellarMass = mstar_source;
-			source_view.StellarMass_II = mstar_source;
-			source_view.Sfr = sfr_source;
-			source_view.FescWeightedGSM = gal->FescWeightedGSMNoScatter;
-			source_view.FescWeightedSfr = 0.0;
-		}
+        if (gal->Galaxy_Population == 3) {
+          gal->StochasticityTreatedFescWeightedSfr = gal->FescIII * sfr_source;
+          gal->SfrIIINoScatter = sfr_source;
+        }
+        else {
+          gal->StochasticityTreatedFescWeightedSfr = gal->Fesc * sfr_source;
+          gal->SfrNoScatter = sfr_source;
+        }
 #else
-		source_view.GrossStellarMass = mstar_source;
-		source_view.Sfr = sfr_source;
-		source_view.FescWeightedGSM = gal->FescWeightedGSMNoScatter;
-		source_view.FescWeightedSfr = 0.0;
-#endif
-
-		update_galaxy_fesc_vals(
-			&source_view,
-			mstar_source - previous_mstar,
-			snapshot
-		);
-
-#if USE_MINI_HALOS
-		if (gal->Galaxy_Population == 3) {
-			gal->GrossStellarMassIIINoScatter = mstar_source;
-			gal->SfrIIINoScatter = sfr_source;
-			gal->FescIIIWeightedGSMNoScatter =
-				source_view.FescIIIWeightedGSM;
-			gal->TargetFescIIIWeightedGSM =
-				source_view.FescIIIWeightedGSM;
-			gal->TargetFescIIIWeightedSfr =
-				source_view.FescIIIWeightedSfr;
-		}
-		else {
-			gal->GrossStellarMassNoScatter = mstar_source;
-			gal->SfrNoScatter = sfr_source;
-			gal->FescWeightedGSMNoScatter =
-				source_view.FescWeightedGSM;
-			gal->TargetFescWeightedGSM =
-				source_view.FescWeightedGSM;
-			gal->TargetFescWeightedSfr =
-				source_view.FescWeightedSfr;
-		}
-#else
-		gal->GrossStellarMassNoScatter = mstar_source;
-		gal->SfrNoScatter = sfr_source;
-		gal->FescWeightedGSMNoScatter =
-			source_view.FescWeightedGSM;
-		gal->TargetFescWeightedGSM =
-			source_view.FescWeightedGSM;
-		gal->TargetFescWeightedSfr =
-			source_view.FescWeightedSfr;
+        gal->StochasticityTreatedFescWeightedSfr = gal->Fesc * sfr_source;
+        gal->SfrNoScatter = sfr_source;
 #endif
       }
     }
@@ -864,7 +782,7 @@ void no_shmr_prepare_sources(int snapshot)
 // Apply fixed-bin global recalibration factors: reduce per-bin raw/source
 // budgets across MPI ranks, compute correction ratios for bins with support,
 // and scale galaxy target weighted GSM/SFR in the corresponding bin.
-void no_shmr_apply_fixed_bin_recalibration(int population)
+void compute_no_shmr_recalibration_factors(int population)
 {
   size_t n_bins =
       (size_t)SHMR_NTYPES * (size_t)SHMR_NX;
@@ -873,10 +791,22 @@ void no_shmr_apply_fixed_bin_recalibration(int population)
     double* global_target_gsm = calloc(n_bins, sizeof(double));
     double* local_target_sfr = calloc(n_bins, sizeof(double));
     double* global_target_sfr = calloc(n_bins, sizeof(double));
-    double* local_source_gsm = calloc(n_bins, sizeof(double));
-    double* global_source_gsm = calloc(n_bins, sizeof(double));
-    double* local_source_sfr = calloc(n_bins, sizeof(double));
-    double* global_source_sfr = calloc(n_bins, sizeof(double));
+    double* local_raw_gsm = calloc(n_bins, sizeof(double));
+    double* global_raw_gsm = calloc(n_bins, sizeof(double));
+    double* local_raw_sfr = calloc(n_bins, sizeof(double));
+    double* global_raw_sfr = calloc(n_bins, sizeof(double));
+#if USE_MINI_HALOS
+    if (population == 3) {
+      double* no_shmr_gsm_stochasticity_calibrations = run_globals.no_shmr_gsm_stochasticity_calibrations_iii;
+      double* no_shmr_sfr_stochasticity_calibrations = run_globals.no_shmr_sfr_stochasticity_calibrations_iii;
+    } else {
+      double* no_shmr_gsm_stochasticity_calibrations = run_globals.no_shmr_gsm_stochasticity_calibrations;
+      double* no_shmr_sfr_stochasticity_calibrations = run_globals.no_shmr_sfr_stochasticity_calibrations;
+    }
+#else
+    double* no_shmr_gsm_stochasticity_calibrations = run_globals.no_shmr_gsm_stochasticity_calibrations;
+    double* no_shmr_sfr_stochasticity_calibrations = run_globals.no_shmr_sfr_stochasticity_calibrations;
+#endif
 
     long long* local_target_gsm_count = calloc(n_bins, sizeof(long long));
     long long* global_target_gsm_count = calloc(n_bins, sizeof(long long));
@@ -885,8 +815,8 @@ void no_shmr_apply_fixed_bin_recalibration(int population)
 
     if (local_target_gsm == NULL || global_target_gsm == NULL ||
       local_target_sfr == NULL || global_target_sfr == NULL ||
-      local_source_gsm == NULL || global_source_gsm == NULL ||
-      local_source_sfr == NULL || global_source_sfr == NULL ||
+      local_raw_gsm == NULL || global_raw_gsm == NULL ||
+      local_raw_sfr == NULL || global_raw_sfr == NULL ||
       local_target_gsm_count == NULL || global_target_gsm_count == NULL ||
       local_target_sfr_count == NULL || global_target_sfr_count == NULL) {
     mlog_error("Failed to allocate noSHMR memory.");
@@ -900,37 +830,37 @@ void no_shmr_apply_fixed_bin_recalibration(int population)
   int bin, has_gsm, has_sfr;
   while (gal != NULL) {
 #if USE_MINI_HALOS
-    raw_gsm = population == 3 ? gal->FescIIIWeightedGSM : gal->FescWeightedGSM;
-    target_gsm = population == 3 ? gal->TargetFescIIIWeightedGSM : gal->TargetFescWeightedGSM;
-	raw_sfr = population == 3 ? gal->FescIIIWeightedSfr : gal->FescWeightedSfr;
-	target_sfr = population == 3 ? gal->TargetFescIIIWeightedSfr : gal->TargetFescWeightedSfr;
+    target_gsm = population == 3 ? gal->FescIIIWeightedGSM : gal->FescWeightedGSM;
+    raw_gsm = population == 3 ? gal->StochasticityTreatedFescIIIWeightedGSM : gal->StochasticityTreatedFescWeightedGSM;
+	target_sfr = population == 3 ? gal->FescIIIWeightedSfr : gal->FescWeightedSfr;
+	raw_sfr = population == 3 ? gal->StochasticityTreatedFescIIIWeightedSfr : gal->StochasticityTreatedFescWeightedSfr;
 #else
-    raw_gsm = gal->FescWeightedGSM; // with SHMR scatter
-    target_gsm = gal->TargetFescWeightedGSM; // no SHMR scatter
-	raw_sfr = gal->FescWeightedSfr;
-	target_sfr = gal->TargetFescWeightedSfr;
+    target_gsm = gal->FescWeightedGSM; // with SHMR scatter
+    raw_gsm = gal->StochasticityTreatedFescWeightedGSM; // no SHMR scatter
+	target_sfr = gal->FescWeightedSfr;
+	raw_sfr = gal->StochasticityTreatedFescWeightedSfr;
 #endif    
     has_gsm = stochasticity_source_eligible(gal) && (raw_gsm > 0.0 || target_gsm > 0.0);
 	has_sfr = stochasticity_source_eligible(gal) && (raw_sfr > 0.0 || target_sfr > 0.0) && gal->Galaxy_Population == population;
 
     if (has_gsm || has_sfr) {
-	  log10_mvir = log10(gal->Mvir);
+	    log10_mvir = log10(gal->Mvir);
       bin = log10_mvir < SHMR_XMIN ? 0 : log10_mvir > SHMR_XMAX ? SHMR_NX - 1 : (int)floor((log10_mvir - SHMR_XMIN) / SHMR_DX);
       index = (size_t) (gal->Type * SHMR_NX + bin);
 
       if (has_gsm) {
-		// the naming is confusing, but local_target is the raw data with SHMR scatter while local_source is the target data without SHMR scatter
+		// the naming is confusing, but local_target is the raw data with SHMR scatter while local_raw is the target data without SHMR scatter
 		// in other words, the source is the target and the target is the raw data for recalibration purposes
-        local_target_gsm[index] += raw_gsm; 
-        local_source_gsm[index] += target_gsm;
-        if (raw_gsm > 0.0)
+        local_target_gsm[index] += target_gsm; 
+        local_raw_gsm[index] += raw_gsm;
+        if (target_gsm > 0.0)
           local_target_gsm_count[index]++;
       }
 
       if (has_sfr) {
-        local_target_sfr[index] += raw_sfr;
-        local_source_sfr[index] += target_sfr;
-        if (raw_sfr > 0.0)
+        local_target_sfr[index] += target_sfr;
+        local_raw_sfr[index] += raw_sfr;
+        if (target_sfr > 0.0)
           local_target_sfr_count[index]++;
       }
     }
@@ -957,8 +887,8 @@ void no_shmr_apply_fixed_bin_recalibration(int population)
   );
 
   MPI_Allreduce(
-      local_source_gsm,
-      global_source_gsm,
+      local_raw_gsm,
+      global_raw_gsm,
       (int)n_bins,
       MPI_DOUBLE,
       MPI_SUM,
@@ -966,8 +896,8 @@ void no_shmr_apply_fixed_bin_recalibration(int population)
   );
 
   MPI_Allreduce(
-      local_source_sfr,
-      global_source_sfr,
+      local_raw_sfr,
+      global_raw_sfr,
       (int)n_bins,
       MPI_DOUBLE,
       MPI_SUM,
@@ -992,104 +922,40 @@ void no_shmr_apply_fixed_bin_recalibration(int population)
       run_globals.mpi_comm
   );
 
-  gal = run_globals.FirstGal;
-  while (gal != NULL) {
-#if USE_MINI_HALOS
-    raw_gsm = population == 3 ? gal->FescIIIWeightedGSM : gal->FescWeightedGSM;
-    target_gsm = population == 3 ? gal->TargetFescIIIWeightedGSM : gal->TargetFescWeightedGSM;
-	raw_sfr = population == 3 ? gal->FescIIIWeightedSfr : gal->FescWeightedSfr;
-	target_sfr = population == 3 ? gal->TargetFescIIIWeightedSfr : gal->TargetFescWeightedSfr;
-#else
-    raw_gsm = gal->FescWeightedGSM; // with SHMR scatter
-    target_gsm = gal->TargetFescWeightedGSM; // no SHMR scatter
-	raw_sfr = gal->FescWeightedSfr;
-	target_sfr = gal->TargetFescWeightedSfr;
-#endif    
-    has_gsm = stochasticity_source_eligible(gal) && (raw_gsm > 0.0 || target_gsm > 0.0);
-	has_sfr = stochasticity_source_eligible(gal) && (raw_sfr > 0.0 || target_sfr > 0.0) && gal->Galaxy_Population == population;
-
-    if (!has_gsm && !has_sfr) {
-      gal = gal->Next;
-      continue;
+  for (index=0; index<n_bins; index++) {
+    if (global_raw_gsm[index] <= ABS_TOL && global_target_gsm[index] > ABS_TOL) {
+      no_shmr_gsm_stochasticity_calibrations[index] =
+          global_target_gsm[index] /
+          (double)global_target_gsm_count[index];
+    } else {
+      no_shmr_gsm_stochasticity_calibrations[index] =
+          global_raw_gsm[index] > ABS_TOL
+              ? global_target_gsm[index] /
+                global_raw_gsm[index]
+              : 1.0;
     }
 
-	log10_mvir = log10(gal->Mvir);
-    bin = log10_mvir < SHMR_XMIN ? 0 : log10_mvir > SHMR_XMAX ? SHMR_NX - 1 : (int)floor((log10_mvir - SHMR_XMIN) / SHMR_DX);
-    index = (size_t) (gal->Type * SHMR_NX + bin);
-
-    if (has_gsm) {
-      // No source budget in this bin but a target exists: split the target evenly
-      // across contributing galaxies instead of scaling a zero source.
-      if (global_source_gsm[index] <=
-              ABS_TOL &&
-          global_target_gsm[index] >
-              ABS_TOL) {
-        new_target_gsm =
-            raw_gsm > 0.0
-                ? global_target_gsm[index] /
-                      (double)global_target_gsm_count[index]
-                : 0.0;
-      } else {
-        new_target_gsm =
-            global_source_gsm[index] >
-                    ABS_TOL
-                ? target_gsm *
-                      (global_target_gsm[index] /
-                       global_source_gsm[index])
-                : target_gsm;
-      }
-
-#if USE_MINI_HALOS
-      if (population == 3)
-        gal->TargetFescIIIWeightedGSM = new_target_gsm;
-      else
-        gal->TargetFescWeightedGSM = new_target_gsm;
-#else
-      gal->TargetFescWeightedGSM = new_target_gsm;
-#endif
+    if (global_raw_sfr[index] <= ABS_TOL && global_target_sfr[index] > ABS_TOL) {
+      no_shmr_sfr_stochasticity_calibrations[index] =
+          global_target_sfr[index] /
+          (double)global_target_sfr_count[index];
+    } else {
+      no_shmr_sfr_stochasticity_calibrations[index] =
+          global_raw_sfr[index] > ABS_TOL
+              ? global_target_sfr[index] /
+                global_raw_sfr[index]
+              : 1.0;
     }
-
-    if (has_sfr) {
-      if (global_source_sfr[index] <=
-              ABS_TOL &&
-          global_target_sfr[index] >
-              ABS_TOL) {
-        new_target_sfr =
-            raw_sfr > 0.0
-                ? global_target_sfr[index] /
-                      (double)global_target_sfr_count[index]
-                : 0.0;
-      } else {
-        new_target_sfr =
-            global_source_sfr[index] >
-                    ABS_TOL
-                ? target_sfr *
-                      (global_target_sfr[index] /
-                       global_source_sfr[index])
-                : target_sfr;
-      }
-
-#if USE_MINI_HALOS
-      if (population == 3)
-        gal->TargetFescIIIWeightedSfr = new_target_sfr;
-      else
-        gal->TargetFescWeightedSfr = new_target_sfr;
-#else
-      gal->TargetFescWeightedSfr = new_target_sfr;
-#endif
-    }
-
-    gal = gal->Next;
   }
 
   free(local_target_gsm);
   free(global_target_gsm);
   free(local_target_sfr);
   free(global_target_sfr);
-  free(local_source_gsm);
-  free(global_source_gsm);
-  free(local_source_sfr);
-  free(global_source_sfr);
+  free(local_raw_gsm);
+  free(global_raw_gsm);
+  free(local_raw_sfr);
+  free(global_raw_sfr);
   free(local_target_gsm_count);
   free(global_target_gsm_count);
   free(local_target_sfr_count);
@@ -1118,7 +984,12 @@ void no_shmr_sources_init(void)
   run_globals.SFRs =
       calloc(n_shmr, sizeof(float));
 
-  if (run_globals.SHMRs == NULL || run_globals.SFRs == NULL) {
+  run_globals.no_shmr_gsm_stochasticity_calibrations = 
+      calloc(n_shmr, sizeof(double));
+  run_globals.no_shmr_sfr_stochasticity_calibrations = 
+      calloc(n_shmr, sizeof(double));
+
+  if (run_globals.SHMRs == NULL || run_globals.SFRs == NULL || run_globals.no_shmr_gsm_stochasticity_calibrations == NULL || run_globals.no_shmr_sfr_stochasticity_calibrations == NULL) {
     mlog_error("Failed to allocate noSHMR memory.");
     ABORT(EXIT_FAILURE);
   }
@@ -1130,32 +1001,71 @@ void no_shmr_sources_init(void)
   run_globals.SFRsIII =
       calloc(n_shmr, sizeof(float));
 
-  if (run_globals.SHMRsIII == NULL || run_globals.SFRsIII == NULL) {
+  run_globals.no_shmr_gsm_stochasticity_calibrations_iii = 
+      calloc(n_shmr, sizeof(double));
+  run_globals.no_shmr_sfr_stochasticity_calibrations_iii = 
+      calloc(n_shmr, sizeof(double));
+
+  if (run_globals.SHMRsIII == NULL || run_globals.SFRsIII == NULL || run_globals.no_shmr_gsm_stochasticity_calibrations_iii == NULL || run_globals.no_shmr_sfr_stochasticity_calibrations_iii == NULL) {
     mlog_error("Failed to allocate noSHMR memory.");
     ABORT(EXIT_FAILURE);
   }
 #endif
+
 }
+
 
 void no_shmr_sources_free(void)
 {
 
   free(run_globals.SHMRs);
   free(run_globals.SFRs);
+  free(run_globals.fesc_stochasticity_calibrations);
+  free(run_globals.no_shmr_gsm_stochasticity_calibrations);
+  free(run_globals.no_shmr_sfr_stochasticity_calibrations);
 
 #if USE_MINI_HALOS
   free(run_globals.SHMRsIII);
   free(run_globals.SFRsIII);
+  free(run_globals.no_shmr_gsm_stochasticity_calibrations_iii);
+  free(run_globals.no_shmr_sfr_stochasticity_calibrations_iii);
 #endif
 
   run_globals.SHMRs = NULL;
   run_globals.SFRs = NULL;
+  run_globals.fesc_stochasticity_calibrations = NULL;
+  run_globals.no_shmr_gsm_stochasticity_calibrations = NULL;
+  run_globals.no_shmr_sfr_stochasticity_calibrations = NULL;
 
 #if USE_MINI_HALOS
   run_globals.SHMRsIII = NULL;
   run_globals.SFRsIII = NULL;
+  run_globals.no_shmr_gsm_stochasticity_calibrations_iii = NULL;
+  run_globals.no_shmr_sfr_stochasticity_calibrations_iii = NULL;
 #endif
 
+}
+
+
+double extract_recalibration_factors(galaxy_t* gal, int population, bool GSM){
+  
+  if (run_globals.params.physics.Flag_RemoveSHMRScatter == 0){
+#if USE_MINI_HALOS
+    if (population == 3)
+      return GSM ? run_globals.fesc_stochasticity_calibrations[POPIII_GSM] : run_globals.fesc_stochasticity_calibrations[POPIII_SFR];
+#endif
+    return GSM ? run_globals.fesc_stochasticity_calibrations[GSM] : run_globals.fesc_stochasticity_calibrations[SFR];
+  }
+
+  double log10_mvir = log10(gal->Mvir);
+  int bin = log10_mvir < SHMR_XMIN ? 0 : log10_mvir > SHMR_XMAX ? SHMR_NX - 1 : (int)floor((log10_mvir - SHMR_XMIN) / SHMR_DX);
+  size_t index = (size_t) (gal->Type * SHMR_NX + bin);
+
+#if USE_MINI_HALOS
+  if (population == 3)
+    return GSM ? run_globals.no_shmr_gsm_stochasticity_calibrations_iii[index] : run_globals.no_shmr_sfr_stochasticity_calibrations_iii[index];
+#endif
+    return GSM ? run_globals.no_shmr_gsm_stochasticity_calibrations[index] : run_globals.no_shmr_sfr_stochasticity_calibrations[index];
 }
 
 #endif
