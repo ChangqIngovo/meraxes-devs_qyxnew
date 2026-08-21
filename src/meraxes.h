@@ -178,7 +178,12 @@ typedef struct physics_params_t
   double SpecIndexXrayAGNSoft;
   double SpecIndexXrayAGNHard;
   double SpecIndexUVAGN;        /* AGN NUV/FUV continuum slope (Lusso et al. 2015), QuasarLuv (1450A) extrapolated into the LW band */
-  double AGNLWEfficiency;       /* Scales quasar_lw only (not QuasarLuv/QuasarMag/QuasarLF) — set to 0 to turn off AGN's LW contribution */
+  double AGNLWEfficiency;       /* Binary debug switch (0 or 1), not a tunable efficiency — the physically
+                                    meaningful suppression near Lyman resonances is handled by sum_lyn_LW_AGN's
+                                    per-window treatment. Set to 0 to turn off AGN's LW contribution independently
+                                    of Flag_IncludeLymanWerner (which gates the whole LW mechanism, GAL included);
+                                    leave at 1 otherwise. Scales quasar_lw only — QuasarLuv/QuasarMag/QuasarLF are
+                                    untouched. */
 
   double ReionMaxHeatingRedshift;
 

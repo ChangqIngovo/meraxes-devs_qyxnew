@@ -59,8 +59,8 @@ NuXrayMax                  : 10000.          # Maximum energy for X-ray band int
 Flag_IncludeAGNXray        : 0               # 0=no AGN, 1=soft+hard, 2=hard only, 3=soft only
 SpecIndexXrayAGNSoft       : 2.2             # Soft-band spectral index (nu^{-alpha}, E < E_break)
 SpecIndexXrayAGNHard       : 1.7             # Hard-band spectral index (nu^{-alpha}, E >= E_break)
-SpecIndexUVAGN             : 0.61            # AGN NUV/FUV continuum slope (nu^{-alpha}), nu < nu_LymanLimit — Lusso et al. 2015 (ApJ 819, 154); QuasarLuv (1450A) extrapolated into the Lyman-Werner band (which sits entirely on this side of the Lyman-limit break), used when Flag_IncludeLymanWerner is on
-AGNLWEfficiency            : 1.0             # Scales quasar_lw only (not QuasarLuv/QuasarMag/QuasarLF) — set to 0 to turn off AGN's LW contribution independently of Flag_IncludeLymanWerner
+SpecIndexUVAGN             : 0.61            # AGN NUV/FUV continuum slope (nu^{-alpha}), 1450A -> 1200A only — Lusso et al. 2015 (ApJ 819, 154). The SED breaks at 1200A (eq. A2, Qin et al. 2017/1703.04895); the Lyman-Werner band sits entirely shortward of that break, so it's governed by ReionAlphaUVBH instead, used when Flag_IncludeLymanWerner is on
+AGNLWEfficiency            : 1.0             # Binary debug switch (0 or 1), not a tunable efficiency — the physical Lyman-resonance suppression is handled by sum_lyn_LW_AGN. Set to 0 to turn off AGN's LW contribution independently of Flag_IncludeLymanWerner; leave at 1 otherwise
 Flag_BHARExponentialCut    : 0               # 0=duty-cycle weighted emissivity, 1=exponential cut with random on-time
 Flag_OutputXrayLF          : 0               # 0=off, 1=output X-ray luminosity function histograms
 XrayLF_MinLogL             : 38.0            # minimum log10(LX/erg/s) for X-ray LF histogram

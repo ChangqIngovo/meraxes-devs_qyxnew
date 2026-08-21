@@ -236,8 +236,12 @@ void calculate_BHemissivity(double BlackHoleMass, double accreted_mass,
    * stars), happens later in ComputeTs.c's sum_lyn_LW_AGN loop, which
    * evaluates (nu/NU_1200)^-ReionAlphaUVBH relative to this amplitude. */
   *quasar_lw = *quasar_luv * pow(NU_1200 / NU_1450, -physics->SpecIndexUVAGN);
-  /* AGNLWEfficiency scales quasar_lw only — QuasarLuv/QuasarMag/QuasarLF are
-   * untouched, so this is a clean off-switch for AGN's LW contribution alone. */
+  /* AGNLWEfficiency is a binary (0/1) debug switch, not a tunable efficiency
+   * — the physically meaningful suppression near Lyman resonances is
+   * already handled by sum_lyn_LW_AGN's per-window treatment above. This
+   * just scales quasar_lw (QuasarLuv/QuasarMag/QuasarLF are untouched), as a
+   * clean off-switch for AGN's LW contribution alone, independent of
+   * Flag_IncludeLymanWerner. */
   *quasar_lw *= physics->AGNLWEfficiency;
 }
 
