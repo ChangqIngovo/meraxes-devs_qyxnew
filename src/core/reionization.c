@@ -1898,13 +1898,9 @@ void construct_baryon_grids(int snapshot, int local_ngals)
           switch (prop) {
             case prop_stellar:
             # if USE_STOCHASTICITY
-                if (stochasticity_source_eligible(gal)) {
-                  if (run_globals.params.physics.Flag_SourceRecalibration)
-                    stochasticity_calibration_factor = extract_recalibration_factors(gal, 2, true);
-                  buffer[ind] += gal->StochasticityTreatedFescWeightedGSM * stochasticity_calibration_factor;
-                }
-                else
-                  buffer[ind] += gal->FescWeightedGSM;
+              if (run_globals.params.physics.Flag_SourceRecalibration)
+                stochasticity_calibration_factor = extract_recalibration_factors(gal, 2, true);
+              buffer[ind] += gal->StochasticityTreatedFescWeightedGSM * stochasticity_calibration_factor;
             #else
               buffer[ind] += gal->FescWeightedGSM;
             #endif
@@ -1922,13 +1918,9 @@ void construct_baryon_grids(int snapshot, int local_ngals)
 #if USE_MINI_HALOS
             case prop_stellarIII:
             # if USE_STOCHASTICITY
-                if (stochasticity_source_eligible(gal)) {
-                  if (run_globals.params.physics.Flag_SourceRecalibration)
-                    stochasticity_calibration_factor = extract_recalibration_factors(gal, 3, true)
-                  buffer[ind] += gal->StochasticityTreatedFescIIIWeightedGSM * stochasticity_calibration_factor;
-                }
-                else
-                  buffer[ind] += gal->FescIIIWeightedGSM;
+              if (run_globals.params.physics.Flag_SourceRecalibration)
+                stochasticity_calibration_factor = extract_recalibration_factors(gal, 3, true)
+              buffer[ind] += gal->StochasticityTreatedFescIIIWeightedGSM * stochasticity_calibration_factor;
             #else
               buffer[ind] += gal->FescIIIWeightedGSM;
             #endif
@@ -1936,13 +1928,9 @@ void construct_baryon_grids(int snapshot, int local_ngals)
 
             case prop_weighted_sfrIII:
             #if USE_STOCHASTICITY
-                if (stochasticity_source_eligible(gal)){
-                  if (run_globals.params.physics.Flag_SourceRecalibration)
-                    stochasticity_calibration_factor = extract_recalibration_factors(gal, 3, false)
-                  buffer[ind] += gal->StochasticityTreatedFescIIIWeightedSfr * stochasticity_calibration_factor;
-                }
-                else
-                  buffer[ind] += gal->FescIIIWeightedSfr;
+              if (run_globals.params.physics.Flag_SourceRecalibration)
+                stochasticity_calibration_factor = extract_recalibration_factors(gal, 3, false)
+              buffer[ind] += gal->StochasticityTreatedFescIIIWeightedSfr * stochasticity_calibration_factor;
             #else
               buffer[ind] += gal->FescIIIWeightedSfr;
             #endif
@@ -1950,20 +1938,14 @@ void construct_baryon_grids(int snapshot, int local_ngals)
 
             case prop_sfrIII:
             # if USE_STOCHASTICITY
-              if (stochasticity_source_eligible(gal)){
-                buffer[ind] +=
-                    run_globals.params.Flag_InstantaneousSFR
-                  ? (run_globals.params.physics.Flag_RemoveSHMRScatter == 1
-                    ? gal->SfrIIINoScatter
-                    : gal->SfrIII)
-                  : (run_globals.params.physics.Flag_RemoveSHMRScatter == 1
-                    ? gal->GrossStellarMassIIINoScatter
-                    : gal->GrossStellarMassIII);                
-              }
-              else
-                buffer[ind] += run_globals.params.Flag_InstantaneousSFR
-                          ? gal->SfrIII
-                          : gal->GrossStellarMassIII;
+              buffer[ind] +=
+                  run_globals.params.Flag_InstantaneousSFR
+                ? (run_globals.params.physics.Flag_RemoveSHMRScatter == 1
+                  ? gal->SfrIIINoScatter
+                  : gal->SfrIII)
+                : (run_globals.params.physics.Flag_RemoveSHMRScatter == 1
+                  ? gal->GrossStellarMassIIINoScatter
+                  : gal->GrossStellarMassIII);                
             #else
               buffer[ind] += run_globals.params.Flag_InstantaneousSFR
                           ? gal->SfrIII
@@ -1974,13 +1956,9 @@ void construct_baryon_grids(int snapshot, int local_ngals)
 
             case prop_weighted_sfr:
             #if USE_STOCHASTICITY
-              if (stochasticity_source_eligible(gal)){
-                if (run_globals.params.physics.Flag_SourceRecalibration)
-                  stochasticity_calibration_factor = extract_recalibration_factors(gal, 2, false);
-                buffer[ind] += gal->StochasticityTreatedFescWeightedSfr * stochasticity_calibration_factor;
-              }
-              else
-                buffer[ind] += gal->FescWeightedSfr;
+              if (run_globals.params.physics.Flag_SourceRecalibration)
+                stochasticity_calibration_factor = extract_recalibration_factors(gal, 2, false);
+              buffer[ind] += gal->StochasticityTreatedFescWeightedSfr * stochasticity_calibration_factor;
             #else
               buffer[ind] += gal->FescWeightedSfr;
             #endif
@@ -1995,20 +1973,14 @@ void construct_baryon_grids(int snapshot, int local_ngals)
 
               case prop_sfr: 
               # if USE_STOCHASTICITY
-                if (stochasticity_source_eligible(gal)) {
-                  buffer[ind] +=
-                      run_globals.params.Flag_InstantaneousSFR
-                    ? (run_globals.params.physics.Flag_RemoveSHMRScatter == 1
-                      ? gal->SfrNoScatter
-                      : gal->Sfr)
-                    : (run_globals.params.physics.Flag_RemoveSHMRScatter == 1
-                      ? gal->GrossStellarMassNoScatter
-                      : gal->GrossStellarMass);                
-                }
-                else
-                  buffer[ind] += run_globals.params.Flag_InstantaneousSFR
-                            ? gal->Sfr
-                            : gal->GrossStellarMass;
+                buffer[ind] +=
+                    run_globals.params.Flag_InstantaneousSFR
+                  ? (run_globals.params.physics.Flag_RemoveSHMRScatter == 1
+                    ? gal->SfrNoScatter
+                    : gal->Sfr)
+                  : (run_globals.params.physics.Flag_RemoveSHMRScatter == 1
+                    ? gal->GrossStellarMassNoScatter
+                    : gal->GrossStellarMass);                
               #else
                 buffer[ind] += run_globals.params.Flag_InstantaneousSFR
                             ? gal->Sfr

@@ -18,7 +18,6 @@
 #define SHMR_INDEX(t,i) \
   ((size_t)(t) * (size_t)SHMR_NX + (size_t)(i))
 
-int stochasticity_source_eligible(const galaxy_t* gal);
 void compute_fesc_recalibration_factors(void);
 void fesc_recalibration(void);
 

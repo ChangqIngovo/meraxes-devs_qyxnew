@@ -38,7 +38,7 @@ enum stochasticity_calibration_index
   CAL_N
 };
 
-int stochasticity_source_eligible(const galaxy_t* gal)
+static int stochasticity_source_eligible(const galaxy_t* gal)
 {
   return gal->Type >= 0 && gal->Type <= 2;
 }
