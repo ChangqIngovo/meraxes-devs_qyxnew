@@ -1027,6 +1027,32 @@ void create_master_file()
     get_nh_transmission(s_T_vals);
     hsize_t nhtrans_dim = 5;
     H5LTmake_dataset_double(file_id, "NHTrans", 1, &nhtrans_dim, s_T_vals);
+
+    /* NHfrac only depends on redshift through _psi_ref(z), which saturates
+     * at z=2 (zeff = min(z,2) in blackhole_feedback.c) — so for any run
+     * whose output snapshots are all z>=2 (true here: this simulation stops
+     * at z=5), it's a run constant too. Evaluate at z=2.0 (or anywhere
+     * above it — same result) and write it once, same as NHTrans. */
+    int n_lx_bins_nhfrac = (int)((run_globals.params.XrayLF_MaxLogL - run_globals.params.XrayLF_MinLogL) *
+                                 run_globals.params.XrayLF_BinsPerDex);
+    if (n_lx_bins_nhfrac < 1)
+      n_lx_bins_nhfrac = 1;
+    double lx_bin_width_nhfrac =
+      (run_globals.params.XrayLF_MaxLogL - run_globals.params.XrayLF_MinLogL) / n_lx_bins_nhfrac;
+
+    double f_det[5];
+    double lx_log_center, lx_lin_1e10Lsun;
+    double* nhfrac_table = malloc((size_t)n_lx_bins_nhfrac * 5 * sizeof(double));
+    for (int ilx = 0; ilx < n_lx_bins_nhfrac; ilx++) {
+      lx_log_center = run_globals.params.XrayLF_MinLogL + (ilx + 0.5) * lx_bin_width_nhfrac;
+      lx_lin_1e10Lsun = pow(10.0, lx_log_center - 10.0 - LOG_10_SOLAR_LUM);
+      get_nh_fracs(lx_lin_1e10Lsun, 2.0, f_det);
+      for (int ib = 0; ib < 5; ib++)
+        nhfrac_table[ilx * 5 + ib] = f_det[ib];
+    }
+    hsize_t nhfrac_dims[2] = { (hsize_t)n_lx_bins_nhfrac, 5 };
+    H5LTmake_dataset_double(file_id, "NHfrac", 2, nhfrac_dims, nhfrac_table);
+    free(nhfrac_table);
   }
 
   char target_group[50];
@@ -1163,15 +1189,8 @@ void create_master_file()
       sprintf(source_ds, "Snap%03d/XrayLF_obs", run_globals.ListOutputSnaps[i_out]);
       H5Lcreate_external(relative_source_file, source_ds, snap_group_id, "XrayLF_obs", H5P_DEFAULT, H5P_DEFAULT);
     }
-    if (run_globals.params.Flag_OutputXrayLF) {
-      // NHTrans is now a single run-level dataset written once above, not
-      // linked per-snapshot.
-      // NHfrac: single 2D (n_lx_bins_nhfrac, 5) dataset per snapshot.
-      if (H5LTfind_dataset(source_group_id, "NHfrac")) {
-        sprintf(source_ds, "Snap%03d/NHfrac", run_globals.ListOutputSnaps[i_out]);
-        H5Lcreate_external(relative_source_file, source_ds, snap_group_id, "NHfrac", H5P_DEFAULT, H5P_DEFAULT);
-      }
-    }
+    // NHTrans and NHfrac are now single run-level datasets written once
+    // above, not linked per-snapshot.
 
     H5Gclose(source_group_id);
     H5Fclose(source_file_id);
@@ -1621,16 +1640,6 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
   int bin_idx;
   double lx_int_lin, lx_obs_lin;
 
-  int n_lx_bins_nhfrac = (int)((run_globals.params.XrayLF_MaxLogL - run_globals.params.XrayLF_MinLogL) *
-                               run_globals.params.XrayLF_BinsPerDex);
-  if (n_lx_bins_nhfrac < 1)
-    n_lx_bins_nhfrac = 1;
-  double lx_bin_width_nhfrac =
-    (run_globals.params.XrayLF_MaxLogL - run_globals.params.XrayLF_MinLogL) / n_lx_bins_nhfrac;
-
-  // Same for every galaxy in this output batch, per @qyx268's review comment.
-  double z_snap = run_globals.ZZ[run_globals.ListOutputSnaps[i_out]];
-
   int buffer_count = 0;
   while (gal != NULL) {
     // Don't output galaxies which merged at this timestep
@@ -1871,32 +1880,25 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
 
     if (run_globals.mpi_rank == 0) {
       hid_t grp = H5Gopen(file_id, target_group, H5P_DEFAULT);
-      double f_det[5];
-      double lx_log_center, lx_lin_1e10Lsun;
-      /* Single 2D dataset (n_lx_bins_nhfrac, 5) instead of one scalar dataset
-       * per (Lx bin, NH bin) pair — per @qyx268's review comment. */
-      double* nhfrac_table = malloc((size_t)n_lx_bins_nhfrac * 5 * sizeof(double));
-      for (int ilx = 0; ilx < n_lx_bins_nhfrac; ilx++) {
-        lx_log_center = run_globals.params.XrayLF_MinLogL + (ilx + 0.5) * lx_bin_width_nhfrac;
-        lx_lin_1e10Lsun = pow(10.0, lx_log_center - 10.0 - LOG_10_SOLAR_LUM);
-        get_nh_fracs(lx_lin_1e10Lsun, z_snap, f_det);
-        for (int ib = 0; ib < 5; ib++)
-          nhfrac_table[ilx * 5 + ib] = f_det[ib];
-      }
-      hsize_t nhfrac_dims[2] = { (hsize_t)n_lx_bins_nhfrac, 5 };
-      H5LTmake_dataset_double(grp, "NHfrac", 2, nhfrac_dims, nhfrac_table);
-      free(nhfrac_table);
+      /* NHfrac used to be written here per snapshot, but it only depends on
+       * redshift through _psi_ref(z), which saturates at z=2 — so for any
+       * run whose output snapshots are all z>=2 (true for every EoR/Cosmic
+       * Dawn run this codebase targets), it's a run constant. It's now
+       * written once in create_master_file() instead. */
 
       {
-        hsize_t one = 1;
-        double xray_hard  = stored_XrayEmissivity_hard[run_globals.ListOutputSnaps[i_out]];
-        double xray_soft  = stored_XrayEmissivity_soft[run_globals.ListOutputSnaps[i_out]];
-        double xray_total = xray_hard + xray_soft;
-        double xray_hmxb  = stored_XrayEmissivity_HMXB[run_globals.ListOutputSnaps[i_out]];
-        H5LTmake_dataset_double(grp, "XrayEmissivity_hard",  1, &one, &xray_hard);
-        H5LTmake_dataset_double(grp, "XrayEmissivity_soft",  1, &one, &xray_soft);
-        H5LTmake_dataset_double(grp, "XrayEmissivity_total", 1, &one, &xray_total);
-        H5LTmake_dataset_double(grp, "XrayEmissivity_HMXB",  1, &one, &xray_hmxb);
+        /* Single 3-element array [hard, soft, HMXB] instead of 4 separate
+         * scalar datasets — same consolidation as NHfrac above. "total" is
+         * dropped: it's just hard+soft, not independent data, so storing it
+         * would just be another redundant per-snapshot copy of a derivable
+         * value. */
+        hsize_t three = 3;
+        double xray_emissivity[3] = {
+          stored_XrayEmissivity_hard[run_globals.ListOutputSnaps[i_out]],
+          stored_XrayEmissivity_soft[run_globals.ListOutputSnaps[i_out]],
+          stored_XrayEmissivity_HMXB[run_globals.ListOutputSnaps[i_out]],
+        };
+        H5LTmake_dataset_double(grp, "XrayEmissivity", 1, &three, xray_emissivity);
       }
 
       H5Gclose(grp);
