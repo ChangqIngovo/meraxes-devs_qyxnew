@@ -278,10 +278,10 @@ static double no_shmr_get_table_value(const float* table,
   log10_mvir = log10(gal->Mvir);
 
   if (log10_mvir <= SHMR_XMIN)
-    return table[SHMR_INDEX(gal->Type, 0)];
+    return pow(10.0, table[SHMR_INDEX(gal->Type, 0)]);
 
   if (log10_mvir >= SHMR_XMAX)
-    return table[SHMR_INDEX(gal->Type, SHMR_NX - 1)];
+    return pow(10.0, table[SHMR_INDEX(gal->Type, SHMR_NX - 1)]);
 
   position = (log10_mvir - SHMR_XMIN) / SHMR_DX;
   index_left = (int)floor(position);
