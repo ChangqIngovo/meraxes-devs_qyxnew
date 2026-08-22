@@ -479,46 +479,31 @@ static void no_shmr_global_bin_medians(
       }
     }
 
-	// Write one type median table. Sparse non-central
-	// types fall back to type 0, and interior gaps are interpolated while edges
-	// are filled with the supplied floor value.
-	int count;
-	
-	for (int type = 0; type < SHMR_NTYPES; type++) {
-		double values[SHMR_NX];
-		unsigned char type_valid[SHMR_NX];
-		count = 0;
+	    // Write one median table for each galaxy type independently.
+       // Interior gaps are interpolated, while values outside the valid
+       // range are filled with the supplied floor value.
+       for (int type = 0; type < SHMR_NTYPES; type++) {
+         double values[SHMR_NX];
+         unsigned char type_valid[SHMR_NX];
 
-		for (int bin = 0; bin < SHMR_NX; bin++) {
-			size_t cell = (size_t)type * (size_t)SHMR_NX + (size_t)bin;
+         for (int bin = 0; bin < SHMR_NX; bin++) {
+           size_t cell = (size_t)type * (size_t)SHMR_NX + (size_t)bin;
 
-			values[bin] = medians[cell];
-			type_valid[bin] = valid[cell];
-			if (type_valid[bin])
-				count++;
-		}
+           values[bin] = medians[cell];
+           type_valid[bin] = valid[cell];
+         }
 
-		if (type > 0 && count < 2) {
-			for (int bin = 0; bin < SHMR_NX; bin++) {
-				values[bin] = table[
-					SHMR_INDEX(0, bin)
-				];
-			}
-		} else {
-			no_shmr_fill_inside_only_with_floor(
-				values,
-				type_valid,
-				SHMR_NX,
-				floor_value
-			);
-		}
+         no_shmr_fill_inside_only_with_floor(
+             values,
+             type_valid,
+             SHMR_NX,
+             floor_value
+         );
 
-		for (int bin = 0; bin < SHMR_NX; bin++) {
-			table[
-				SHMR_INDEX(type, bin)
-			] = (float)values[bin];
-		}
-	}
+         for (int bin = 0; bin < SHMR_NX; bin++) {
+           table[SHMR_INDEX(type, bin)] = (float)values[bin];
+         }
+       }
     free(rank_cursor);
     free(scratch);
   }
