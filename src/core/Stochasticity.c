@@ -780,17 +780,26 @@ void compute_no_shmr_recalibration_factors(int population)
     double* global_raw_gsm = calloc(n_bins, sizeof(double));
     double* local_raw_sfr = calloc(n_bins, sizeof(double));
     double* global_raw_sfr = calloc(n_bins, sizeof(double));
+double* no_shmr_gsm_stochasticity_calibrations;
+double* no_shmr_sfr_stochasticity_calibrations;
+
 #if USE_MINI_HALOS
-    if (population == 3) {
-      double* no_shmr_gsm_stochasticity_calibrations = run_globals.no_shmr_gsm_stochasticity_calibrations_iii;
-      double* no_shmr_sfr_stochasticity_calibrations = run_globals.no_shmr_sfr_stochasticity_calibrations_iii;
-    } else {
-      double* no_shmr_gsm_stochasticity_calibrations = run_globals.no_shmr_gsm_stochasticity_calibrations;
-      double* no_shmr_sfr_stochasticity_calibrations = run_globals.no_shmr_sfr_stochasticity_calibrations;
-    }
+if (population == 3) {
+  no_shmr_gsm_stochasticity_calibrations =
+      run_globals.no_shmr_gsm_stochasticity_calibrations_iii;
+  no_shmr_sfr_stochasticity_calibrations =
+      run_globals.no_shmr_sfr_stochasticity_calibrations_iii;
+} else {
+  no_shmr_gsm_stochasticity_calibrations =
+      run_globals.no_shmr_gsm_stochasticity_calibrations;
+  no_shmr_sfr_stochasticity_calibrations =
+      run_globals.no_shmr_sfr_stochasticity_calibrations;
+}
 #else
-    double* no_shmr_gsm_stochasticity_calibrations = run_globals.no_shmr_gsm_stochasticity_calibrations;
-    double* no_shmr_sfr_stochasticity_calibrations = run_globals.no_shmr_sfr_stochasticity_calibrations;
+no_shmr_gsm_stochasticity_calibrations =
+    run_globals.no_shmr_gsm_stochasticity_calibrations;
+no_shmr_sfr_stochasticity_calibrations =
+    run_globals.no_shmr_sfr_stochasticity_calibrations;
 #endif
 
     long long* local_target_gsm_count = calloc(n_bins, sizeof(long long));
