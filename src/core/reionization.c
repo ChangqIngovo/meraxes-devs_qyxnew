@@ -276,7 +276,7 @@ void update_galaxy_fesc_vals(galaxy_t* gal, double new_stars, int snapshot)
   gal->FescWeightedSfr += gal->Sfr * fesc;
 
 #if USE_STOCHASTICITY
-  if (params->Flag_SourceRecalibration && params->EscapeFracScatterDex > ABS_TOL){
+  if (params->EscapeFracScatterDex > ABS_TOL){
     gal->StochasticityTreatedFescWeightedGSM += new_stars * scattered_fesc;
     gal->StochasticityTreatedFescWeightedSfr += gal->Sfr * scattered_fesc;
   };
