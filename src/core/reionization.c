@@ -221,9 +221,13 @@ void update_galaxy_fesc_vals(galaxy_t* gal, double new_stars, int snapshot)
 
 #if USE_STOCHASTICITY
   double scattered_fesc;
-  if (params->EscapeFracScatterDex > ABS_TOL) {
+
 #if USE_MINI_HALOS
   double scattered_fescIII;
+#endif
+
+  if (params->EscapeFracScatterDex > ABS_TOL) {
+#if USE_MINI_HALOS
     if (gal->Galaxy_Population == 2) {
       scattered_fesc = apply_lognormal_scatter(
           fesc,
@@ -240,8 +244,8 @@ void update_galaxy_fesc_vals(galaxy_t* gal, double new_stars, int snapshot)
         fesc,
         params->EscapeFracScatterDex
     );
-  }
 #endif
+  }
 #endif
 
 #if USE_MINI_HALOS
