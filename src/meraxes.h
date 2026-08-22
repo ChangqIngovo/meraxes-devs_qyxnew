@@ -955,7 +955,7 @@ typedef struct run_globals_t
   // Independent Pop III tables with the same halo-mass layout.
   float* SHMRsIII;
   float* SFRsIII;
-  double *no_shmr_gsm_stochasticity_calibrationsIII;
+  double *no_shmr_gsm_stochasticity_calibrations_iii;
   double *no_shmr_sfr_stochasticity_calibrationsIII;
 #endif
 #endif
