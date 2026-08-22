@@ -1040,7 +1040,7 @@ void no_shmr_sources_free(void)
 }
 
 
-double extract_recalibration_factors(galaxy_t* gal, int population, bool GSM){
+double extract_recalibration_factors(galaxy_t* gal, int population, bool use_gsm){
   
   if (run_globals.params.physics.Flag_RemoveSHMRScatter == 0){
 #if USE_MINI_HALOS
