@@ -1045,7 +1045,7 @@ double extract_recalibration_factors(galaxy_t* gal, int population, bool use_gsm
   if (run_globals.params.physics.Flag_RemoveSHMRScatter == 0){
 #if USE_MINI_HALOS
     if (population == 3)
-      return GSM ? run_globals.fesc_stochasticity_calibrations[POPIII_GSM] : run_globals.fesc_stochasticity_calibrations[POPIII_SFR];
+      return use_gsm ? run_globals.fesc_stochasticity_calibrations[POPIII_GSM] : run_globals.fesc_stochasticity_calibrations[POPIII_SFR];
 #endif
     return GSM ? run_globals.fesc_stochasticity_calibrations[GSM] : run_globals.fesc_stochasticity_calibrations[SFR];
   }
