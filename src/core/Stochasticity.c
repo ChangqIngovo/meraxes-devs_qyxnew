@@ -119,7 +119,7 @@ void compute_fesc_recalibration_factors(void)
     gal = gal->Next;
   }
 
-  MPI_Reduce(
+  MPI_Allreduce(
       local,
       global,
       FESC_GLOBAL_NSUM,
