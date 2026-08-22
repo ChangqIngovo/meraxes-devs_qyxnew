@@ -1929,7 +1929,7 @@ void construct_baryon_grids(int snapshot, int local_ngals)
             case prop_weighted_sfrIII:
             #if USE_STOCHASTICITY
               if (run_globals.params.physics.Flag_SourceRecalibration)
-                stochasticity_calibration_factor = extract_recalibration_factors(gal, 3, false)
+                stochasticity_calibration_factor = extract_recalibration_factors(gal, 3, false);
               buffer[ind] += gal->StochasticityTreatedFescIIIWeightedSfr * stochasticity_calibration_factor;
             #else
               buffer[ind] += gal->FescIIIWeightedSfr;
