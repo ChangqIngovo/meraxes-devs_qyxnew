@@ -25,7 +25,7 @@ void build_no_shmr_tables(int population);
 void apply_no_shmr_treatment(void);
 void compute_no_shmr_recalibration_factors(int population);
 
-double extract_recalibration_factors(galaxy_t* gal, int population, bool GSM);
+double extract_recalibration_factors(galaxy_t* gal, int population, bool use_gsm);
 
 void no_shmr_sources_init(void);
 void no_shmr_sources_free(void);
