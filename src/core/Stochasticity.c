@@ -1047,7 +1047,7 @@ double extract_recalibration_factors(galaxy_t* gal, int population, bool use_gsm
     if (population == 3)
       return use_gsm ? run_globals.fesc_stochasticity_calibrations[POPIII_GSM] : run_globals.fesc_stochasticity_calibrations[POPIII_SFR];
 #endif
-    return GSM ? run_globals.fesc_stochasticity_calibrations[GSM] : run_globals.fesc_stochasticity_calibrations[SFR];
+    return use_gsm ? run_globals.fesc_stochasticity_calibrations[GSM] : run_globals.fesc_stochasticity_calibrations[SFR];
   }
 
   double log10_mvir = log10(gal->Mvir);
