@@ -1058,7 +1058,7 @@ double extract_recalibration_factors(galaxy_t* gal, int population, bool use_gsm
   if (population == 3)
     return use_gsm ? run_globals.no_shmr_gsm_stochasticity_calibrations_iii[index] : run_globals.no_shmr_sfr_stochasticity_calibrations_iii[index];
 #endif
-    return GSM ? run_globals.no_shmr_gsm_stochasticity_calibrations[index] : run_globals.no_shmr_sfr_stochasticity_calibrations[index];
+    return use_gsm ? run_globals.no_shmr_gsm_stochasticity_calibrations[index] : run_globals.no_shmr_sfr_stochasticity_calibrations[index];
 }
 
 #endif
