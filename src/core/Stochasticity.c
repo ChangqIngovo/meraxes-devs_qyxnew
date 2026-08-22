@@ -125,7 +125,6 @@ void compute_fesc_recalibration_factors(void)
       FESC_GLOBAL_NSUM,
       MPI_DOUBLE,
       MPI_SUM,
-      0,
       run_globals.mpi_comm
   );
 
