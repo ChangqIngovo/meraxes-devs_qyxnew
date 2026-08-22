@@ -719,7 +719,7 @@ void apply_no_shmr_treatment()
 #if USE_MINI_HALOS
         if (gal->Galaxy_Population == 3) {
           if (mstar_source > gal->GrossStellarMassIIINoScatter)
-            gal->StochasticityTreatedFescWeightedGSM += gal->FescIII * (mstar_source - gal->GrossStellarMassIIINoScatter);
+            gal->StochasticityTreatedFescIIIWeightedGSM += gal->FescIII * (mstar_source - gal->GrossStellarMassIIINoScatter);
           gal->GrossStellarMassIIINoScatter = mstar_source;
         }
         else {
