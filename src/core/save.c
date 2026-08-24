@@ -1056,23 +1056,29 @@ void create_master_file()
 
     /* XrayEmissivity: unlike NHfrac this does depend on the snapshot (it
      * tracks the evolving BH population), so it can't be reduced to a
-     * single constant. But per @qyx268's clarification, the fix isn't "3
-     * components -> 1 array" (that's the NHfrac-style consolidation, and
-     * still leaves one dataset per snapshot) — it's "N snapshots -> 1
-     * array". By the time this function runs, the full snapshot loop has
-     * already finished, so stored_XrayEmissivity_hard/soft/HMXB are fully
-     * populated for every output snapshot. Write them all as a single
-     * (NOutputSnaps, 3) dataset here instead of one 3-element dataset per
-     * snapshot group. */
-    double* xray_emissivity_all = malloc((size_t)run_globals.NOutputSnaps * 3 * sizeof(double));
+     * single constant. Per @qyx268's clarification, the fix is "N
+     * snapshots -> 1 array" per component, NOT "3 components -> 1 array"
+     * — so hard/soft/HMXB stay as three separate datasets, each now
+     * covering every output snapshot in one go instead of one 3-element
+     * dataset per snapshot group. By the time this function runs, the
+     * full snapshot loop has already finished, so
+     * stored_XrayEmissivity_hard/soft/HMXB are fully populated for every
+     * output snapshot. */
+    double* xray_hard_all = malloc((size_t)run_globals.NOutputSnaps * sizeof(double));
+    double* xray_soft_all = malloc((size_t)run_globals.NOutputSnaps * sizeof(double));
+    double* xray_hmxb_all = malloc((size_t)run_globals.NOutputSnaps * sizeof(double));
     for (int i_out = 0; i_out < run_globals.NOutputSnaps; i_out++) {
-      xray_emissivity_all[i_out * 3 + 0] = stored_XrayEmissivity_hard[run_globals.ListOutputSnaps[i_out]];
-      xray_emissivity_all[i_out * 3 + 1] = stored_XrayEmissivity_soft[run_globals.ListOutputSnaps[i_out]];
-      xray_emissivity_all[i_out * 3 + 2] = stored_XrayEmissivity_HMXB[run_globals.ListOutputSnaps[i_out]];
+      xray_hard_all[i_out] = stored_XrayEmissivity_hard[run_globals.ListOutputSnaps[i_out]];
+      xray_soft_all[i_out] = stored_XrayEmissivity_soft[run_globals.ListOutputSnaps[i_out]];
+      xray_hmxb_all[i_out] = stored_XrayEmissivity_HMXB[run_globals.ListOutputSnaps[i_out]];
     }
-    hsize_t xray_emissivity_dims[2] = { (hsize_t)run_globals.NOutputSnaps, 3 };
-    H5LTmake_dataset_double(file_id, "XrayEmissivity", 2, xray_emissivity_dims, xray_emissivity_all);
-    free(xray_emissivity_all);
+    hsize_t n_xray_snaps = (hsize_t)run_globals.NOutputSnaps;
+    H5LTmake_dataset_double(file_id, "XrayEmissivity_hard", 1, &n_xray_snaps, xray_hard_all);
+    H5LTmake_dataset_double(file_id, "XrayEmissivity_soft", 1, &n_xray_snaps, xray_soft_all);
+    H5LTmake_dataset_double(file_id, "XrayEmissivity_HMXB", 1, &n_xray_snaps, xray_hmxb_all);
+    free(xray_hard_all);
+    free(xray_soft_all);
+    free(xray_hmxb_all);
   }
 
   char target_group[50];
@@ -1899,10 +1905,10 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
 
 
     /* XrayEmissivity (hard/soft/HMXB) is no longer written per snapshot —
-     * per @qyx268's clarification, it's now written once as a single
-     * (NOutputSnaps, 3) dataset in create_master_file(), covering every
-     * output snapshot in one go instead of one dataset per snapshot
-     * group. */
+     * per @qyx268's clarification, each is now written once in
+     * create_master_file() as its own (NOutputSnaps,) dataset, covering
+     * every output snapshot in one go instead of one dataset per
+     * snapshot group. */
   }
 
   
