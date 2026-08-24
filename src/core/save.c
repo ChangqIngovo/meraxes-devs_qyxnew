@@ -1053,6 +1053,26 @@ void create_master_file()
     hsize_t nhfrac_dims[2] = { (hsize_t)n_lx_bins_nhfrac, 5 };
     H5LTmake_dataset_double(file_id, "NHfrac", 2, nhfrac_dims, nhfrac_table);
     free(nhfrac_table);
+
+    /* XrayEmissivity: unlike NHfrac this does depend on the snapshot (it
+     * tracks the evolving BH population), so it can't be reduced to a
+     * single constant. But per @qyx268's clarification, the fix isn't "3
+     * components -> 1 array" (that's the NHfrac-style consolidation, and
+     * still leaves one dataset per snapshot) — it's "N snapshots -> 1
+     * array". By the time this function runs, the full snapshot loop has
+     * already finished, so stored_XrayEmissivity_hard/soft/HMXB are fully
+     * populated for every output snapshot. Write them all as a single
+     * (NOutputSnaps, 3) dataset here instead of one 3-element dataset per
+     * snapshot group. */
+    double* xray_emissivity_all = malloc((size_t)run_globals.NOutputSnaps * 3 * sizeof(double));
+    for (int i_out = 0; i_out < run_globals.NOutputSnaps; i_out++) {
+      xray_emissivity_all[i_out * 3 + 0] = stored_XrayEmissivity_hard[run_globals.ListOutputSnaps[i_out]];
+      xray_emissivity_all[i_out * 3 + 1] = stored_XrayEmissivity_soft[run_globals.ListOutputSnaps[i_out]];
+      xray_emissivity_all[i_out * 3 + 2] = stored_XrayEmissivity_HMXB[run_globals.ListOutputSnaps[i_out]];
+    }
+    hsize_t xray_emissivity_dims[2] = { (hsize_t)run_globals.NOutputSnaps, 3 };
+    H5LTmake_dataset_double(file_id, "XrayEmissivity", 2, xray_emissivity_dims, xray_emissivity_all);
+    free(xray_emissivity_all);
   }
 
   char target_group[50];
@@ -1878,31 +1898,11 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
     df_free(&xraylf_obs);
 
 
-    if (run_globals.mpi_rank == 0) {
-      hid_t grp = H5Gopen(file_id, target_group, H5P_DEFAULT);
-      /* NHfrac used to be written here per snapshot, but it only depends on
-       * redshift through _psi_ref(z), which saturates at z=2 — so for any
-       * run whose output snapshots are all z>=2 (true for every EoR/Cosmic
-       * Dawn run this codebase targets), it's a run constant. It's now
-       * written once in create_master_file() instead. */
-
-      {
-        /* Single 3-element array [hard, soft, HMXB] instead of 4 separate
-         * scalar datasets — same consolidation as NHfrac above. "total" is
-         * dropped: it's just hard+soft, not independent data, so storing it
-         * would just be another redundant per-snapshot copy of a derivable
-         * value. */
-        hsize_t three = 3;
-        double xray_emissivity[3] = {
-          stored_XrayEmissivity_hard[run_globals.ListOutputSnaps[i_out]],
-          stored_XrayEmissivity_soft[run_globals.ListOutputSnaps[i_out]],
-          stored_XrayEmissivity_HMXB[run_globals.ListOutputSnaps[i_out]],
-        };
-        H5LTmake_dataset_double(grp, "XrayEmissivity", 1, &three, xray_emissivity);
-      }
-
-      H5Gclose(grp);
-    }
+    /* XrayEmissivity (hard/soft/HMXB) is no longer written per snapshot —
+     * per @qyx268's clarification, it's now written once as a single
+     * (NOutputSnaps, 3) dataset in create_master_file(), covering every
+     * output snapshot in one go instead of one dataset per snapshot
+     * group. */
   }
 
   
