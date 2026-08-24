@@ -1403,9 +1403,8 @@ void evolveInt(float zp,
       }
 #endif
 
-      /* Per shell, each band uses only its own amplitude/index/integral:
-       *   dX_AGN_soft/dt += (dt/dz'')dz'' × XAGN_soft[zpp_ct] × (1+z'')^-Γ_soft × freq_int_X_AGN_soft[zpp_ct]
-       *   dX_AGN_hard/dt += (dt/dz'')dz'' × XAGN_hard[zpp_ct] × (1+z'')^-Γ_hard × freq_int_X_AGN_hard[zpp_ct] */
+      /* dX_AGN_soft/dt += (dt/dz'')dz'' × XAGN_soft[zpp_ct] × (1+z'')^-alpha_soft × freq_int_X_AGN_soft[zpp_ct]
+       * dX_AGN_hard/dt += (dt/dz'')dz'' × XAGN_hard[zpp_ct] × (1+z'')^-alpha_hard × freq_int_X_AGN_hard[zpp_ct] */
       zpp_integrand_AGN = XAGN_soft[zpp_ct]
                           * pow(1 + zpp,
                                 -run_globals.params.physics.SpecIndexXrayAGNSoft);
@@ -1462,8 +1461,7 @@ void evolveInt(float zp,
     dxion_source_dt_AGN_hard *= const_zp_prefactor_AGN_hard;
     dxlya_dt_AGN_hard        *= const_zp_prefactor_AGN_hard * n_b;
 
-    /* Only now, with each band independently normalised, sum them into
-     * the shared accumulators used by every downstream deriv[] below. */
+    /* dx_heat/dt|_AGN = dx_heat/dt|_soft + dx_heat/dt|_hard */
     dxheat_dt_AGN       += dxheat_dt_AGN_hard;
     dxion_source_dt_AGN += dxion_source_dt_AGN_hard;
     dxlya_dt_AGN        += dxlya_dt_AGN_hard;

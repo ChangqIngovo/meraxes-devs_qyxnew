@@ -785,7 +785,9 @@ void _ComputeTs(int snapshot)
 
 
       if (run_globals.params.physics.Flag_IncludeAGNXray > 0) {
-      /* Soft: integrate [max(nu_tau_one, nu_thresh_AGN), nu_break] — captures locally
+      /* K_b(zp,zpp,x_e) = Int_{nu_lo(zp,zpp)}^{nu_hi(zp,zpp)} f_dep(nu,x_e) * (nu/nu_th)^(-alpha_b-1) dnu
+       *
+       * Soft: integrate [max(nu_tau_one, nu_thresh_AGN), nu_break] — captures locally
        * absorbed soft photons plus redshifted-in hard photons; nu_tau_one enforces the
        * tau=1 opacity cutoff. Hard: [max(nu_tau_one, nu_break), nu_hard_cut] — starts
        * at nu_break to avoid double-counting with soft. */
@@ -993,9 +995,11 @@ void _ComputeTs(int snapshot)
     // Conversion here means the code otherwise remains the same as the original Ts.c
 
     /*
-     * L(nu) = L0*(nu/nu_th)^(Γ-1) on [nu_lo,nu_hi], Γ = 1 - alpha (alpha = SpecIndexXray*), nu_th = NuXrayThreshold.
-     * C = L0/L_band = Γ*nu_th^(Γ-1)/(nu_hi^Γ-nu_lo^Γ); Γ==0: C = 1/(nu_th*ln(nu_hi/nu_lo)).
-     * [nu_lo,nu_hi] = calibration band: GAL/III/AGN-soft -> [NuXrayThreshold,NuXraySoftCut], AGN-hard -> [NuXraySoftCut,NuXrayMax].
+     * L(nu) = L0*(nu/nu_th)^(-alpha) on [nu_lo,nu_hi], nu_th = NuXrayThreshold.
+     * C = L0/L_band:
+     *   alpha != 1:  C = (1-alpha) * nu_th^-alpha / [nu_hi^(1-alpha) - nu_lo^(1-alpha)]
+     *   alpha == 1:  C = 1 / (nu_th * ln(nu_hi/nu_lo))
+     * [nu_lo,nu_hi]: GAL/III/AGN-soft -> [NuXrayThreshold,NuXraySoftCut], AGN-hard -> [NuXraySoftCut,NuXrayMax].
      */
     if (fabs(run_globals.params.physics.SpecIndexXrayGal - 1.0) < REL_TOL) {
       Luminosity_converstion_factor_GAL =
@@ -1114,6 +1118,7 @@ void _ComputeTs(int snapshot)
                              pow(1 + zp, run_globals.params.physics.SpecIndexXrayIII + 3);
 #endif
 
+    /* A_b(zp) = (C_b / nu_th) * c * (1+zp)^(alpha_b + 3) */
     const_zp_prefactor_AGN_soft =
       Luminosity_converstion_factor_AGN_soft /
       (run_globals.params.physics.NuXrayThreshold * NU_over_EV) * SPEED_OF_LIGHT *
