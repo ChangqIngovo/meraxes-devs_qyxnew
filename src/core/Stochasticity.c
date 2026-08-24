@@ -690,6 +690,9 @@ void build_no_shmr_tables(int population)
 // Initialize per-galaxy noSHMR source targets from the tables,
 // resetting target accumulators first and only evaluating galaxies with
 // active stellar-mass or SFR source content.
+// TODO: when simplifying the noSHMR treatment, I accidentally made the treatment 
+// to only works when EscapeFracDependency is either constant or z or Mvir dependent. 
+// Dylan's orignal version recompute fesc after the noSHMR treatment.
 void apply_no_shmr_treatment()
 {
   galaxy_t* gal = run_globals.FirstGal;
