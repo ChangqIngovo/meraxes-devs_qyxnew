@@ -109,9 +109,10 @@ void _ComputeTs(int snapshot)
   double upper_int_limit_GAL;
   double upper_int_limit_AGN_soft;
   double upper_int_limit_AGN_hard;
-  double nu_tau_one_agn; /* shared opacity-cutoff frequency for AGN soft+hard — same
-                          * (zp, zpp, x_e_ave, filling_factor_of_HI_zp, snapshot) for both,
-                          * so nu_tau_one()'s Brent root-solve only needs to run once. */
+  double nu_tau_one_zpp; /* shared opacity-cutoff frequency for this (zp, zpp) shell — nu_tau_one()
+                          * has no spectral-index/band dependence at all, so GAL's lower_int_limit_GAL
+                          * and both AGN bands' limits all reuse this one Brent root-solve instead of
+                          * repeating it (per @qyx268's review). */
   double Luminosity_converstion_factor_AGN_soft;  /* soft band: nu_thresh -> nu_break   */
   double Luminosity_converstion_factor_AGN_hard;  /* hard band: nu_break  -> nu_hard_cut */
   double agn_emissivity_zpp;       /* AGN emissivity at shell redshift z'': integral of LF x SED */
@@ -728,7 +729,11 @@ void _ComputeTs(int snapshot)
       // GAL/III have no soft/hard split — their calibration already accounts
       // for whatever redshift dependence is needed, so the band edges stay
       // unscaled here (unlike the AGN soft/hard limits below).
-      lower_int_limit_GAL = fmax(nu_tau_one(zp, zpp, x_e_ave, filling_factor_of_HI_zp, snapshot),
+      /* nu_tau_one() doesn't depend on band/spectral index — it's a pure IGM-opacity
+       * horizon for this (zp, zpp) shell — so it's computed once here and reused below
+       * for the AGN soft/hard limits too, instead of repeating this GSL root-solve. */
+      nu_tau_one_zpp = nu_tau_one(zp, zpp, x_e_ave, filling_factor_of_HI_zp, snapshot);
+      lower_int_limit_GAL = fmax(nu_tau_one_zpp,
                                  run_globals.params.physics.NuXrayThreshold * NU_over_EV);
       upper_int_limit_GAL = run_globals.params.physics.NuXrayMax * NU_over_EV;
 
@@ -798,10 +803,8 @@ void _ComputeTs(int snapshot)
        * rest-frame (at zpp) but nu_tau_one() is arrival-frame (at zp), so scaling
        * by (1+zp)/(1+zpp) is what lets a hard photon redshift into the soft band. */
 
-      /* Soft and hard both use the same (zp, zpp, x_e_ave, filling_factor_of_HI_zp,
-       * snapshot) at this point (post-clamp), so nu_tau_one() only needs to run
-       * once, regardless of which band(s) flag_agn actually selects below. */
-      nu_tau_one_agn = nu_tau_one(zp, zpp, x_e_ave, filling_factor_of_HI_zp, snapshot);
+      /* nu_tau_one_zpp already computed once above, alongside lower_int_limit_GAL —
+       * reused here for both AGN bands rather than recomputed. */
 
       bool agn_soft_needed = (run_globals.params.physics.Flag_IncludeAGNXray == 1 ||
                               run_globals.params.physics.Flag_IncludeAGNXray == 3);
@@ -811,7 +814,7 @@ void _ComputeTs(int snapshot)
       if (agn_soft_needed) {
         /* Soft band lower limit: opacity cutoff or AGN threshold, whichever is higher */
         lower_int_limit_AGN_soft = fmax(
-          nu_tau_one_agn,
+          nu_tau_one_zpp,
           run_globals.params.physics.NuXrayThreshold * NU_over_EV * (1. + zp) / (1. + zpp));
         /* Soft band upper limit: capped at the soft/hard break, not NuXrayMax */
         upper_int_limit_AGN_soft = run_globals.params.physics.NuXraySoftCut * NU_over_EV * (1. + zp) / (1. + zpp);
@@ -820,7 +823,7 @@ void _ComputeTs(int snapshot)
       if (agn_hard_needed) {
         /* Hard band lower limit: start at break frequency (no double counting) */
         lower_int_limit_AGN_hard = fmax(
-          nu_tau_one_agn,
+          nu_tau_one_zpp,
           run_globals.params.physics.NuXraySoftCut * NU_over_EV * (1. + zp) / (1. + zpp));
         upper_int_limit_AGN_hard = run_globals.params.physics.NuXrayMax * NU_over_EV * (1. + zp) / (1. + zpp);
       }
