@@ -15,6 +15,7 @@
 #include "read_grids.h"
 #include "reionization.h"
 #include "virial_properties.h"
+#include "XRayHeatingFunctions.h"
 
 static hid_t create_reion_grid(const int snapshot, const bool parallel);
 
@@ -2737,6 +2738,40 @@ void save_reion_output_grids(int snapshot)
     H5Dclose(dset_id);
 #endif
   }
+
+#if USE_MINI_HALOS
+  /* Per-shell Lyman-Werner shape sums (stellar and AGN), for comparing their
+   * spectral shapes the way sum_lyn_LW/sum_lyn_LW_AGN are used in evolveInt().
+   * Not spatial grids — one value per filtering shell (TsNumFilterSteps),
+   * same as PS_data/k_bins above. Only allocated (non-NULL) when
+   * Flag_IncludeLymanWerner is on — see init_heat(). */
+  if (run_globals.params.Flag_IncludeLymanWerner) {
+    hsize_t dims_LW[1] = { (hsize_t)run_globals.params.TsNumFilterSteps };
+    hid_t fspace_id_LW = H5Screate_simple(1, dims_LW, NULL);
+    hid_t memspace_id_LW = H5Screate_simple(1, dims_LW, NULL);
+    hid_t dcpl_id_LW = H5Pcreate(H5P_DATASET_CREATE);
+
+    hid_t dset_id_LW =
+      H5Dcreate(file_id, "LW_shape_stellar", H5T_NATIVE_DOUBLE, fspace_id_LW, H5P_DEFAULT, dcpl_id_LW, H5P_DEFAULT);
+    hid_t plist_id_LW = H5Pcreate(H5P_DATASET_XFER);
+    H5Pset_dxpl_mpio(plist_id_LW, H5FD_MPIO_COLLECTIVE);
+    H5Dwrite(dset_id_LW, H5T_NATIVE_DOUBLE, memspace_id_LW, fspace_id_LW, plist_id_LW, sum_lyn_LW);
+    H5Pclose(plist_id_LW);
+    H5Dclose(dset_id_LW);
+
+    dset_id_LW =
+      H5Dcreate(file_id, "LW_shape_AGN", H5T_NATIVE_DOUBLE, fspace_id_LW, H5P_DEFAULT, dcpl_id_LW, H5P_DEFAULT);
+    plist_id_LW = H5Pcreate(H5P_DATASET_XFER);
+    H5Pset_dxpl_mpio(plist_id_LW, H5FD_MPIO_COLLECTIVE);
+    H5Dwrite(dset_id_LW, H5T_NATIVE_DOUBLE, memspace_id_LW, fspace_id_LW, plist_id_LW, sum_lyn_LW_AGN);
+    H5Pclose(plist_id_LW);
+    H5Dclose(dset_id_LW);
+
+    H5Pclose(dcpl_id_LW);
+    H5Sclose(memspace_id_LW);
+    H5Sclose(fspace_id_LW);
+  }
+#endif
 
   // tidy up
   free(grid);
