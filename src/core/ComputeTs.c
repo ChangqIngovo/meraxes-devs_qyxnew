@@ -119,7 +119,6 @@ void _ComputeTs(int snapshot)
 #if USE_MINI_HALOS
   float bh_lw;                      /* per-cell BHLWEmissivity, read while building SMOOTHED_AGN_LW */
 #endif
-  double ratio;                     /* soft/hard split ratio for the Xheat_ave_AGN_soft/hard diagnostic */
 
 #if USE_MINI_HALOS
   double Luminosity_converstion_factor_III, collapse_fractionIII, collapse_fractionIII_in_cell;
@@ -1146,6 +1145,12 @@ void _ComputeTs(int snapshot)
 
     // interpolate to correct nu integral value based on the cell's ionization state
     int flag_agn = run_globals.params.physics.Flag_IncludeAGNXray;
+    /* Computed once here, same pattern as the per-shell loop above — flag_agn itself doesn't
+     * change per cell/R_ct, so re-deriving these as an inline comparison inside the loop below
+     * would just repeat the same branch on every one of local_nix*ReionGridDim^2*TsNumFilterSteps
+     * iterations for an answer that's already fixed for this snapshot. */
+    bool agn_soft_needed = (flag_agn == 1 || flag_agn == 3);
+    bool agn_hard_needed = (flag_agn == 1 || flag_agn == 2);
     for (int ix = 0; ix < local_nix; ix++)
       for (int iy = 0; iy < ReionGridDim; iy++)
         for (int iz = 0; iz < ReionGridDim; iz++) {
@@ -1164,8 +1169,8 @@ void _ComputeTs(int snapshot)
             SFR_GAL[R_ct] = SMOOTHED_SFR_GAL[i_smoothed_heating];
 
             {
-              XAGN_soft[R_ct] = (flag_agn == 1 || flag_agn == 3) ? SMOOTHED_AGN_soft[i_smoothed_heating] : 0.0;
-              XAGN_hard[R_ct] = (flag_agn == 1 || flag_agn == 2) ? SMOOTHED_AGN[i_smoothed_heating] : 0.0;
+              XAGN_soft[R_ct] = agn_soft_needed ? SMOOTHED_AGN_soft[i_smoothed_heating] : 0.0;
+              XAGN_hard[R_ct] = agn_hard_needed ? SMOOTHED_AGN[i_smoothed_heating] : 0.0;
             }
 #if USE_MINI_HALOS
             SFR_III[R_ct] = SMOOTHED_SFR_III[i_smoothed_heating];
@@ -1329,18 +1334,15 @@ void _ComputeTs(int snapshot)
                     ans,
                     dansdz);
 #endif
-          if (flag_agn == 1) {
-            ratio = (const_zp_prefactor_AGN_soft + const_zp_prefactor_AGN_hard > 0.0)
-                         ? const_zp_prefactor_AGN_soft / (const_zp_prefactor_AGN_soft + const_zp_prefactor_AGN_hard)
-                         : 0.5;
-            Xheat_ave_AGN_soft += dansdz[3] * ratio;
-            Xheat_ave_AGN_hard += dansdz[3] * (1.0 - ratio);
-          } else if (flag_agn == 3) {
-            Xheat_ave_AGN_soft += dansdz[3];
-          } else if (flag_agn == 2) {
-            Xheat_ave_AGN_hard += dansdz[3];
+          /* dansdz[3] (== dansdz[1] minus Compton/adiabatic/species terms) is GAL+III+AGN
+           * combined, not AGN-only — it can't be split into soft/hard after the fact via a
+           * single zp-only ratio (per @qyx268's "why?..."). deriv[11]/deriv[12] in evolveInt()
+           * carry the true per-band AGN-only rates instead; each is already naturally zero
+           * when its band is excluded (XAGN_soft/hard were zeroed above), so no flag_agn
+           * special-casing is needed here either. */
+          Xheat_ave_AGN_soft += dansdz[11];
+          Xheat_ave_AGN_hard += dansdz[12];
           }
-          } /* end flag_agn block */
 
           x_e_box_prev[i_padded] += dansdz[0] * dzp; // remember dzp is negative
           if (x_e_box_prev[i_padded] > 1)            // can do this late in evolution if dzp is too large

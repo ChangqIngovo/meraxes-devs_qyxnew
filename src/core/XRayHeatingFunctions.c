@@ -1478,6 +1478,15 @@ void evolveInt(float zp,
     dxion_source_dt_AGN_hard *= const_zp_prefactor_AGN_hard;
     dxlya_dt_AGN_hard        *= const_zp_prefactor_AGN_hard * n_b;
 
+    /* AGN soft/hard dT_K/dz contributions, kept separate (not the combined dxheat_dt_AGN
+     * computed below) for ComputeTs.c's AGN_Xheat_soft/hard diagnostic log. That diagnostic
+     * needs the true per-band split; a single zp-only ratio (e.g. from const_zp_prefactor_AGN_soft/
+     * hard alone) can't reconstruct it after summing, since the real split also depends on
+     * XAGN_soft vs XAGN_hard and freq_int_heat_AGN_soft vs _hard, both of which vary per
+     * cell/shell — see the discussion on this PR. Same dT_K/dz conversion as dxheat_dzp below. */
+    deriv[11] = dxheat_dt_AGN      * dt_dzp * 2.0 / 3.0 / BOLTZMANN / (1.0 + x_e);
+    deriv[12] = dxheat_dt_AGN_hard * dt_dzp * 2.0 / 3.0 / BOLTZMANN / (1.0 + x_e);
+
     /* dx_heat/dt|_AGN = dx_heat/dt|_soft + dx_heat/dt|_hard */
     dxheat_dt_AGN       += dxheat_dt_AGN_hard;
     dxion_source_dt_AGN += dxion_source_dt_AGN_hard;
