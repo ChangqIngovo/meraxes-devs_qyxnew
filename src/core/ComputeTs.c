@@ -144,24 +144,18 @@ void _ComputeTs(int snapshot)
     freq_int_lya_tbl_GAL[x_int_NXHII][TsNumFilterSteps];
 
   /* AGN broken power law: separate soft/hard tables (soft = intrinsic soft +
-   * redshifted hard; hard = still-hard at observation z). Heap-allocated only
-   * when that band is selected by Flag_IncludeAGNXray (1=both, 2=hard, 3=soft). */
-  double (*freq_int_heat_tbl_AGN_soft)[TsNumFilterSteps] = NULL;
-  double (*freq_int_ion_tbl_AGN_soft)[TsNumFilterSteps] = NULL;
-  double (*freq_int_lya_tbl_AGN_soft)[TsNumFilterSteps] = NULL;
-  double (*freq_int_heat_tbl_AGN_hard)[TsNumFilterSteps] = NULL;
-  double (*freq_int_ion_tbl_AGN_hard)[TsNumFilterSteps] = NULL;
-  double (*freq_int_lya_tbl_AGN_hard)[TsNumFilterSteps] = NULL;
-  if (run_globals.params.physics.Flag_IncludeAGNXray == 1 || run_globals.params.physics.Flag_IncludeAGNXray == 3) {
-    freq_int_heat_tbl_AGN_soft = calloc((size_t)x_int_NXHII, sizeof(*freq_int_heat_tbl_AGN_soft));
-    freq_int_ion_tbl_AGN_soft = calloc((size_t)x_int_NXHII, sizeof(*freq_int_ion_tbl_AGN_soft));
-    freq_int_lya_tbl_AGN_soft = calloc((size_t)x_int_NXHII, sizeof(*freq_int_lya_tbl_AGN_soft));
-  }
-  if (run_globals.params.physics.Flag_IncludeAGNXray == 1 || run_globals.params.physics.Flag_IncludeAGNXray == 2) {
-    freq_int_heat_tbl_AGN_hard = calloc((size_t)x_int_NXHII, sizeof(*freq_int_heat_tbl_AGN_hard));
-    freq_int_ion_tbl_AGN_hard = calloc((size_t)x_int_NXHII, sizeof(*freq_int_ion_tbl_AGN_hard));
-    freq_int_lya_tbl_AGN_hard = calloc((size_t)x_int_NXHII, sizeof(*freq_int_lya_tbl_AGN_hard));
-  }
+   * redshifted hard; hard = still-hard at observation z). Flag_IncludeAGNXray
+   * (1=both, 2=hard, 3=soft) selects which bands are needed; computed once
+   * here (rather than per shell in the R_ct loop below) and reused throughout. */
+  bool agn_soft_needed = (run_globals.params.physics.Flag_IncludeAGNXray == 1 ||
+                          run_globals.params.physics.Flag_IncludeAGNXray == 3);
+  bool agn_hard_needed = (run_globals.params.physics.Flag_IncludeAGNXray == 1 ||
+                          run_globals.params.physics.Flag_IncludeAGNXray == 2);
+
+  double freq_int_heat_tbl_AGN_soft[x_int_NXHII][TsNumFilterSteps],
+    freq_int_ion_tbl_AGN_soft[x_int_NXHII][TsNumFilterSteps], freq_int_lya_tbl_AGN_soft[x_int_NXHII][TsNumFilterSteps];
+  double freq_int_heat_tbl_AGN_hard[x_int_NXHII][TsNumFilterSteps],
+    freq_int_ion_tbl_AGN_hard[x_int_NXHII][TsNumFilterSteps], freq_int_lya_tbl_AGN_hard[x_int_NXHII][TsNumFilterSteps];
 
   /* Per-cell interpolated AGN integrals, kept separate for soft/hard so
    * Flag_IncludeAGNXray (0=off, 1=both, 2=hard, 3=soft) can select components. */
@@ -804,12 +798,8 @@ void _ComputeTs(int snapshot)
        * by (1+zp)/(1+zpp) is what lets a hard photon redshift into the soft band. */
 
       /* nu_tau_one_zpp already computed once above, alongside lower_int_limit_GAL —
-       * reused here for both AGN bands rather than recomputed. */
-
-      bool agn_soft_needed = (run_globals.params.physics.Flag_IncludeAGNXray == 1 ||
-                              run_globals.params.physics.Flag_IncludeAGNXray == 3);
-      bool agn_hard_needed = (run_globals.params.physics.Flag_IncludeAGNXray == 1 ||
-                              run_globals.params.physics.Flag_IncludeAGNXray == 2);
+       * reused here for both AGN bands rather than recomputed. agn_soft_needed/
+       * agn_hard_needed are computed once outside this loop, not per shell. */
 
       if (agn_soft_needed) {
         /* Soft band lower limit: opacity cutoff or AGN threshold, whichever is higher */
@@ -1236,7 +1226,7 @@ void _ComputeTs(int snapshot)
             freq_int_lya_III[R_ct] += freq_int_lya_tbl_III[m_xHII_low][R_ct];
 #endif
 
-            if (run_globals.params.physics.Flag_IncludeAGNXray == 1 || run_globals.params.physics.Flag_IncludeAGNXray == 3) {
+            if (agn_soft_needed) {
             /* --- soft component --- */
             freq_int_heat_AGN_soft[R_ct] =
               (freq_int_heat_tbl_AGN_soft[m_xHII_high][R_ct] - freq_int_heat_tbl_AGN_soft[m_xHII_low][R_ct]) /
@@ -1261,7 +1251,7 @@ void _ComputeTs(int snapshot)
               freq_int_lya_AGN_soft[R_ct]  = 0.0;
             }
 
-            if (run_globals.params.physics.Flag_IncludeAGNXray == 1 || run_globals.params.physics.Flag_IncludeAGNXray == 2) {
+            if (agn_hard_needed) {
             /* --- hard component --- */
             freq_int_heat_AGN_hard[R_ct] =
               (freq_int_heat_tbl_AGN_hard[m_xHII_high][R_ct] - freq_int_heat_tbl_AGN_hard[m_xHII_low][R_ct]) /
@@ -1539,12 +1529,6 @@ void _ComputeTs(int snapshot)
        run_globals.params.physics.Flag_IncludeAGNXray);
 #endif
 
-  free(freq_int_heat_tbl_AGN_soft);
-  free(freq_int_ion_tbl_AGN_soft);
-  free(freq_int_lya_tbl_AGN_soft);
-  free(freq_int_heat_tbl_AGN_hard);
-  free(freq_int_ion_tbl_AGN_hard);
-  free(freq_int_lya_tbl_AGN_hard);
 }
 
 // This function makes sure that the right version of ComputeTs() gets called.
