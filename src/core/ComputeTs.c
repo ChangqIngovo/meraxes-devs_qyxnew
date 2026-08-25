@@ -402,6 +402,7 @@ void _ComputeTs(int snapshot)
             mlog("R_ct = %d, reaching %d snapshots earlier, reloading tocf sfr grids at snapshot %d with a weight of %.2f...", MLOG_OPEN, R_ct, snapshot_counter_backwards[R_ct]-1, snapshot-snapshot_counter_backwards[R_ct]+1, weight);
 #endif
             load_reion_sfr_grids(snapshot_counter_backwards[R_ct]-1, weight, 1);
+            load_reion_bh_grids(snapshot_counter_backwards[R_ct]-1, weight, 1);
           }
           else{
             // shouldn't really happen!
@@ -436,6 +437,7 @@ void _ComputeTs(int snapshot)
           mlog("       reaching %d snapshots earlier, loading tocf sfr grids at snapshot %d with a weight of %.2f.", MLOG_MESG, snapshot_counter_backwards[R_ct], snapshot-snapshot_counter_backwards[R_ct], weight);
 #endif
           load_reion_sfr_grids(snapshot_counter_backwards[R_ct], weight, 0);
+          load_reion_bh_grids(snapshot_counter_backwards[R_ct], weight, 0);
           snapshot_counter_backwards[R_ct]+=1;
         }
 #ifdef DEBUG
@@ -451,6 +453,7 @@ void _ComputeTs(int snapshot)
               mlog("R_ct = %d, reached %d snapshots earlier, reloading tocf sfr grids at snapshot %d", MLOG_MESG, R_ct, snapshot_counter_backwards[R_ct] - 1, snapshot - snapshot_counter_backwards[R_ct]+1);
 #endif
               load_reion_sfr_grids(snapshot_counter_backwards[R_ct]-1, weight, 1);
+              load_reion_bh_grids(snapshot_counter_backwards[R_ct]-1, weight, 1);
             }
         }
       }

@@ -2436,7 +2436,6 @@ void save_reion_input_grids(int snapshot)
 
 void load_reion_sfr_grids(int snapshot_counter_backwards, float weight, const int new_load)
 {
-  // TODO: currently only read sfr
   reion_grids_t* grids = &(run_globals.reion_grids);
   int ReionGridDim = run_globals.params.ReionGridDim;
   int local_nix = (int)(run_globals.reion_grids.slab_nix[run_globals.mpi_rank]);
@@ -2450,7 +2449,34 @@ void load_reion_sfr_grids(int snapshot_counter_backwards, float weight, const in
 #if USE_MINI_HALOS
             (grids->sfrIII)[grid_index(ii, jj, kk, ReionGridDim, INDEX_PADDED)] = grids->sfrIII_histories[snapshot_counter_backwards * local_n_complex * 2+grid_index(ii, jj, kk, ReionGridDim, INDEX_REAL)]  * weight;
 #endif
+        }
+  }
+  else{
+    for (int ii = 0; ii < local_nix; ii++)
+      for (int jj = 0; jj < ReionGridDim; jj++)
+        for (int kk = 0; kk < ReionGridDim; kk++){
+            (grids->sfr)[grid_index(ii, jj, kk, ReionGridDim, INDEX_PADDED)] += grids->sfr_histories[snapshot_counter_backwards * local_n_complex * 2+grid_index(ii, jj, kk, ReionGridDim, INDEX_REAL)]  * weight;
+#if USE_MINI_HALOS
+            (grids->sfrIII)[grid_index(ii, jj, kk, ReionGridDim, INDEX_PADDED)] += grids->sfrIII_histories[snapshot_counter_backwards * local_n_complex * 2+grid_index(ii, jj, kk, ReionGridDim, INDEX_REAL)]  * weight;
+#endif
+        }
+  }
+}
 
+/* Split out of load_reion_sfr_grids per @qyx268's review: that function's name promised
+ * SFR-only, but it was also loading the BH/AGN grids — same job, just for
+ * BHXrayEmissivity(_soft)/BHLWEmissivity instead of sfr/sfrIII. */
+void load_reion_bh_grids(int snapshot_counter_backwards, float weight, const int new_load)
+{
+  reion_grids_t* grids = &(run_globals.reion_grids);
+  int ReionGridDim = run_globals.params.ReionGridDim;
+  int local_nix = (int)(run_globals.reion_grids.slab_nix[run_globals.mpi_rank]);
+  int local_n_complex = (int)(run_globals.reion_grids.slab_n_complex[run_globals.mpi_rank]);
+
+  if (new_load){
+    for (int ii = 0; ii < local_nix; ii++)
+      for (int jj = 0; jj < ReionGridDim; jj++)
+        for (int kk = 0; kk < ReionGridDim; kk++){
             if (run_globals.params.physics.Flag_IncludeAGNXray == 1 || run_globals.params.physics.Flag_IncludeAGNXray == 2)
               (grids->BHXrayEmissivity)[grid_index(ii, jj, kk, ReionGridDim, INDEX_PADDED)] =
                   grids->bh_xray_histories[snapshot_counter_backwards * local_n_complex * 2 +
@@ -2473,11 +2499,6 @@ void load_reion_sfr_grids(int snapshot_counter_backwards, float weight, const in
     for (int ii = 0; ii < local_nix; ii++)
       for (int jj = 0; jj < ReionGridDim; jj++)
         for (int kk = 0; kk < ReionGridDim; kk++){
-            (grids->sfr)[grid_index(ii, jj, kk, ReionGridDim, INDEX_PADDED)] += grids->sfr_histories[snapshot_counter_backwards * local_n_complex * 2+grid_index(ii, jj, kk, ReionGridDim, INDEX_REAL)]  * weight;
-#if USE_MINI_HALOS
-            (grids->sfrIII)[grid_index(ii, jj, kk, ReionGridDim, INDEX_PADDED)] += grids->sfrIII_histories[snapshot_counter_backwards * local_n_complex * 2+grid_index(ii, jj, kk, ReionGridDim, INDEX_REAL)]  * weight;
-#endif
-
             if (run_globals.params.physics.Flag_IncludeAGNXray == 1 || run_globals.params.physics.Flag_IncludeAGNXray == 2)
               (grids->BHXrayEmissivity)[grid_index(ii, jj, kk, ReionGridDim, INDEX_PADDED)] +=
                   grids->bh_xray_histories[snapshot_counter_backwards * local_n_complex * 2 +
