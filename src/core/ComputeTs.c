@@ -1073,17 +1073,8 @@ void _ComputeTs(int snapshot)
     Luminosity_converstion_factor_AGN_hard /= (PLANCK);
 
 #if USE_MINI_HALOS
-    /*
-     * AGN LW prefactor: AGN_LW*sum_lyn_LW_AGN is still an erg/s/cm^3-like
-     * density (sum_lyn_LW_AGN is a dimensionless shape weight — see the
-     * Lyman-window loop above), so no Luminosity_converstion_factor step is
-     * needed here either — this just converts to the photon-flux convention
-     * dstarlyLW_dt_GAL uses. Not yet validated against the stellar LW
-     * pathway's magnitude.
-     */
-    const_zp_prefactor_AGN_LW = run_globals.params.Flag_IncludeLymanWerner
-      ? SPEED_OF_LIGHT / (4.0 * M_PI) / (PLANCK * NU_LW)
-      : 0.0;
+    // Moved to XRayHeatingFunctions.c per @qyx268's review — see set_const_zp_prefactor_AGN_LW().
+    set_const_zp_prefactor_AGN_LW();
 #endif
 
     // Do the same for Pop III.
@@ -1192,6 +1183,8 @@ void _ComputeTs(int snapshot)
             m_xHII_low = locate_xHII_index((float)xHII_call);
             m_xHII_high = m_xHII_low + 1;
 
+      
+      
             // heat
             freq_int_heat_GAL[R_ct] =
               (freq_int_heat_tbl_GAL[m_xHII_high][R_ct] - freq_int_heat_tbl_GAL[m_xHII_low][R_ct]) /

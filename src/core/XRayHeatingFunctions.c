@@ -99,6 +99,23 @@ void destruct_heat()
 #endif
 }
 
+#if USE_MINI_HALOS
+/* AGN LW prefactor: AGN_LW*sum_lyn_LW_AGN is still an erg/s/cm^3-like density
+ * (sum_lyn_LW_AGN is a dimensionless shape weight, built per shell in
+ * ComputeTs.c), so no Luminosity_converstion_factor step is needed here
+ * either — this just converts to the photon-flux convention dstarlyLW_dt_GAL
+ * uses. Not yet validated against the stellar LW pathway's magnitude. Unlike
+ * const_zp_prefactor_GAL/AGN_soft/hard, this has no zp-dependence at all —
+ * it's a run constant, computed once per snapshot in ComputeTs.c purely out
+ * of habit alongside the others. */
+void set_const_zp_prefactor_AGN_LW()
+{
+  const_zp_prefactor_AGN_LW = run_globals.params.Flag_IncludeLymanWerner
+    ? SPEED_OF_LIGHT / (4.0 * M_PI) / (PLANCK * NU_LW)
+    : 0.0;
+}
+#endif
+
 // ******************************************************************** //
 //  ************************ RECFAST quantities ************************ //
 //  ******************************************************************** //

@@ -136,6 +136,13 @@ extern "C"
   /* destruction/deallocation routine */
   void destruct_heat();
 
+#if USE_MINI_HALOS
+  /* Sets const_zp_prefactor_AGN_LW. Moved here from ComputeTs.c per @qyx268's review — it's a
+   * pure physical-constants expression (SPEED_OF_LIGHT/PLANCK/NU_LW), with no per-zp or per-cell
+   * dependence at all, so it belongs with the rest of the X-ray/heating prefactor machinery. */
+  void set_const_zp_prefactor_AGN_LW();
+#endif
+
   /* returns the spectral emissity */
   double spectral_emissivity(double nu_norm, int flag, int flag_Pop);
 
