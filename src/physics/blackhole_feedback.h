@@ -18,10 +18,6 @@
 // = (1 solar mass *(speed of light)^2/450e6year) /3.828e26watt
 // where 450e6year is eddington time scale
 
-#define NU_1450 (double)(2.0675e15)
-// frequency [Hz] corresponding to 1450 Angstrom (SPEED_OF_LIGHT / 1450e-8 cm),
-// the reference wavelength QuasarLuv is defined at.
-
 #define LB2EMISSIVITY 2.127633e-6
 // firstly B band luminosity is:   LB = Lbol/kb 1e10Lsun
 // then B band magnitude is:       MB = 4.74 - 2.5log10(1e10LB)

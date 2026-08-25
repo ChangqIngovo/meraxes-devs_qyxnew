@@ -41,6 +41,10 @@
  * ReionAlphaUVBH rather than SpecIndexUVAGN. The entire LW band
  * (NU_LW-NU_LL) sits shortward of NU_1200. */
 #define NU_1200 (double)(2.49825e15)
+/* Frequency [Hz] corresponding to 1450 Angstrom (SPEED_OF_LIGHT / 1450e-8 cm),
+ * the reference wavelength QuasarLuv is defined at. Not unique to black holes
+ * (per @qyx268's review) — moved here from blackhole_feedback.h. */
+#define NU_1450 (double)(2.0675e15)
 #define PLANCK_EV (double)(4.1357e-15)
 #define T_RE 1e4
 #define EDDINGTON_TIME_SCALE 450.514890  // Eddington timescale in Megayears
