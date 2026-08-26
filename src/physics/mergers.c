@@ -209,7 +209,17 @@ void merge_with_target(galaxy_t* gal, int* dead_gals, int snapshot)
     parent->DutyCycleAGN = gal->DutyCycleAGN;
     parent->t_resp = gal->t_resp;
   }
+  /* QuasarLX/BHXrayEmissivity(_soft) are per-snapshot accumulators, reset
+   * alongside QuasarLuv every snapshot (galaxies.c) — merged here for the
+   * same reason (per @qyx268's review): otherwise a satellite's X-ray
+   * emissivity from this step is silently dropped at merger instead of
+   * reaching the X-ray heating grids. NHbin (which obscuration bin the
+   * stochastic draw landed in) is left as the parent's own — it's a
+   * diagnostic, not fed back into the physics. */
   parent->QuasarLuv += gal->QuasarLuv;
+  parent->QuasarLX  += gal->QuasarLX;
+  parent->BHXrayEmissivity      += gal->BHXrayEmissivity;
+  parent->BHXrayEmissivity_soft += gal->BHXrayEmissivity_soft;
 
   // take the CGM tau from the one with more CGM
   if (parent->HotGas < gal->HotGas)

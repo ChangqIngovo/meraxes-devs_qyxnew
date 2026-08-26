@@ -23,6 +23,8 @@ against the source. The specific question under discussion — why the soft
 and hard bands need distinct integration limits in the
 \emph{luminosity-conversion} step but not, for the same reason, in
 \code{integrate\_over\_nu} — is addressed explicitly in Section~\ref{sec:why-limits}.
+A second thread — whether the AGN grids can be folded into the existing SFR
+grids to cut RAM — is addressed in Section~\ref{sec:merge}.
 
 \tableofcontents
 
@@ -151,7 +153,7 @@ redshift $z'$ (\code{zp}). This is \code{const\_zp\_prefactor\_AGN\_soft}/
   \mathcal{A}_b(z') = \frac{C_b}{\nu_{\rm th}}\, c\,(1+z')^{\alpha_b + 3}.
   \label{eq:prefactor}
 \end{equation}
-\textbf{Code check} (\code{ComputeTs.c:1117-1131}):
+\textbf{Code check} (\code{ComputeTs.c:1112-1130}):
 \begin{verbatim}
 const_zp_prefactor_AGN_soft = Luminosity_converstion_factor_AGN_soft
     / (NuXrayThreshold * NU_over_EV) * SPEED_OF_LIGHT
@@ -168,7 +170,7 @@ channel does not re-derive this — it reuses the identical cosmological
 scaling, per band, with that band's own $\alpha_b$ and $C_b$.
 
 Both prefactors are checked for finiteness immediately
-(\code{ComputeTs.c:1121,1132}) and the run aborts rather than silently
+(\code{ComputeTs.c:1116,1127}) and the run aborts rather than silently
 propagating a bad value — this guards against a zero-width band
 ($\nu_{{\rm hi},b}=\nu_{{\rm lo},b}$, e.g. \code{NuXraySoftCut==NuXrayThreshold}),
 which would make $C_b$ divide by zero.
@@ -226,12 +228,12 @@ answer two different physical questions, which is the direct answer to
     \begin{verbatim}
 * (1. + zp) / (1. + zpp)
 \end{verbatim}
-    factor on every AGN soft/hard limit (\code{ComputeTs.c:793-821}), absent
+    factor on every AGN soft/hard limit (\code{ComputeTs.c:796-819}), absent
     from GAL/III's limits because GAL/III use one single band with no
     internal soft/hard split to redshift across. On top of that redshift
     scaling, the lower edge of each band is further clamped to
     $\max(\cdot,\, \nu_{\tau=1}(z',z''))$, the frequency at which the IGM
-    becomes optically thick along that shell (\code{nu\_tau\_one\_agn}) —
+    becomes optically thick along that shell (\code{nu\_tau\_one\_zpp}) —
     a purely radiative-transfer constraint with no analogue in the
     calibration step at all.
 \end{itemize}
@@ -244,6 +246,7 @@ limits for soft vs.\ hard" but answer unrelated questions — one is about
 the definition of a band, the other about a shifting horizon within it.
 
 \section{Step 4: assembling the heating-rate ODE term}
+\label{sec:heat-sum}
 
 Per shell $z''_{\rm ct}$ (in \code{evolveInt}, \code{XRayHeatingFunctions.c:1409-1423}):
 \begin{align}
@@ -275,6 +278,97 @@ and this combined AGN heating rate enters $dT_K/dz'$ (\code{deriv[3]} /
 cooling and Compton heating (unchanged from the pre-existing GAL/III
 pathway).
 
+\section{Can the AGN grids be folded into the existing SFR grids?}
+\label{sec:merge}
+
+A separate review thread (\code{reionization.c}, on the
+\code{grids->BHXrayEmissivity} allocation block) raises the RAM cost of
+carrying \code{BHXrayEmissivity}/\code{\_soft} as their own grids, history
+ring buffers, and FFTW plans, and asks whether the AGN contribution can
+instead be added into the existing SFR grid machinery by "manipulating the
+constants." Eq.~\eqref{eq:heat-sum} answers this precisely, by showing which
+quantities are genuinely band-specific and which are not.
+
+\subsection{The raw emissivities cannot be summed before filtering}
+\label{sec:merge-no}
+
+Write the GAL contribution in the same form as Eq.~\eqref{eq:heat-sum}:
+\begin{equation}
+  \frac{dx_{\rm heat}}{dt}\bigg|_{\rm GAL} =
+    \mathcal{A}_{\rm GAL}(z') \sum_{z''} \frac{dt}{dz''}\,\Delta z''\;
+    X_{\rm GAL}(z'')\,(1+z'')^{-\alpha_{\rm GAL}}\, \mathcal{K}_{\rm GAL}(z',z'',x_e).
+  \label{eq:heat-sum-gal}
+\end{equation}
+Comparing this term-by-term with Eq.~\eqref{eq:heat-sum} for band $b$, every
+factor multiplying $X(z'')$ — the redshifting exponent
+$(1+z'')^{-\alpha_b}$, the shape kernel $\mathcal{K}_b$ (itself
+$\alpha_b$-dependent through the $(\nu/\nu_{\rm th})^{-\alpha_b-1}$ integrand
+in Eq.~\eqref{eq:shape}), and the prefactor $\mathcal{A}_b(z')$ — depends on
+$\alpha_b$, which is a \emph{different, independently-set parameter} for
+each of GAL/AGN-soft/AGN-hard (\code{SpecIndexXrayGal} vs.\
+\code{SpecIndexXrayAGNSoft} vs.\ \code{SpecIndexXrayAGNHard}). Summing the
+raw grids first,
+\begin{equation}
+  X_{\rm merged}(z'') \equiv X_{\rm GAL}(z'') + X_{\rm AGN}(z''),
+\end{equation}
+and then applying \emph{one} $(1+z'')^{-\alpha}\mathcal{K}_\alpha$ to
+$X_{\rm merged}$ is only correct if $\alpha_{\rm GAL}=\alpha_{\rm AGN}$ —
+otherwise it silently applies the wrong spectral shape to whichever
+component's true $\alpha_b$ differs from the one used, exactly the failure
+mode raised in the reply on that thread. $X_{\rm GAL}$ and $X_{\rm AGN}$
+are not even the same physical quantity before this step: $X_{\rm GAL}$
+(\code{SMOOTHED\_SFR\_GAL}) carries units of SFR ($M_\odot\,{\rm yr}^{-1}$,
+converted to a luminosity only via $C_{\rm GAL}$, which bakes in
+$\alpha_{\rm GAL}$), while $X_{\rm AGN}$ (\code{SMOOTHED\_AGN(\_soft)}) is
+already a luminosity from \code{gal->BHXrayEmissivity(\_soft)}. So merging
+\emph{before} the calibration/shape stage — i.e.\ merging the grids
+themselves — is not just inconvenient but dimensionally and physically
+wrong whenever $\alpha_{\rm GAL}\neq\alpha_{\rm AGN,soft/hard}$, which is
+the general case here (they are independent fit parameters, not tied
+together). This confirms the concern raised in reply to that thread.
+
+\subsection{What genuinely is band-agnostic: the smoothing machinery}
+\label{sec:merge-yes}
+
+The real RAM cost the thread is pointing at, however, is not $X_b(z'')$
+itself but the \emph{scratch space used to compute it}: for each band,
+\code{ComputeTs.c} allocates its own pair of FFTW complex buffers
+(\code{*\_unfiltered}/\code{*\_filtered}, each $\mathcal{O}(\code{ReionGridDim}^3)$)
+and forward/reverse plans, used only to smooth that band's raw per-cell
+emissivity over radius $R$ (\code{filter()}, \code{ComputeTs.c:456-532}).
+Inspecting that pipeline shows every band — GAL, III, AGN-hard, AGN-soft,
+AGN-LW — goes through an \emph{identical}, purely geometric sequence
+(forward FFT $\to$ normalize $\to$ copy $\to$ \code{filter()} $\to$ inverse
+FFT) that has no $\alpha_b$ dependence at all: \code{filter()} only ever
+sees a real-space grid of shape \code{ReionGridDim}$^3$ and a radius $R$,
+never a spectral index. All $\alpha_b$-dependence lives entirely upstream
+(Sections~\ref{sec:conversion}--\ref{sec:shape}, in $C_b$/$\mathcal{A}_b$/
+$\mathcal{K}_b$) and downstream (Section~\ref{sec:heat-sum}, where each
+band's own smoothed history is weighted by its own $\alpha_b$). Currently
+every band's forward FFT happens before any band's filtered result is
+extracted (all $N_{\rm bands}$ unfiltered/filtered pairs alive at once, so
+that one shared triple loop over cells can populate all the
+\code{SMOOTHED\_*} arrays together, \code{ComputeTs.c:536-613}/\code{638-687}).
+
+Because the filtering step itself is band-agnostic, the \emph{scratch}
+buffers and plans — not the \code{SMOOTHED\_*} outputs — could legitimately
+be shared: process one band fully (forward FFT $\to$ filter $\to$ inverse
+FFT $\to$ extract into that band's own \code{SMOOTHED\_*} array), then reuse
+the same pair of complex buffers and the same FFTW plan for the next band,
+instead of holding up to five separate pairs simultaneously. This would cut
+the scratch-buffer cost from $\sim N_{\rm bands}\times$ down to $1\times$
+$\mathcal{O}(\code{ReionGridDim}^3)$, at the price of splitting the current
+shared extraction loop into one pass per band (more loop overhead, no
+change in numerical result). It does \emph{not} touch the
+\code{SMOOTHED\_*} history arrays themselves (Section~\ref{sec:merge-no}
+established those must stay physically distinct — and they, not the
+scratch buffers, are the dominant memory cost, scaling as
+$\code{ReionGridDim}^3\times\code{TsNumFilterSteps}$ rather than just
+$\code{ReionGridDim}^3$), nor the per-galaxy history ring buffers
+(\code{bh\_xray\_histories(\_soft)}), which record a physically distinct
+per-snapshot quantity from \code{sfr\_histories} and cannot be merged for
+the same reason as Section~\ref{sec:merge-no}.
+
 \section{Symbol / code cross-reference}
 
 \begin{center}
@@ -291,7 +385,7 @@ $C_b$ & luminosity conversion factor & \code{Luminosity\_converstion\_factor\_AG
 $\mathcal{A}_b(z')$ & redshift prefactor & \code{const\_zp\_prefactor\_AGN\_soft/hard} \\
 $\mathcal{K}_b(z',z'',x_e)$ & frequency shape kernel & \code{freq\_int\_heat\_tbl\_AGN\_soft/hard} \\
 $X_b(z'')$ & per-shell AGN emissivity & \code{XAGN\_soft/hard[R\_ct]} \\
-$\nu_{\tau=1}(z',z'')$ & opacity horizon & \code{nu\_tau\_one\_agn} \\
+$\nu_{\tau=1}(z',z'')$ & opacity horizon & \code{nu\_tau\_one\_zpp} \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -312,6 +406,11 @@ $\nu_{\tau=1}(z',z'')$ & opacity horizon & \code{nu\_tau\_one\_agn} \\
     $=10^{-5}$, \code{meraxes.h:65}) is tight enough not to introduce a
     discontinuity in $C_b$ near $\alpha_b=1$ for realistic parameter
     sweeps.
+  \item Section~\ref{sec:merge}: agree whether the scratch-buffer-reuse
+    refactor (band-agnostic FFT buffers/plans, one band processed fully
+    before reusing the pair for the next) is worth implementing given the
+    RAM pressure at high \code{ReionGridDim}, and whether the resulting
+    per-band extraction loop's extra overhead is acceptable.
 \end{itemize}
 
 \end{document}

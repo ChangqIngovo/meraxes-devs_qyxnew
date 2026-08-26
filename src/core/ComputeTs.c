@@ -1000,7 +1000,7 @@ void _ComputeTs(int snapshot)
      *   alpha == 1:  C = 1 / (nu_th * ln(nu_hi/nu_lo))
      * [nu_lo,nu_hi]: GAL/III/AGN-soft -> [NuXrayThreshold,NuXraySoftCut], AGN-hard -> [NuXraySoftCut,NuXrayMax].
      */
-    if (fabs(run_globals.params.physics.SpecIndexXrayGal - 1.0) < REL_TOL) {
+    if (fabs(run_globals.params.physics.SpecIndexXrayGal - 1.0) < SPEC_INDEX_UNITY_TOL) {
       Luminosity_converstion_factor_GAL =
         (run_globals.params.physics.NuXrayThreshold * NU_over_EV) *
         log(run_globals.params.physics.NuXraySoftCut / run_globals.params.physics.NuXrayThreshold);
@@ -1021,7 +1021,7 @@ void _ComputeTs(int snapshot)
     Luminosity_converstion_factor_GAL *= (SEC_PER_YEAR) / (PLANCK);
 
     /* --- Soft component: nu_thresh to nu_break --- */
-    if (fabs(run_globals.params.physics.SpecIndexXrayAGNSoft - 1.0) < REL_TOL) {
+    if (fabs(run_globals.params.physics.SpecIndexXrayAGNSoft - 1.0) < SPEC_INDEX_UNITY_TOL) {
       Luminosity_converstion_factor_AGN_soft =
         (run_globals.params.physics.NuXrayThreshold * NU_over_EV) *
         log(run_globals.params.physics.NuXraySoftCut /
@@ -1047,7 +1047,7 @@ void _ComputeTs(int snapshot)
     /* --- Hard component: [NuXraySoftCut, NuXrayMax], not [NuXrayThreshold, NuXraySoftCut] ---
      * quasar_lx is calibrated over the hard band, so C must be derived over that same band.
      * Pivot frequency stays NuXrayThreshold, matching const_zp_prefactor_AGN_hard below. */
-    if (fabs(run_globals.params.physics.SpecIndexXrayAGNHard - 1.0) < REL_TOL) {
+    if (fabs(run_globals.params.physics.SpecIndexXrayAGNHard - 1.0) < SPEC_INDEX_UNITY_TOL) {
       Luminosity_converstion_factor_AGN_hard =
         (run_globals.params.physics.NuXrayThreshold * NU_over_EV) *
         log(run_globals.params.physics.NuXrayMax /
@@ -1076,7 +1076,7 @@ void _ComputeTs(int snapshot)
     // Do the same for Pop III.
 
 #if USE_MINI_HALOS
-    if (fabs(run_globals.params.physics.SpecIndexXrayIII - 1.0) < REL_TOL) {
+    if (fabs(run_globals.params.physics.SpecIndexXrayIII - 1.0) < SPEC_INDEX_UNITY_TOL) {
       Luminosity_converstion_factor_III =
         (run_globals.params.physics.NuXrayThreshold * NU_over_EV) *
         log(run_globals.params.physics.NuXraySoftCut / run_globals.params.physics.NuXrayThreshold);

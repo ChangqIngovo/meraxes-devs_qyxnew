@@ -97,29 +97,10 @@ static int read_swift(const enum grid_prop property, const int snapshot, float* 
     if (use_resampled_file) {
       grid_dim = run_globals.params.ReionGridDim;
     } else {
-      /* DensityGrids:grid_dim is stored as an HDF5 *variable-length* string.
-       * H5LTget_attribute_string() only copies characters correctly for a
-       * fixed-length string attribute — for a variable-length one, HDF5
-       * expects the destination to be the address of a char* pointer (it
-       * allocates the string itself and hands back a pointer to it), not a
-       * fixed buffer. Passing a fixed char[20] here silently wrote the raw
-       * 8-byte pointer value into the front of the buffer instead of the
-       * string, so atoi() on the result was reading garbage and always
-       * returned 0 — which upstream became "grid has zero resolution" and
-       * aborted. Verified empirically against this exact file/attribute
-       * before applying this fix. Read it correctly via the low-level
-       * H5A API instead, which handles variable-length strings properly. */
-      hid_t attr_id = H5Aopen_by_name(file_id, "/Parameters", "DensityGrids:grid_dim", H5P_DEFAULT, H5P_DEFAULT);
-      hid_t attr_type = H5Aget_type(attr_id);
-      char* data = NULL;
-      status = H5Aread(attr_id, attr_type, &data);
+      char data[20] = { '\0' };
+      status = H5LTget_attribute_string(file_id, "/Parameters", "DensityGrids:grid_dim", data);
       assert(status >= 0);
       grid_dim = atoi(data);
-      hid_t attr_space = H5Aget_space(attr_id);
-      H5Dvlen_reclaim(attr_type, attr_space, H5P_DEFAULT, &data);
-      H5Sclose(attr_space);
-      H5Tclose(attr_type);
-      H5Aclose(attr_id);
     }
 
     status = H5LTget_attribute_double(file_id, "/Header", "BoxSize", box_size);

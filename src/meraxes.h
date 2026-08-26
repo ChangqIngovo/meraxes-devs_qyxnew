@@ -73,6 +73,14 @@
 #define STRLEN 256 //!< Default string length
 #define REL_TOL (float)1e-5
 #define ABS_TOL (float)1e-8
+/* How close a spectral index can get to 1 before the power-law calibration's
+ * closed-form solution switches to the log branch (1/(1-alpha) is singular
+ * at alpha=1) — see ComputeTs.c's Luminosity_converstion_factor_* blocks.
+ * Deliberately its own constant (per @qyx268's review): despite the name
+ * REL_TOL previously used here, this is an absolute tolerance on alpha's
+ * distance from 1, unrelated to REL_TOL/ABS_TOL's near-zero floor usage
+ * elsewhere, so it must not be conflated with (or retuned by) either. */
+#define SPEC_INDEX_UNITY_TOL (float)1e-5
 // ======================================================
 
 // Define things used for aborting exceptions
