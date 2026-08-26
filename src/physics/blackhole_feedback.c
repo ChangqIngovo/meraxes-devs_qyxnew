@@ -191,8 +191,7 @@ void get_nh_fracs(double LX_1e10Lsun, double redshift, double f_out[5])
 void calculate_BHemissivity(double BlackHoleMass, double accreted_mass,
                             double *emissivity,     double *accretion_time,
                             double *quasar_luv,     double *quasar_lx,
-                            double *quasar_lx_soft, double *xray_emissivity,
-                            double *quasar_lw)
+                            double *quasar_lx_soft, double *xray_emissivity)
 {
   double Lbol;
   double kb;
@@ -229,20 +228,15 @@ void calculate_BHemissivity(double BlackHoleMass, double accreted_mass,
    * quasar_luv*(nu/NU_1450)^-SpecIndexUVAGN redward of 1200A, steepening to
    * ReionAlphaUVBH (the same ionizing-continuum index already used for the
    * UV background elsewhere) shortward of it. The whole LW band sits
-   * shortward of NU_1200, so quasar_lw here is just the specific luminosity
-   * AT the break — L_nu(NU_1200) = quasar_luv*(NU_1200/NU_1450)^-SpecIndexUVAGN.
-   * The actual band integral, window-by-window across the redshifted Lyman
-   * series (picket-fence absorption, same treatment as sum_lyn_LW for
-   * stars), happens later in ComputeTs.c's sum_lyn_LW_AGN loop, which
-   * evaluates (nu/NU_1200)^-ReionAlphaUVBH relative to this amplitude. */
-  *quasar_lw = *quasar_luv * pow(NU_1200 / NU_1450, -physics->SpecIndexUVAGN);
-  /* AGNLWEfficiency is a binary (0/1) debug switch, not a tunable efficiency
-   * — the physically meaningful suppression near Lyman resonances is
-   * already handled by sum_lyn_LW_AGN's per-window treatment above. This
-   * just scales quasar_lw (QuasarLuv/QuasarMag/QuasarLF are untouched), as a
-   * clean off-switch for AGN's LW contribution alone, independent of
-   * Flag_IncludeLymanWerner. */
-  *quasar_lw *= physics->AGNLWEfficiency;
+   * shortward of NU_1200, so the specific luminosity AT the break —
+   * L_nu(NU_1200) = quasar_luv*(NU_1200/NU_1450)^-SpecIndexUVAGN*AGNLWEfficiency
+   * — is just quasar_luv times a run-constant (run_globals.QuasarLWScale, set
+   * once in init.c), so it's not returned/stored here (per @qyx268's review —
+   * not worth its own out-param or per-galaxy field). The actual band
+   * integral, window-by-window across the redshifted Lyman series
+   * (picket-fence absorption, same treatment as sum_lyn_LW for stars),
+   * happens later in ComputeTs.c's sum_lyn_LW_AGN loop, which evaluates
+   * (nu/NU_1200)^-ReionAlphaUVBH relative to this amplitude. */
 }
 
 static double get_vvir(galaxy_t* gal) {
@@ -384,7 +378,6 @@ void previous_merger_driven_BH_growth(galaxy_t* gal, int snapshot)
   double accreted_mass;
   double BHemissivity, accretion_time, quasar_luv;
   double quasar_lx, quasar_lx_soft, xray_emissivity;
-  double quasar_lw;
   double obs_fraction_hard;
   double obs_fraction_soft;
   int    NH_bin;
@@ -432,8 +425,7 @@ void previous_merger_driven_BH_growth(galaxy_t* gal, int snapshot)
     calculate_BHemissivity(gal->BlackHoleMass, accreted_mass,
                            &BHemissivity, &accretion_time,
                            &quasar_luv, &quasar_lx,
-                           &quasar_lx_soft, &xray_emissivity,
-                           &quasar_lw);
+                           &quasar_lx_soft, &xray_emissivity);
     apply_xray_obscuration(quasar_lx,
                            run_globals.ZZ[snapshot],
                            &obs_fraction_hard,
@@ -469,9 +461,6 @@ void previous_merger_driven_BH_growth(galaxy_t* gal, int snapshot)
      * ComputeTs.c, same point as SMOOTHED_SFR_GAL's stellar conversion. */
     gal->BHXrayEmissivity      += quasar_lx      * obs_fraction_hard;
     gal->BHXrayEmissivity_soft += quasar_lx_soft * obs_fraction_soft;
-    /* No obscuration weighting, same as QuasarLuv above — quasar_lw is
-     * derived from the same unobscured UV continuum. */
-    gal->BHLWEmissivity += quasar_lw;
     gal->EffectiveBHAR += BHemissivity;
     // quasar mode feedback
     m_reheat = run_globals.params.physics.QuasarModeEff * 2. * ETA * run_globals.Csquare * accreted_mass / Vvir / Vvir;

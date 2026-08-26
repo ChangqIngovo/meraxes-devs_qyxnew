@@ -18,17 +18,19 @@
 // = (1 solar mass *(speed of light)^2/450e6year) /3.828e26watt
 // where 450e6year is eddington time scale
 
-#define LB2EMISSIVITY 2.127633e-6
+#define LB2EMISSIVITY 2.060274e-6
 // firstly B band luminosity is:   LB = Lbol/kb 1e10Lsun
 // then B band magnitude is:       MB = 4.74 - 2.5log10(1e10LB)
 // then convert from Vega to AB:   MAB,B = MB-0.09
 // then UV mag:                    M1450 = MAB,B+0.524
 // then UV lum:                    LUV = 10**((M1450_1-51.594843)/-2.5) #erg/s/Hz
-// then 912 lum:                   L912 = LUV*(1200./1450)**0.44*(912/1200.)**1.57  #erg/s/Hz
+// then 912 lum:                   L912 = LUV*(1200./1450)**0.61*(912/1200.)**1.57  #erg/s/Hz
 // then BHemissivity:              L912/Planck constant/1.57 #photons/s
 // then total BHemissivity in this step: BHemissivity*accretion_time(seconds)
-// BHemissivity = fobs*Lbol/kb*2.1276330276278045e+54*accretion_time(seconds)/1e60; // photon numbers/1e60
-// BHemissivity = fobs*Lbol/kb*2.1276330276278045e-6*accretion_time(seconds); // photon numbers/1e60
+// BHemissivity = fobs*Lbol/kb*2.0602739394e+54*accretion_time(seconds)/1e60; // photon numbers/1e60
+// BHemissivity = fobs*Lbol/kb*2.0602739394e-6*accretion_time(seconds); // photon numbers/1e60
+// (2026-08: SpecIndexUVAGN updated 0.44->0.61 per Lusso et al. 2015; LB2EMISSIVITY
+//  rescaled accordingly by (1200/1450)^(0.61-0.44) = 0.968341 from the old 2.127633e-6)
 
 /* Morrison & McCammon (1983) Table 2: photoelectric cross-section coefficients.
  * σ(E) = (C0 + C1·E + C2·E²) × E^{-3} × 10^{-24} cm²,  E in keV.
@@ -72,8 +74,7 @@ extern "C"
   void calculate_BHemissivity(double BlackHoleMass, double accreted_mass,
                               double *emissivity,     double *accretion_time,
                               double *quasar_luv,     double *quasar_lx,
-                              double *quasar_lx_soft, double *xray_emissivity,
-                              double *quasar_lw);
+                              double *quasar_lx_soft, double *xray_emissivity);
 
   void merger_driven_BH_growth(struct galaxy_t* gal, double merger_ratio, int snapshot);
   void previous_merger_driven_BH_growth(struct galaxy_t* gal, int snapshot);

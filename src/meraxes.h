@@ -186,8 +186,8 @@ typedef struct physics_params_t
                                     meaningful suppression near Lyman resonances is handled by sum_lyn_LW_AGN's
                                     per-window treatment. Set to 0 to turn off AGN's LW contribution independently
                                     of Flag_IncludeLymanWerner (which gates the whole LW mechanism, GAL included);
-                                    leave at 1 otherwise. Scales quasar_lw only — QuasarLuv/QuasarMag/QuasarLF are
-                                    untouched. */
+                                    leave at 1 otherwise. Scales the AGN LW amplitude (run_globals.QuasarLWScale)
+                                    only — QuasarLuv/QuasarMag/QuasarLF are untouched. */
 
   double ReionMaxHeatingRedshift;
 
@@ -734,7 +734,6 @@ typedef struct galaxy_t
                                   //!<This (bin, luminosity) pair replaces the old QuasarLX_obs0-4/NHfrac0-4 fields (5 mostly-zero doubles each, every galaxy).
   double BHXrayEmissivity;       //!< Observed hard X-ray emissivity [1e10 Lsun], obscuration-weighted
   double BHXrayEmissivity_soft;  //!< Observed soft X-ray emissivity [1e10 Lsun], obscuration-weighted
-  double BHLWEmissivity;         //!< AGN Lyman-Werner band emissivity [1e10 Lsun], extrapolated from QuasarLuv
   double EffectiveBHM;
   double EffectiveBHAR;
   double DutyCycleAGN;
@@ -949,6 +948,10 @@ typedef struct run_globals_t
   double G;
   double Csquare;
   double EddingtonTimescale;
+  double QuasarLWScale;      //!< AGN LW emissivity per unit QuasarLuv: pow(NU_1200/NU_1450,
+                              //!< -SpecIndexUVAGN) * AGNLWEfficiency. Run-constant (per @qyx268's
+                              //!< review — quasar_lw was just QuasarLuv times this, not worth its
+                              //!< own per-galaxy field), computed once here instead of per galaxy.
   loiii_params_t loiii_params;
   // PopIII stuff
 

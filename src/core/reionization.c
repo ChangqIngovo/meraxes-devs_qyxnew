@@ -2109,8 +2109,11 @@ void construct_baryon_grids(int snapshot, int local_ngals)
 
 #if USE_MINI_HALOS
             case prop_bh_lw_emissivity:
+              /* No stored per-galaxy BHLWEmissivity field (per @qyx268's review) — it was
+               * just QuasarLuv * run_globals.QuasarLWScale, so computed on the fly here
+               * instead of carrying an extra double on every galaxy. */
               if (gal->BlackHoleMass >= run_globals.params.physics.BlackHoleMassLimitReion)
-                buffer[ind] += gal->BHLWEmissivity;
+                buffer[ind] += gal->QuasarLuv * run_globals.QuasarLWScale;
               break;
 #endif
 
