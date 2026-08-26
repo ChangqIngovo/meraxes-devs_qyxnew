@@ -24,7 +24,7 @@
 // then convert from Vega to AB:   MAB,B = MB-0.09
 // then UV mag:                    M1450 = MAB,B+0.524
 // then UV lum:                    LUV = 10**((M1450_1-51.594843)/-2.5) #erg/s/Hz
-// then 912 lum:                   L912 = LUV*(1200./1450)**0.61*(912/1200.)**1.57  #erg/s/Hz
+// then 912 lum:                   L912 = LUV*(1200./1450)**SpecIndexUVAGN*(912/1200.)**1.57  #erg/s/Hz
 // then BHemissivity:              L912/Planck constant/1.57 #photons/s
 // then total BHemissivity in this step: BHemissivity*accretion_time(seconds)
 // BHemissivity = fobs*Lbol/kb*2.0602739394e+54*accretion_time(seconds)/1e60; // photon numbers/1e60
