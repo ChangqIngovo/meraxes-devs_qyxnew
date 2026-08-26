@@ -201,12 +201,15 @@ typedef struct physics_params_t
    * calculate_BHemissivity and never applies inside the LW band. */
   double SpecIndexUVAGNSoft;    /* lambda > 912A (redward of/at the break) — LW band amplitude/shape */
   double SpecIndexUVAGNHard;    /* lambda <= 912A (shortward of the break) — ionizing photon rate only */
-  double AGNLWEfficiency;       /* Binary debug switch (0 or 1), not a tunable efficiency — the physically
-                                    meaningful suppression near Lyman resonances is handled by sum_lyn_LW_AGN's
-                                    per-window treatment. Set to 0 to turn off AGN's LW contribution independently
-                                    of Flag_IncludeLymanWerner (which gates the whole LW mechanism, GAL included);
-                                    leave at 1 otherwise. Scales the AGN LW amplitude (run_globals.QuasarLWScale)
-                                    only — QuasarLuv/QuasarMag/QuasarLF are untouched. */
+  double AGNLWEfficiency;       /* Scale factor on the AGN LW amplitude (run_globals.QuasarLWScale) only —
+                                    QuasarLuv/QuasarMag/QuasarLF are untouched. A genuine tunable double, not
+                                    a binary switch (per @qyx268's review) — though every run so far leaves it
+                                    at 1.0 (i.e. AGN LW scales 1:1 with QuasarLuv). Its main use is isolating
+                                    AGN's own LW contribution independently of Flag_IncludeLymanWerner (which
+                                    gates the whole LW mechanism, GAL included) — e.g. set to 0 to turn AGN's
+                                    contribution off while leaving stellar LW on. The physically meaningful
+                                    suppression near Lyman resonances is handled separately, by sum_lyn_LW_AGN's
+                                    per-window treatment. */
 
   double ReionMaxHeatingRedshift;
 
