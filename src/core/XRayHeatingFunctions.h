@@ -62,11 +62,13 @@ double* sum_lyn;
 double* sum_lyn_LW;
 double* sum_lyn_III;
 double* sum_lyn_LW_III;
-// Per-shell AGN LW shape weight: (nu/NU_1200)^-ReionAlphaUVBH evaluated at
+// Per-shell AGN LW shape weight: (nu/NU_LL)^-SpecIndexUVAGNSoft evaluated at
 // each redshifted Lyman window, same picket-fence treatment as sum_lyn_LW
-// but for the AGN's double power-law continuum instead of the tabulated
-// stellar SED. AGN_LW[R_ct] carries the amplitude (L_nu at NU_1200); this
-// carries the per-window shape.
+// but for the AGN continuum instead of the tabulated stellar SED. The whole
+// LW band sits on the same (SpecIndexUVAGNSoft) side of the break as the near/
+// far-UV continuum — Lusso et al. (2015) place the break AT the Lyman limit
+// (NU_LL, 912A), not at 1200A. AGN_LW[R_ct] carries the amplitude (L_nu at
+// NU_LL); this carries the per-window shape.
 double* sum_lyn_LW_AGN;
 double growth_factor_zp;
 double dgrowth_factor_dzp;

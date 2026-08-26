@@ -218,25 +218,20 @@ void calculate_BHemissivity(double BlackHoleMass, double accreted_mass,
   *quasar_lx      = Lbol / kb_hard;
   *quasar_lx_soft = Lbol / kb_soft;
 
+  /* L912 amplitude at the break (NU_LL, 912A — see blackhole_feedback.h for
+   * the full derivation). Computed at runtime from physics->SpecIndexUVAGNSoft
+   * so a .par change never requires hand-recomputing LB2EMISSIVITY. */
+  double break_factor = pow(NU_LL / NU_1450, -physics->SpecIndexUVAGNSoft);
+
   // Approximation using the emissivity at the MIDDLE of accretion time
-  *emissivity = physics->quasar_fobs * *quasar_luv * LB2EMISSIVITY
+  *emissivity = physics->quasar_fobs * *quasar_luv * LB2EMISSIVITY * break_factor / physics->SpecIndexUVAGNHard
                * *accretion_time * run_globals.units.UnitTime_in_s
                / run_globals.params.Hubble_h;
 
-  /* Lyman-Werner: the AGN continuum is a double power law with a break at
-   * 1200A (eq. A2, Qin et al. 2017, arXiv:1703.04895) — L_nu =
-   * quasar_luv*(nu/NU_1450)^-SpecIndexUVAGN redward of 1200A, steepening to
-   * ReionAlphaUVBH (the same ionizing-continuum index already used for the
-   * UV background elsewhere) shortward of it. The whole LW band sits
-   * shortward of NU_1200, so the specific luminosity AT the break —
-   * L_nu(NU_1200) = quasar_luv*(NU_1200/NU_1450)^-SpecIndexUVAGN*AGNLWEfficiency
-   * — is just quasar_luv times a run-constant (run_globals.QuasarLWScale, set
-   * once in init.c), so it's not returned/stored here (per @qyx268's review —
-   * not worth its own out-param or per-galaxy field). The actual band
-   * integral, window-by-window across the redshifted Lyman series
-   * (picket-fence absorption, same treatment as sum_lyn_LW for stars),
-   * happens later in ComputeTs.c's sum_lyn_LW_AGN loop, which evaluates
-   * (nu/NU_1200)^-ReionAlphaUVBH relative to this amplitude. */
+  /* Lyman-Werner: the whole LW band sits on the Soft side of the break, so
+   * its amplitude is just quasar_luv*break_factor*AGNLWEfficiency — folded
+   * into run_globals.QuasarLWScale (init.c), not returned here. The band
+   * integral itself happens later in ComputeTs.c's sum_lyn_LW_AGN loop. */
 }
 
 static double get_vvir(galaxy_t* gal) {

@@ -36,11 +36,16 @@
 #define TCMB 2.728
 #define NU_LL (double)(3.29e15)
 #define NU_LW (double)(2.71e15)
-/* AGN UV/LW SED break frequency at 1200A (eq. A2, Qin et al. 2017,
- * arXiv:1703.04895) — shortward of this, the AGN continuum follows
- * ReionAlphaUVBH rather than SpecIndexUVAGN. The entire LW band
- * (NU_LW-NU_LL) sits shortward of NU_1200. */
-#define NU_1200 (double)(2.49825e15)
+/* NU_LL doubles as the AGN UV/LW SED break frequency (912A, the Lyman
+ * limit) — Lusso et al. (2015, MNRAS 449, 4204) measure the AGN continuum
+ * break to sit AT 912A itself, not at 1200A as earlier versions of this
+ * code assumed (that used a since-removed NU_1200=2.49825e15 constant).
+ * SpecIndexUVAGNSoft applies for nu<=NU_LL (redward of/at the break, which
+ * covers the entire LW band NU_LW-NU_LL); SpecIndexUVAGNHard, the steeper
+ * index, applies only shortward of NU_LL, used for the ionizing/912A
+ * photon budget only (see calculate_BHemissivity) —
+ * ReionAlphaUVBH is a distinct, separately-tuned reionization parameter
+ * and is not used for the AGN LW band). */
 /* Frequency [Hz] corresponding to 1450 Angstrom (SPEED_OF_LIGHT / 1450e-8 cm),
  * the reference wavelength QuasarLuv is defined at. Not unique to black holes
  * (per @qyx268's review) — moved here from blackhole_feedback.h. */
@@ -181,7 +186,13 @@ typedef struct physics_params_t
   int Flag_IncludeAGNXray;      /* 0=no AGN, 1=soft+hard, 2=hard only, 3=soft only */
   double SpecIndexXrayAGNSoft;
   double SpecIndexXrayAGNHard;
-  double SpecIndexUVAGN;        /* AGN NUV/FUV continuum slope (Lusso et al. 2015), QuasarLuv (1450A) extrapolated into the LW band */
+  /* AGN UV/EUV continuum slopes (nu^-alpha), Lusso et al. (2015), break AT NU_LL
+   * (912A, the Lyman limit) — same Soft/Hard naming convention as the X-ray
+   * pair above. QuasarLuv (1450A) is extrapolated down through the LW band
+   * using Soft; Hard governs only the ionizing (<=912A) photon budget in
+   * calculate_BHemissivity and never applies inside the LW band. */
+  double SpecIndexUVAGNSoft;    /* lambda > 912A (redward of/at the break) — LW band amplitude/shape */
+  double SpecIndexUVAGNHard;    /* lambda <= 912A (shortward of the break) — ionizing photon rate only */
   double AGNLWEfficiency;       /* Binary debug switch (0 or 1), not a tunable efficiency — the physically
                                     meaningful suppression near Lyman resonances is handled by sum_lyn_LW_AGN's
                                     per-window treatment. Set to 0 to turn off AGN's LW contribution independently
@@ -948,10 +959,12 @@ typedef struct run_globals_t
   double G;
   double Csquare;
   double EddingtonTimescale;
-  double QuasarLWScale;      //!< AGN LW emissivity per unit QuasarLuv: pow(NU_1200/NU_1450,
-                              //!< -SpecIndexUVAGN) * AGNLWEfficiency. Run-constant (per @qyx268's
-                              //!< review — quasar_lw was just QuasarLuv times this, not worth its
-                              //!< own per-galaxy field), computed once here instead of per galaxy.
+  double QuasarLWScale;      //!< AGN LW emissivity per unit QuasarLuv: pow(NU_LL/NU_1450,
+                              //!< -SpecIndexUVAGNSoft) * AGNLWEfficiency — amplitude AT the Lyman-limit
+                              //!< break (Lusso et al. 2015), not at 1200A. Run-constant (per
+                              //!< @qyx268's review — quasar_lw was just QuasarLuv times this, not
+                              //!< worth its own per-galaxy field), computed once here instead of
+                              //!< per galaxy.
   loiii_params_t loiii_params;
   // PopIII stuff
 

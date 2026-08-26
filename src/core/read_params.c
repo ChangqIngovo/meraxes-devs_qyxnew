@@ -1198,8 +1198,13 @@ void read_parameter_file(char* fname, int mode)
       required_tag[n_param] = 1;
       params_type[n_param++] = PARAM_TYPE_DOUBLE;
 
-      strcpy(params_tag[n_param], "SpecIndexUVAGN");
-      params_addr[n_param] = &(run_params->physics).SpecIndexUVAGN;
+      strcpy(params_tag[n_param], "SpecIndexUVAGNSoft");
+      params_addr[n_param] = &(run_params->physics).SpecIndexUVAGNSoft;
+      required_tag[n_param] = 1;
+      params_type[n_param++] = PARAM_TYPE_DOUBLE;
+
+      strcpy(params_tag[n_param], "SpecIndexUVAGNHard");
+      params_addr[n_param] = &(run_params->physics).SpecIndexUVAGNHard;
       required_tag[n_param] = 1;
       params_type[n_param++] = PARAM_TYPE_DOUBLE;
 

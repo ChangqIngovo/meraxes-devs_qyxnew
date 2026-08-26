@@ -1342,11 +1342,11 @@ void evolveInt(float zp,
   double dxlya_dt_AGN_hard       = 0.0;
   double zpp_integrand_AGN_hard;
   /* AGN contribution to Lyman-Werner flux, same role as dstarlyLW_dt_GAL/_III:
-   * AGN_LW carries the amplitude (QuasarLuv extrapolated to the SED's 1200A
-   * break via SpecIndexUVAGN — see calculate_BHemissivity), sum_lyn_LW_AGN
-   * carries the picket-fence window shape (double power law, break at
-   * NU_1200, eq. A2 of Qin et al. 2017/1703.04895). Only meaningful under
-   * USE_MINI_HALOS + Flag_IncludeLymanWerner. */
+   * AGN_LW carries the amplitude (QuasarLuv extrapolated to the SED's break
+   * via SpecIndexUVAGNSoft — see calculate_BHemissivity), sum_lyn_LW_AGN carries
+   * the picket-fence window shape, single power law throughout the LW band
+   * with the break at NU_LL (912A, the Lyman limit — Lusso et al. 2015),
+   * not at 1200A. Only meaningful under USE_MINI_HALOS + Flag_IncludeLymanWerner. */
   double dstarlyLW_dt_AGN = 0.0;
 
   x_e = y[0];

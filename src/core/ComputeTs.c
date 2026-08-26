@@ -913,13 +913,17 @@ void _ComputeTs(int snapshot)
 
           /* AGN continuum shape at this same redshifted window: nuprime is
            * in Ly-alpha units, so nuprime*Ly_alpha_HZ is the actual
-           * frequency; (nu/NU_1200)^-ReionAlphaUVBH is the double-power-law
-           * shape (eq. A2, Qin et al. 2017) relative to AGN_LW's amplitude
-           * at the 1200A break — the entire LW band sits shortward of
-           * NU_1200, so ReionAlphaUVBH (not SpecIndexUVAGN) always applies
-           * here. */
+           * frequency; (nu/NU_LL)^-SpecIndexUVAGNSoft is the shape relative
+           * to AGN_LW's amplitude at the break, which Lusso et al. (2015)
+           * place AT the Lyman limit (NU_LL, 912A) itself — not at 1200A.
+           * The entire LW band (NU_LW to NU_LL) sits on the SAME side of
+           * that break as the near/far-UV continuum, so SpecIndexUVAGNSoft
+           * (not SpecIndexUVAGNHard, and not ReionAlphaUVBH) applies
+           * throughout the band; there is no second slope until shortward
+           * of NU_LL, which is outside the LW band entirely (see
+           * calculate_BHemissivity). */
           sum_lyn_LW_AGN[R_ct] +=
-            pow(nuprime * Ly_alpha_HZ / NU_1200, -run_globals.params.physics.ReionAlphaUVBH);
+            pow(nuprime * Ly_alpha_HZ / NU_LL, -run_globals.params.physics.SpecIndexUVAGNSoft);
         }
 
 #endif
