@@ -48,7 +48,8 @@ ZCrit                      : 0.0001 # Critical metallicity. If Z >= Zcrit -> Pop
 #------------------------- X-Ray stuff -----------------------------
 #----- including PopIII which is required when using Minihalos -----
 #-------------------------------------------------------------------
-LXrayGal                   : 3.16e40         # Soft-band (< NuXraySoftCut keV) X-ray luminosity for galaxy based sources (HMXB)
+LXrayGal                   : 3.16e40         # Soft-band (< NuXraySoftCut keV) X-ray luminosity per SFR for galaxy based sources (erg/s)/(Msun/yr)
+XrayScatterDex             : 0.0             # Galaxy-to-galaxy 1-sigma scatter in log10 X-ray luminosity at fixed SFR (dex)
 LXrayGalIII                : 3.16e40         # Same as above for PopIII 
 SpecIndexXrayGal           : 1.              # Spectral index of galaxy X-ray sources  (nu^-alpha)
 SpecIndexXrayIII           : 1.              # Same as above for Pop III
@@ -65,6 +66,8 @@ Flag_OutputXrayLF          : 0               # 0=off, 1=output X-ray luminosity 
 XrayLF_MinLogL             : 38.0            # minimum log10(LX/erg/s) for X-ray LF histogram
 XrayLF_MaxLogL             : 46.0            # maximum log10(LX/erg/s) for X-ray LF histogram
 XrayLF_BinsPerDex          : 5               # number of LF histogram bins per dex
+Flag_IncludeAGNXray : 0
+Flag_includeAGN     : 0 
 
 #---------------------------------------------
 #----- star formation (including PopIII) -----

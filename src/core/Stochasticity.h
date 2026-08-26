@@ -22,7 +22,7 @@ void compute_fesc_recalibration_factors(void);
 void fesc_recalibration(void);
 
 void build_no_shmr_tables(int population);
-void apply_no_shmr_treatment(void);
+void apply_no_shmr_treatment(int snapshot);
 void compute_no_shmr_recalibration_factors(int population);
 
 double extract_recalibration_factors(galaxy_t* gal, int population, bool use_gsm);
