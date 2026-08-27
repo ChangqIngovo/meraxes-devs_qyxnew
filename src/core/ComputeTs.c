@@ -152,10 +152,27 @@ void _ComputeTs(int snapshot)
   bool agn_hard_needed = (run_globals.params.physics.Flag_IncludeAGNXray == 1 ||
                           run_globals.params.physics.Flag_IncludeAGNXray == 2);
 
-  double freq_int_heat_tbl_AGN_soft[x_int_NXHII][TsNumFilterSteps],
-    freq_int_ion_tbl_AGN_soft[x_int_NXHII][TsNumFilterSteps], freq_int_lya_tbl_AGN_soft[x_int_NXHII][TsNumFilterSteps];
-  double freq_int_heat_tbl_AGN_hard[x_int_NXHII][TsNumFilterSteps],
-    freq_int_ion_tbl_AGN_hard[x_int_NXHII][TsNumFilterSteps], freq_int_lya_tbl_AGN_hard[x_int_NXHII][TsNumFilterSteps];
+  /* Per @qyx268's review: only malloc these if the corresponding band is
+   * actually needed (agn_soft_needed/agn_hard_needed above), rather than
+   * always reserving both as unconditional VLAs. Every access to these is
+   * already gated behind the same flags further down, so a NULL pointer
+   * here is never dereferenced. */
+  double (*freq_int_heat_tbl_AGN_soft)[TsNumFilterSteps] = NULL;
+  double (*freq_int_ion_tbl_AGN_soft)[TsNumFilterSteps] = NULL;
+  double (*freq_int_lya_tbl_AGN_soft)[TsNumFilterSteps] = NULL;
+  double (*freq_int_heat_tbl_AGN_hard)[TsNumFilterSteps] = NULL;
+  double (*freq_int_ion_tbl_AGN_hard)[TsNumFilterSteps] = NULL;
+  double (*freq_int_lya_tbl_AGN_hard)[TsNumFilterSteps] = NULL;
+  if (agn_soft_needed) {
+    freq_int_heat_tbl_AGN_soft = malloc(sizeof(*freq_int_heat_tbl_AGN_soft) * x_int_NXHII);
+    freq_int_ion_tbl_AGN_soft  = malloc(sizeof(*freq_int_ion_tbl_AGN_soft)  * x_int_NXHII);
+    freq_int_lya_tbl_AGN_soft  = malloc(sizeof(*freq_int_lya_tbl_AGN_soft)  * x_int_NXHII);
+  }
+  if (agn_hard_needed) {
+    freq_int_heat_tbl_AGN_hard = malloc(sizeof(*freq_int_heat_tbl_AGN_hard) * x_int_NXHII);
+    freq_int_ion_tbl_AGN_hard  = malloc(sizeof(*freq_int_ion_tbl_AGN_hard)  * x_int_NXHII);
+    freq_int_lya_tbl_AGN_hard  = malloc(sizeof(*freq_int_lya_tbl_AGN_hard)  * x_int_NXHII);
+  }
 
   /* Per-cell interpolated AGN integrals, kept separate for soft/hard so
    * Flag_IncludeAGNXray (0=off, 1=both, 2=hard, 3=soft) can select components. */
@@ -1526,6 +1543,14 @@ void _ComputeTs(int snapshot)
        run_globals.params.physics.Flag_IncludeAGNXray);
 #endif
 
+  // Free the AGN soft/hard tables malloc'd above (free(NULL) is a no-op, so
+  // this is safe regardless of which bands agn_soft_needed/agn_hard_needed selected).
+  free(freq_int_heat_tbl_AGN_soft);
+  free(freq_int_ion_tbl_AGN_soft);
+  free(freq_int_lya_tbl_AGN_soft);
+  free(freq_int_heat_tbl_AGN_hard);
+  free(freq_int_ion_tbl_AGN_hard);
+  free(freq_int_lya_tbl_AGN_hard);
 }
 
 // This function makes sure that the right version of ComputeTs() gets called.
