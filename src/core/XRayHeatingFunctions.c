@@ -54,6 +54,16 @@ int init_heat()
     sum_lyn_LW = calloc(TsNumFilterSteps, sizeof(double));
     sum_lyn_LW_III = calloc(TsNumFilterSteps, sizeof(double));
     sum_lyn_LW_AGN = calloc(TsNumFilterSteps, sizeof(double));
+
+    /* AGN LW prefactor: AGN_LW*sum_lyn_LW_AGN is still an erg/s/cm^3-like density
+     * (sum_lyn_LW_AGN is a dimensionless shape weight, built per shell in
+     * ComputeTs.c), so no Luminosity_converstion_factor step is needed here
+     * either — this just converts to the photon-flux convention dstarlyLW_dt_GAL
+     * uses. Unlike const_zp_prefactor_GAL/AGN_soft/hard, this has no
+     * zp-dependence at all — it's a run constant, so set once here rather than
+     * every snapshot in ComputeTs.c. (When this flag is off, it stays at its
+     * zero-initialised default.) */
+    const_zp_prefactor_AGN_LW = SPEED_OF_LIGHT / (4.0 * M_PI) / (PLANCK * NU_LW);
   }
 #endif
 
@@ -98,27 +108,6 @@ void destruct_heat()
   }
 #endif
 }
-
-#if USE_MINI_HALOS
-/* AGN LW prefactor: AGN_LW*sum_lyn_LW_AGN is still an erg/s/cm^3-like density
- * (sum_lyn_LW_AGN is a dimensionless shape weight, built per shell in
- * ComputeTs.c), so no Luminosity_converstion_factor step is needed here
- * either — this just converts to the photon-flux convention dstarlyLW_dt_GAL
- * uses. Not yet validated against the stellar LW pathway's magnitude. Unlike
- * const_zp_prefactor_GAL/AGN_soft/hard, this has no zp-dependence at all —
- * it's a run constant, computed once per snapshot in ComputeTs.c purely out
- * of habit alongside the others. */
-void set_const_zp_prefactor_AGN_LW()
-{
-  const_zp_prefactor_AGN_LW = run_globals.params.Flag_IncludeLymanWerner
-    ? SPEED_OF_LIGHT / (4.0 * M_PI) / (PLANCK * NU_LW)
-    : 0.0;
-}
-#endif
-
-// ******************************************************************** //
-//  ************************ RECFAST quantities ************************ //
-//  ******************************************************************** //
 
 // * IGM temperature from RECFAST; includes Compton heating and adiabatic expansion only. * //
 double T_RECFAST(float z, int flag)

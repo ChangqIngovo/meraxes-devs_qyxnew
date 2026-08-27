@@ -1068,10 +1068,8 @@ void _ComputeTs(int snapshot)
     /* Same as the soft-band comment above: no SEC_PER_YEAR needed. */
     Luminosity_converstion_factor_AGN_hard /= (PLANCK);
 
-#if USE_MINI_HALOS
-    // Moved to XRayHeatingFunctions.c per @qyx268's review — see set_const_zp_prefactor_AGN_LW().
-    set_const_zp_prefactor_AGN_LW();
-#endif
+    // const_zp_prefactor_AGN_LW is a run constant (no zp-dependence) — set once in
+    // init_heat() instead of being recomputed here every snapshot.
 
     // Do the same for Pop III.
 
