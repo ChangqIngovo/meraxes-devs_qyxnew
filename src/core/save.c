@@ -1020,41 +1020,10 @@ void create_master_file()
   // save the number of cores used in this run
   H5LTset_attribute_int(file_id, "/", "NCores", &(run_globals.mpi_size), 1);
 
-  // NHTrans is a run-constant (does not depend on redshift/snapshot — see
-  // write_snapshot()), so write it once here rather than per-snapshot.
+  // NHTrans/NHfrac reverted to per-snapshot (see write_snapshot()); this
+  // block only handles XrayEmissivity_*, which has no such caveat since
+  // it's already one value per output snapshot, not a single frozen value.
   if (run_globals.params.Flag_OutputXrayLF) {
-    double s_T_vals[5];
-    get_nh_transmission(s_T_vals);
-    hsize_t nhtrans_dim = 5;
-    H5LTmake_dataset_double(file_id, "NHTrans", 1, &nhtrans_dim, s_T_vals);
-
-    /* NHfrac only depends on redshift through _psi_ref(z), which saturates
-     * at z=2 (zeff = min(z,2) in blackhole_feedback.c) — so for any run
-     * whose output snapshots are all z>=2 (true here: this simulation stops
-     * at z=5), it's a run constant too. Evaluate at z=2.0 (or anywhere
-     * above it — same result) and write it once, same as NHTrans. */
-    int n_lx_bins_nhfrac = (int)((run_globals.params.XrayLF_MaxLogL - run_globals.params.XrayLF_MinLogL) *
-                                 run_globals.params.XrayLF_BinsPerDex);
-    if (n_lx_bins_nhfrac < 1)
-      n_lx_bins_nhfrac = 1;
-    double lx_bin_width_nhfrac =
-      (run_globals.params.XrayLF_MaxLogL - run_globals.params.XrayLF_MinLogL) / n_lx_bins_nhfrac;
-
-    double f_det[5];
-    double lx_log_center, lx_lin_1e10Lsun;
-    double* nhfrac_table = malloc((size_t)n_lx_bins_nhfrac * 5 * sizeof(double));
-    for (int ilx = 0; ilx < n_lx_bins_nhfrac; ilx++) {
-      lx_log_center = run_globals.params.XrayLF_MinLogL + (ilx + 0.5) * lx_bin_width_nhfrac;
-      lx_lin_1e10Lsun = pow(10.0, lx_log_center - 10.0 - LOG_10_SOLAR_LUM);
-      get_nh_fracs(lx_lin_1e10Lsun, 2.0, f_det);
-      for (int ib = 0; ib < 5; ib++)
-        nhfrac_table[ilx * 5 + ib] = f_det[ib];
-    }
-    hsize_t nhfrac_dims[2] = { (hsize_t)n_lx_bins_nhfrac, 5 };
-    H5LTmake_dataset_double(file_id, "NHfrac", 2, nhfrac_dims, nhfrac_table);
-    free(nhfrac_table);
-
-
     double* xray_hard_all = malloc((size_t)run_globals.NOutputSnaps * sizeof(double));
     double* xray_soft_all = malloc((size_t)run_globals.NOutputSnaps * sizeof(double));
     double* xray_hmxb_all = malloc((size_t)run_globals.NOutputSnaps * sizeof(double));
@@ -1206,8 +1175,14 @@ void create_master_file()
       sprintf(source_ds, "Snap%03d/XrayLF_obs", run_globals.ListOutputSnaps[i_out]);
       H5Lcreate_external(relative_source_file, source_ds, snap_group_id, "XrayLF_obs", H5P_DEFAULT, H5P_DEFAULT);
     }
-    // NHTrans and NHfrac are now single run-level datasets written once
-    // above, not linked per-snapshot.
+    if (run_globals.params.Flag_OutputXrayLF && H5LTfind_dataset(source_group_id, "NHTrans")) {
+      sprintf(source_ds, "Snap%03d/NHTrans", run_globals.ListOutputSnaps[i_out]);
+      H5Lcreate_external(relative_source_file, source_ds, snap_group_id, "NHTrans", H5P_DEFAULT, H5P_DEFAULT);
+    }
+    if (run_globals.params.Flag_OutputXrayLF && H5LTfind_dataset(source_group_id, "NHfrac")) {
+      sprintf(source_ds, "Snap%03d/NHfrac", run_globals.ListOutputSnaps[i_out]);
+      H5Lcreate_external(relative_source_file, source_ds, snap_group_id, "NHfrac", H5P_DEFAULT, H5P_DEFAULT);
+    }
 
     H5Gclose(source_group_id);
     H5Fclose(source_file_id);
@@ -1894,6 +1869,38 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
     df_free(&xraylf);
     df_free(&xraylf_obs);
 
+    /* NHTrans/NHfrac: reverted to per-snapshot, at this snapshot's actual
+     * redshift (per @qyx268's review — the run-level "write once" shortcut
+     * assumed every output snapshot has z>=2, which nothing enforced). */
+    if (run_globals.mpi_rank == 0) {
+      double z_snap = run_globals.ZZ[run_globals.ListOutputSnaps[i_out]];
+
+      double s_T_vals[5];
+      get_nh_transmission(s_T_vals);
+      hsize_t nhtrans_dim = 5;
+      H5LTmake_dataset_double(group_id, "NHTrans", 1, &nhtrans_dim, s_T_vals);
+
+      int n_lx_bins_nhfrac = (int)((run_globals.params.XrayLF_MaxLogL - run_globals.params.XrayLF_MinLogL) *
+                                   run_globals.params.XrayLF_BinsPerDex);
+      if (n_lx_bins_nhfrac < 1)
+        n_lx_bins_nhfrac = 1;
+      double lx_bin_width_nhfrac =
+        (run_globals.params.XrayLF_MaxLogL - run_globals.params.XrayLF_MinLogL) / n_lx_bins_nhfrac;
+
+      double f_det[5];
+      double lx_log_center, lx_lin_1e10Lsun;
+      double* nhfrac_table = malloc((size_t)n_lx_bins_nhfrac * 5 * sizeof(double));
+      for (int ilx = 0; ilx < n_lx_bins_nhfrac; ilx++) {
+        lx_log_center = run_globals.params.XrayLF_MinLogL + (ilx + 0.5) * lx_bin_width_nhfrac;
+        lx_lin_1e10Lsun = pow(10.0, lx_log_center - 10.0 - LOG_10_SOLAR_LUM);
+        get_nh_fracs(lx_lin_1e10Lsun, z_snap, f_det);
+        for (int ib = 0; ib < 5; ib++)
+          nhfrac_table[ilx * 5 + ib] = f_det[ib];
+      }
+      hsize_t nhfrac_dims[2] = { (hsize_t)n_lx_bins_nhfrac, 5 };
+      H5LTmake_dataset_double(group_id, "NHfrac", 2, nhfrac_dims, nhfrac_table);
+      free(nhfrac_table);
+    }
 
     /* XrayEmissivity (hard/soft/HMXB) is no longer written per snapshot —
      * per @qyx268's clarification, each is now written once in
