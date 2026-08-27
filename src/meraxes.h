@@ -934,7 +934,7 @@ typedef struct run_globals_t
   double G;
   double Csquare;
   double EddingtonTimescale;
-  double QuasarLWScale;      //!< pow(NU_LL/NU_1450, -SpecIndexUVAGNSoft) * AGNLWEfficiency
+  double QuasarLWScale;      //!< pow(NU_LL/NU_1450, 1-SpecIndexUVAGNSoft) * AGNLWEfficiency (nu*L_nu scaling, see init.c)
   loiii_params_t loiii_params;
   // PopIII stuff
 

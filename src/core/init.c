@@ -212,7 +212,14 @@ void set_units()
   // convert some physical input parameters to internal units
   run_globals.Hubble = HUBBLE * units->UnitTime_in_s;
   run_globals.EddingtonTimescale = EDDINGTON_TIME_SCALE * run_globals.params.Hubble_h / units->UnitTime_in_Megayears;
-  run_globals.QuasarLWScale = pow(NU_LL / NU_1450, -run_globals.params.physics.SpecIndexUVAGNSoft) *
+  /* gal->QuasarLuv is nu*L_nu at 1450A (Lbol/kb, with kb the Shen et al. 2020
+   * bolometric correction calibrated against L1450 = nu_1450*L_nu(1450), not
+   * L_nu itself). Rescaling a nu*L_nu amplitude via a single L_nu ~ nu^-alpha
+   * power law from NU_1450 to NU_LL needs an extra +1 in the exponent versus
+   * the plain L_nu ratio: NU_LL*L_nu(NU_LL) = NU_1450*L_nu(NU_1450) *
+   * (NU_LL/NU_1450)^(1-alpha). Using exponent -alpha alone (as before)
+   * underweights QuasarLWScale by a factor of NU_LL/NU_1450 ~ 1.59. */
+  run_globals.QuasarLWScale = pow(NU_LL / NU_1450, 1.0 - run_globals.params.physics.SpecIndexUVAGNSoft) *
                               run_globals.params.physics.AGNLWEfficiency;
 
   // compute a few quantitites
