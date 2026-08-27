@@ -233,17 +233,20 @@ void update_galaxy_fesc_vals(galaxy_t* gal, double new_stars, int snapshot)
           fesc,
           params->EscapeFracScatterDex
       );
+      CLAMP_0_1(scattered_fesc);
     } else if (gal->Galaxy_Population == 3) {
       scattered_fescIII = apply_lognormal_scatter(
           fescIII,
           params->EscapeFracScatterDex
       );
+      CLAMP_0_1(scattered_fesc);
     }
 #else
     scattered_fesc = apply_lognormal_scatter(
         fesc,
         params->EscapeFracScatterDex
     );
+    CLAMP_0_1(scattered_fesc);
 #endif
   }
 #endif
@@ -1819,14 +1822,17 @@ static double calculate_galaxy_xray_luminosity(galaxy_t* gal, double sfr_timesca
   double source_sfr;
 
   source_sfr = run_globals.params.Flag_InstantaneousSFR
-             ? (run_globals.params.physics.Flag_RemoveSHMRScatter == 1 ? gal->SfrNoScatter : gal->Sfr)
-             : (run_globals.params.physics.Flag_RemoveSHMRScatter == 1 ? gal->GrossStellarMassNoScatter
-                                                                       : gal->GrossStellarMass) / sfr_timescale;
+      ? (run_globals.params.physics.Flag_RemoveSHMRScatter == 1
+           ? gal->SfrNoScatter
+           : gal->Sfr)
+      : (run_globals.params.physics.Flag_RemoveSHMRScatter == 1
+           ? gal->GrossStellarMassNoScatter
+           : gal->GrossStellarMass) / sfr_timescale;
 
   source_sfr *= run_globals.units.UnitMass_in_g / SOLAR_MASS;
   source_sfr *= SEC_PER_YEAR / run_globals.units.UnitTime_in_s;
 
-  return run_globals.params.physics.LXrayGal * source_sfr;
+  return run_globals.params.physics.LXrayGal * source_sfr / XRAY_LUMINOSITY_UNIT;
 }
 #endif
 
@@ -2092,9 +2098,8 @@ void construct_baryon_grids(int snapshot, int local_ngals)
               double xray_luminosity = calculate_galaxy_xray_luminosity(gal, sfr_timescale);
 
               if (run_globals.params.physics.XrayScatterDex > 0.0)
-                xray_luminosity = apply_xray_scatter(xray_luminosity, run_globals.params.physics.XrayScatterDex);
-
-              buffer[ind] += (float)(xray_luminosity / XRAY_LUMINOSITY_UNIT);
+                xray_luminosity = apply_lognormal_scatter(xray_luminosity, run_globals.params.physics.XrayScatterDex);
+              buffer[ind] += (float)xray_luminosity;
               break;
             }
 #endif

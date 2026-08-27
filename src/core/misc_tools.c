@@ -70,22 +70,7 @@ double apply_lognormal_scatter(double mean_esc, double scatter_dex)
   g = gsl_cdf_ugaussian_Pinv(u);
 
   scattered_fesc = exp(zeta + sigma_ln * g);
-  CLAMP_0_1(scattered_fesc);
   return scattered_fesc;
-}
-
-double apply_xray_scatter(double luminosity, double scatter_dex)
-{
-  double u;
-  double g;
-
-  if (luminosity == 0.0)
-    return 0.0;
-
-  u = gsl_rng_uniform(run_globals.random_generator);
-  g = gsl_cdf_ugaussian_Pinv(u);
-
-  return luminosity * pow(10.0, scatter_dex * g);
 }
 #endif
 

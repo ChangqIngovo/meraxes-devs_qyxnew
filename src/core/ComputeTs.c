@@ -102,9 +102,6 @@ void _ComputeTs(int snapshot)
   double prev_zpp, prev_R, zpp, zp, lower_int_limit_GAL, filling_factor_of_HI_zp, R_factor, R, nuprime, dzp,
     Luminosity_converstion_factor_GAL;
   double collapse_fraction, density_over_mean, collapse_fraction_in_cell;
-#if USE_STOCHASTICITY
-  double volume_ave_xray_luminosity;
-#endif
 
 #if USE_MINI_HALOS
   double Luminosity_converstion_factor_III, collapse_fractionIII, collapse_fractionIII_in_cell;
@@ -136,8 +133,8 @@ void _ComputeTs(int snapshot)
   double R_values[TsNumFilterSteps];
   int snapshot_counter_backwards[TsNumFilterSteps];
   double zedge;
-
-  double ans[2], dansdz[20], xHII_call;
+// When USE_MINI_HALO: ans[0] = x_e_box_prev[i_padded], ans[1] = Tk_box[i_real], #if USE_MINI_HALOS ans[2] = Tk_boxII[i_real]; #endif, so need 3, also in evolveInt
+  double ans[3], dansdz[20], xHII_call;
   double SFR_GAL[TsNumFilterSteps];
 #if USE_STOCHASTICITY
   double XRAY_LUMINOSITY_GAL[TsNumFilterSteps];
@@ -281,9 +278,6 @@ void _ComputeTs(int snapshot)
   } else {
 
     collapse_fraction = 0.;
-#if USE_STOCHASTICITY
-    volume_ave_xray_luminosity = 0.;
-#endif
 #if USE_MINI_HALOS
     collapse_fractionIII = 0.;
 #endif
@@ -476,7 +470,6 @@ void _ComputeTs(int snapshot)
               SMOOTHED_XRAY_LUMINOSITY_GAL[i_smoothedSFR] =
                 (((float*)xray_luminosity_filtered)[i_padded] / pixel_volume) *
                 XRAY_LUMINOSITY_UNIT * pow(units->UnitLength_in_cm, -3.);
-              volume_ave_xray_luminosity += SMOOTHED_XRAY_LUMINOSITY_GAL[i_smoothedSFR];
 #endif
 #if USE_MINI_HALOS
               ((float*)sfrIII_filtered)[i_padded] = fmaxf(((float*)sfrIII_filtered)[i_padded], 0.0);
@@ -515,15 +508,9 @@ void _ComputeTs(int snapshot)
 
         MPI_Allreduce(MPI_IN_PLACE, &collapse_fraction, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
         MPI_Allreduce(MPI_IN_PLACE, &x_e_ave, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
-#if USE_STOCHASTICITY
-        MPI_Allreduce(MPI_IN_PLACE, &volume_ave_xray_luminosity, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
-#endif
 
         collapse_fraction = collapse_fraction / total_n_cells;
         x_e_ave = x_e_ave / total_n_cells;
-#if USE_STOCHASTICITY
-        volume_ave_xray_luminosity = volume_ave_xray_luminosity / total_n_cells;
-#endif
 
         stored_fcoll[snapshot] = collapse_fraction;
 
@@ -569,17 +556,10 @@ void _ComputeTs(int snapshot)
 
     // A condition (defined by whether or not there are stars) for evaluating the heating/ionisation integrals
 #if USE_MINI_HALOS
-#if USE_STOCHASTICITY
-    if ((collapse_fraction + collapse_fractionIII) > 0.0 || volume_ave_xray_luminosity > 0.0)
-#else
     if ((collapse_fraction + collapse_fractionIII) > 0.0)
-#endif
 #else
 #if USE_STOCHASTICITY
-    if (collapse_fraction > 0.0 || volume_ave_xray_luminosity > 0.0)
-#else
     if (collapse_fraction > 0.0)
-#endif
 #endif
     {
       NO_LIGHT = 0;
@@ -761,15 +741,6 @@ void _ComputeTs(int snapshot)
         pow(run_globals.params.physics.NuXrayThreshold * NU_over_EV, -run_globals.params.physics.SpecIndexXrayGal) *
         (1 - run_globals.params.physics.SpecIndexXrayGal);
     }
-    // Finally, convert to the correct units. NU_over_EV*hplank as only want to divide by eV -> erg (owing to the
-    // definition of Luminosity)
-#if USE_STOCHASTICITY
-    Luminosity_converstion_factor_GAL *= 1. / PLANCK;
-#else
-    Luminosity_converstion_factor_GAL *= (SEC_PER_YEAR) / (PLANCK);
-#endif
-
-    // Do the same for Pop III.
 
 #if USE_MINI_HALOS
     if (fabs(run_globals.params.physics.SpecIndexXrayIII - 1.0) < 0.000001) {
@@ -796,13 +767,13 @@ void _ComputeTs(int snapshot)
     //        Luminosity_converstion_factor_GAL ) / (run_globals.params.physics.NuXrayThreshold*NU_over_EV) *
     //        SPEED_OF_LIGHT * pow(1+zp, run_globals.params.physics.SpecIndexXrayGal+3);
 #if USE_STOCHASTICITY
-    const_zp_prefactor_GAL = Luminosity_converstion_factor_GAL /
-                             (run_globals.params.physics.NuXrayThreshold * NU_over_EV) * SPEED_OF_LIGHT *
-                             pow(1 + zp, run_globals.params.physics.SpecIndexXrayGal + 3);
+    const_zp_prefactor_GAL = Luminosity_converstion_factor_GAL / 
+    (run_globals.params.physics.NuXrayThreshold * NU_over_EV) * SPEED_OF_LIGHT *
+    pow(1 + zp,run_globals.params.physics.SpecIndexXrayGal + 3);
 #else
-    const_zp_prefactor_GAL = (run_globals.params.physics.LXrayGal * Luminosity_converstion_factor_GAL) /
-                             (run_globals.params.physics.NuXrayThreshold * NU_over_EV) * SPEED_OF_LIGHT *
-                             pow(1 + zp, run_globals.params.physics.SpecIndexXrayGal + 3);
+    const_zp_prefactor_GAL = (run_globals.params.physics.LXrayGal * SEC_PER_YEAR * 
+    Luminosity_converstion_factor_GAL) /(run_globals.params.physics.NuXrayThreshold * NU_over_EV) * 
+    SPEED_OF_LIGHT * pow(1 + zp, run_globals.params.physics.SpecIndexXrayGal + 3);
 #endif
 #if USE_MINI_HALOS
     const_zp_prefactor_III = (run_globals.params.physics.LXrayGalIII * Luminosity_converstion_factor_III) /

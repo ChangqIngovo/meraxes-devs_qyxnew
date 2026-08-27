@@ -772,23 +772,25 @@ void apply_no_shmr_treatment(int snapshot)
         update_galaxy_fesc_vals(&source_view, new_stars_source, snapshot);
 
 #if USE_MINI_HALOS
-        if (gal->Galaxy_Population == 3) {
-          gal->GrossStellarMassIIINoScatter = mstar_source;
-          gal->SfrIIINoScatter = sfr_source;
-          gal->StochasticityTreatedFescIIIWeightedGSM = source_view.FescIIIWeightedGSM;
-          gal->StochasticityTreatedFescIIIWeightedSfr = source_view.FescIIIWeightedSfr;
-        }
-        else {
-          gal->GrossStellarMassNoScatter = mstar_source;
-          gal->SfrNoScatter = sfr_source;
-          gal->StochasticityTreatedFescWeightedGSM = source_view.FescWeightedGSM;
-          gal->StochasticityTreatedFescWeightedSfr = source_view.FescWeightedSfr;
-        }
+if (gal->Galaxy_Population == 3) {
+  gal->GrossStellarMassIIINoScatter = source_view.GrossStellarMassIII;
+  gal->SfrIIINoScatter = source_view.SfrIII;
+
+  gal->StochasticityTreatedFescIIIWeightedGSM = source_view.FescIIIWeightedGSM;
+  gal->StochasticityTreatedFescIIIWeightedSfr = source_view.FescIIIWeightedSfr;
+} else {
+  gal->GrossStellarMassNoScatter = source_view.GrossStellarMass;
+  gal->SfrNoScatter = source_view.Sfr;
+
+  gal->StochasticityTreatedFescWeightedGSM = source_view.FescWeightedGSM;
+  gal->StochasticityTreatedFescWeightedSfr = source_view.FescWeightedSfr;
+}
 #else
-        gal->GrossStellarMassNoScatter = mstar_source;
-        gal->SfrNoScatter = sfr_source;
-        gal->StochasticityTreatedFescWeightedGSM = source_view.FescWeightedGSM;
-        gal->StochasticityTreatedFescWeightedSfr = source_view.FescWeightedSfr;
+gal->GrossStellarMassNoScatter = source_view.GrossStellarMass;
+gal->SfrNoScatter = source_view.Sfr;
+
+gal->StochasticityTreatedFescWeightedGSM = source_view.FescWeightedGSM;
+gal->StochasticityTreatedFescWeightedSfr = source_view.FescWeightedSfr;
 #endif
       }
     }
