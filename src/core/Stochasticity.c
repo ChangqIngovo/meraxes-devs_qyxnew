@@ -27,6 +27,14 @@ enum fesc_global_sum_index
   FESC_GLOBAL_NSUM
 };
 
+// X-ray stochasticity related
+enum xray_global_sum_index
+{
+  XRAY_LUMINOSITY_RAW = 0,
+  XRAY_LUMINOSITY_TARGET,
+  XRAY_GLOBAL_NSUM
+};
+
 enum stochasticity_calibration_index
 {
   GSM = 0,
@@ -177,7 +185,49 @@ void compute_fesc_recalibration_factors(void)
 #endif
   }  
 }
+// Essentially the same but for xray
+double compute_xray_recalibration_factor(double local_xray_raw,
+                                         double local_xray_target)
+{
+  double local[XRAY_GLOBAL_NSUM] = {0.0};
+  double global[XRAY_GLOBAL_NSUM] = {0.0};
 
+  local[XRAY_LUMINOSITY_RAW] = local_xray_raw;
+  local[XRAY_LUMINOSITY_TARGET] = local_xray_target;
+
+  MPI_Allreduce(
+      local,
+      global,
+      XRAY_GLOBAL_NSUM,
+      MPI_DOUBLE,
+      MPI_SUM,
+      run_globals.mpi_comm
+  );
+
+  double correction = 1.0;
+
+  if (global[XRAY_LUMINOSITY_RAW] > 0.0) {
+    correction = global[XRAY_LUMINOSITY_TARGET] /
+                 global[XRAY_LUMINOSITY_RAW];
+  } else if (global[XRAY_LUMINOSITY_TARGET] > 0.0) {
+    mlog_error(
+        "Cannot recalibrate X-ray luminosity: target=%g raw=%g.",
+        global[XRAY_LUMINOSITY_TARGET],
+        global[XRAY_LUMINOSITY_RAW]
+    );
+    ABORT(EXIT_FAILURE);
+  }
+
+  if (run_globals.mpi_rank == 0) {
+    mlog(
+        "Global X-ray recalibration: C_X=%.12g.",
+        MLOG_MESG,
+        correction
+    );
+  }
+
+  return correction;
+}
 // SHMR stochasticity related. Population is the raw Galaxy_Population
 
 // Fill missing values in a one-dimensional binned table.

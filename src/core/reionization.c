@@ -1817,22 +1817,19 @@ void assign_Mvir_crit_to_galaxies(int ngals_in_slabs, int flag_feed)
 }
 
 #if USE_STOCHASTICITY
-static double calculate_galaxy_xray_luminosity(galaxy_t* gal, double sfr_timescale)
+static double calculate_galaxy_xray_luminosity(const galaxy_t* source_view, double sfr_timescale)
 {
   double source_sfr;
 
   source_sfr = run_globals.params.Flag_InstantaneousSFR
-      ? (run_globals.params.physics.Flag_RemoveSHMRScatter == 1
-           ? gal->SfrNoScatter
-           : gal->Sfr)
-      : (run_globals.params.physics.Flag_RemoveSHMRScatter == 1
-           ? gal->GrossStellarMassNoScatter
-           : gal->GrossStellarMass) / sfr_timescale;
+             ? source_view->Sfr
+             : source_view->GrossStellarMass / sfr_timescale;
 
   source_sfr *= run_globals.units.UnitMass_in_g / SOLAR_MASS;
   source_sfr *= SEC_PER_YEAR / run_globals.units.UnitTime_in_s;
 
-  return run_globals.params.physics.LXrayGal * source_sfr / XRAY_LUMINOSITY_UNIT;
+  return run_globals.params.physics.LXrayGal * source_sfr /
+         XRAY_LUMINOSITY_UNIT;
 }
 #endif
 
@@ -1847,6 +1844,9 @@ void construct_baryon_grids(int snapshot, int local_ngals)
 #if USE_STOCHASTICITY
   float* xray_luminosity_grid = run_globals.reion_grids.xray_luminosity;
   float* xray_luminosity_histories_grid = run_globals.reion_grids.xray_luminosity_histories;
+  // Recalibrate the X-ray field only when source recalibration is enabled and either noSHMR treatment or X-ray scatter modifies the source luminosities.
+  int recalibrate_xray_sources = run_globals.params.physics.Flag_SourceRecalibration &&
+  (run_globals.params.physics.Flag_RemoveSHMRScatter == 1 || run_globals.params.physics.XrayScatterDex > 0.0);
 #endif
   float* weighted_sfr_grid = run_globals.reion_grids.weighted_sfr;
   int ReionGridDim = run_globals.params.ReionGridDim;
@@ -1872,16 +1872,17 @@ void construct_baryon_grids(int snapshot, int local_ngals)
     // this does the resetting and prepares for recalibration on SHMR
     apply_no_shmr_treatment(snapshot);
   }
-    
-  if (run_globals.params.physics.Flag_SourceRecalibration)
-    if (run_globals.params.physics.Flag_RemoveSHMRScatter == 0) // SHMR and fesc recalibration are mutually exclusive
-      compute_fesc_recalibration_factors(); // fesc scattering was done in update_galaxy_fesc_vals
-    else{
-      compute_no_shmr_recalibration_factors(2);
+  // explicitly writen out to prevent call compute_fesc_recalibration_factors() when XrayScatterDex > 0
+  if (run_globals.params.physics.Flag_SourceRecalibration) {
+  if (run_globals.params.physics.Flag_RemoveSHMRScatter == 1) {
+    compute_no_shmr_recalibration_factors(2);
 #if USE_MINI_HALOS
-      compute_no_shmr_recalibration_factors(3);
+    compute_no_shmr_recalibration_factors(3);
 #endif
-    }
+  } else if (run_globals.params.physics.EscapeFracScatterDex > ABS_TOL) {
+    compute_fesc_recalibration_factors();
+  }
+}  
 #endif
 
   mlog("Constructing stellar mass and sfr grids...", MLOG_OPEN | MLOG_TIMERSTART);
@@ -1963,6 +1964,10 @@ void construct_baryon_grids(int snapshot, int local_ngals)
     int skipped_gals = 0;
     long N_BlackHoleMassLimitReion = 0;
     double stochasticity_calibration_factor = 1.0;
+#if USE_STOCHASTICITY
+    double local_xray_raw = 0.0;
+    double local_xray_target = 0.0;
+#endif
 
     for (int i_r = 0; i_r < run_globals.mpi_size; i_r++) {
       // init the buffer
@@ -2095,11 +2100,35 @@ void construct_baryon_grids(int snapshot, int local_ngals)
 
 #if USE_STOCHASTICITY
             case prop_xray_luminosity: {
-              double xray_luminosity = calculate_galaxy_xray_luminosity(gal, sfr_timescale);
+              double xray_target =
+                calculate_galaxy_xray_luminosity(gal, sfr_timescale);
+              double xray_raw = xray_target;
+
+              if (run_globals.params.physics.Flag_RemoveSHMRScatter == 1) {
+                galaxy_t source_view = *gal;
+                source_view.GrossStellarMass =
+                  source_view.GrossStellarMassNoScatter;
+                source_view.Sfr = source_view.SfrNoScatter;
+
+                xray_raw =
+                  calculate_galaxy_xray_luminosity(
+                      &source_view,
+                      sfr_timescale
+                  );
+              }
 
               if (run_globals.params.physics.XrayScatterDex > 0.0)
-                xray_luminosity = apply_lognormal_scatter(xray_luminosity, run_globals.params.physics.XrayScatterDex);
-              buffer[ind] += (float)xray_luminosity;
+                xray_raw = apply_lognormal_scatter(
+                    xray_raw,
+                    run_globals.params.physics.XrayScatterDex
+                );
+
+              if (recalibrate_xray_sources) {
+                local_xray_raw += xray_raw;
+                local_xray_target += xray_target;
+              }
+
+              buffer[ind] += (float)xray_raw;
               break;
             }
 #endif
@@ -2243,6 +2272,23 @@ void construct_baryon_grids(int snapshot, int local_ngals)
             ABORT(EXIT_FAILURE);
         }
     }
+#if USE_STOCHASTICITY
+    if (prop == prop_xray_luminosity &&
+        recalibrate_xray_sources) {
+      double xray_recalibration_factor =
+        compute_xray_recalibration_factor(
+            local_xray_raw,
+            local_xray_target
+        );
+
+      for (int ii = 0; ii < local_n_complex * 2; ii++) {
+        xray_luminosity_grid[ii] *=
+          (float)xray_recalibration_factor;
+        xray_luminosity_histories_grid[ii] *=
+          (float)xray_recalibration_factor;
+      }
+    }
+#endif
     MPI_Allreduce(MPI_IN_PLACE, &N_BlackHoleMassLimitReion, 1, MPI_LONG, MPI_SUM, run_globals.mpi_comm);
     if (prop == prop_stellar)
       mlog("%d quasars are smaller than %g",

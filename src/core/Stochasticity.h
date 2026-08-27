@@ -20,6 +20,7 @@
 
 void compute_fesc_recalibration_factors(void);
 void fesc_recalibration(void);
+double compute_xray_recalibration_factor(double local_xray_raw, double local_xray_target);
 
 void build_no_shmr_tables(int population);
 void apply_no_shmr_treatment(int snapshot);
