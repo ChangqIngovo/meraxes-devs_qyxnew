@@ -1139,13 +1139,8 @@ void _ComputeTs(int snapshot)
     // this same factor higher than 21cmFAST, but at least it is understood why and trivially accounted for.
 
     // interpolate to correct nu integral value based on the cell's ionization state
-    int flag_agn = run_globals.params.physics.Flag_IncludeAGNXray;
-    /* Computed once here, same pattern as the per-shell loop above — flag_agn itself doesn't
-     * change per cell/R_ct, so re-deriving these as an inline comparison inside the loop below
-     * would just repeat the same branch on every one of local_nix*ReionGridDim^2*TsNumFilterSteps
-     * iterations for an answer that's already fixed for this snapshot. */
-    bool agn_soft_needed = (flag_agn == 1 || flag_agn == 3);
-    bool agn_hard_needed = (flag_agn == 1 || flag_agn == 2);
+    // agn_soft_needed/agn_hard_needed already computed once, at function scope (Flag_IncludeAGNXray
+    // doesn't change mid-snapshot) — reused here rather than re-derived.
     for (int ix = 0; ix < local_nix; ix++)
       for (int iy = 0; iy < ReionGridDim; iy++)
         for (int iz = 0; iz < ReionGridDim; iz++) {

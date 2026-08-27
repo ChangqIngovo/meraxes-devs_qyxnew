@@ -1054,16 +1054,7 @@ void create_master_file()
     H5LTmake_dataset_double(file_id, "NHfrac", 2, nhfrac_dims, nhfrac_table);
     free(nhfrac_table);
 
-    /* XrayEmissivity: unlike NHfrac this does depend on the snapshot (it
-     * tracks the evolving BH population), so it can't be reduced to a
-     * single constant. Per @qyx268's clarification, the fix is "N
-     * snapshots -> 1 array" per component, NOT "3 components -> 1 array"
-     * — so hard/soft/HMXB stay as three separate datasets, each now
-     * covering every output snapshot in one go instead of one 3-element
-     * dataset per snapshot group. By the time this function runs, the
-     * full snapshot loop has already finished, so
-     * stored_XrayEmissivity_hard/soft/HMXB are fully populated for every
-     * output snapshot. */
+
     double* xray_hard_all = malloc((size_t)run_globals.NOutputSnaps * sizeof(double));
     double* xray_soft_all = malloc((size_t)run_globals.NOutputSnaps * sizeof(double));
     double* xray_hmxb_all = malloc((size_t)run_globals.NOutputSnaps * sizeof(double));
