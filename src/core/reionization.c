@@ -744,7 +744,7 @@ void malloc_reionization_grids()
 
   grids->BHXrayEmissivity       = NULL;
   grids->bh_xray_histories      = NULL;
-  grids->SMOOTHED_AGN           = NULL;
+  grids->SMOOTHED_AGN_hard           = NULL;
   grids->BHXrayEmissivity_soft  = NULL;
   grids->bh_xray_histories_soft = NULL;
   grids->SMOOTHED_AGN_soft      = NULL;
@@ -1038,7 +1038,7 @@ void malloc_reionization_grids()
             grids->bh_xray_histories[ii] = 0.0f;
 
           // Same size as SMOOTHED_SFR_GAL; calloc ensures zeroed on allocation.
-          grids->SMOOTHED_AGN = calloc((size_t)slab_n_real_smoothedSFR, sizeof(double));
+          grids->SMOOTHED_AGN_hard = calloc((size_t)slab_n_real_smoothedSFR, sizeof(double));
         }
 
         if (agn_soft_needed) {
@@ -1342,7 +1342,7 @@ void free_reionization_grids()
     free(grids->SMOOTHED_SFR_GAL);
 
     // Free the AGN smoothed-emissivity/grid/history buffers, matching malloc_reionization_grids' guards.
-    free(grids->SMOOTHED_AGN);
+    free(grids->SMOOTHED_AGN_hard);
     free(grids->SMOOTHED_AGN_soft);
     {
       int flag_agn = run_globals.params.physics.Flag_IncludeAGNXray;

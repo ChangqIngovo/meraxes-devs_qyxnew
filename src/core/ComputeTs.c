@@ -116,7 +116,7 @@ void _ComputeTs(int snapshot)
   double Luminosity_converstion_factor_AGN_soft;  /* soft band: nu_thresh -> nu_break   */
   double Luminosity_converstion_factor_AGN_hard;  /* hard band: nu_break  -> nu_hard_cut */
   double agn_emissivity_zpp;       /* AGN emissivity at shell redshift z'': integral of LF x SED */
-  float bh, bh_soft;                /* per-cell BHXrayEmissivity(_soft), read while building SMOOTHED_AGN(_soft) */
+  float bh, bh_soft;                /* per-cell BHXrayEmissivity(_soft), read while building SMOOTHED_AGN_hard(_soft) */
 #if USE_MINI_HALOS
   float bh_lw;                      /* per-cell BHLWEmissivity, read while building SMOOTHED_AGN_LW */
 #endif
@@ -222,7 +222,7 @@ void _ComputeTs(int snapshot)
 #endif
 
   double* SMOOTHED_SFR_GAL = run_globals.reion_grids.SMOOTHED_SFR_GAL;
-  double* SMOOTHED_AGN      = run_globals.reion_grids.SMOOTHED_AGN;
+  double* SMOOTHED_AGN_hard      = run_globals.reion_grids.SMOOTHED_AGN_hard;
   double* SMOOTHED_AGN_soft = run_globals.reion_grids.SMOOTHED_AGN_soft;
 #if USE_MINI_HALOS
   double* SMOOTHED_AGN_LW   = run_globals.reion_grids.SMOOTHED_AGN_LW;
@@ -468,12 +468,12 @@ void _ComputeTs(int snapshot)
       /* Same shell-filtering pipeline as sfr/sfr_filtered, smoothing
        * BHXrayEmissivity(_soft) over radius R. Each band's plans only exist
        * when selected by Flag_IncludeAGNXray, so gated independently here too. */
-      if (run_globals.params.physics.Flag_IncludeAGNXray == 1 || run_globals.params.physics.Flag_IncludeAGNXray == 2) {
+      if (agn_hard_needed) {
         fftwf_execute(run_globals.reion_grids.BHXrayEmissivity_forward_plan);
         for (int ii = 0; ii < slab_n_complex; ii++)
           BHXrayEmissivity_unfiltered[ii] /= (float)total_n_cells;
       }
-      if (run_globals.params.physics.Flag_IncludeAGNXray == 1 || run_globals.params.physics.Flag_IncludeAGNXray == 3) {
+      if (agn_soft_needed) {
         fftwf_execute(run_globals.reion_grids.BHXrayEmissivity_soft_forward_plan);
         for (int ii = 0; ii < slab_n_complex; ii++)
           BHXrayEmissivity_soft_unfiltered[ii] /= (float)total_n_cells;
@@ -491,9 +491,9 @@ void _ComputeTs(int snapshot)
   #if USE_MINI_HALOS
       memcpy(sfrIII_filtered, sfrIII_unfiltered, sizeof(fftwf_complex) * slab_n_complex);
   #endif
-      if (run_globals.params.physics.Flag_IncludeAGNXray == 1 || run_globals.params.physics.Flag_IncludeAGNXray == 2)
+      if (agn_hard_needed)
         memcpy(BHXrayEmissivity_filtered, BHXrayEmissivity_unfiltered, sizeof(fftwf_complex) * slab_n_complex);
-      if (run_globals.params.physics.Flag_IncludeAGNXray == 1 || run_globals.params.physics.Flag_IncludeAGNXray == 3)
+      if (agn_soft_needed)
         memcpy(BHXrayEmissivity_soft_filtered, BHXrayEmissivity_soft_unfiltered, sizeof(fftwf_complex) * slab_n_complex);
 #if USE_MINI_HALOS
       if (run_globals.params.Flag_IncludeLymanWerner)
@@ -507,9 +507,9 @@ void _ComputeTs(int snapshot)
   #if USE_MINI_HALOS
         filter(sfrIII_filtered, local_ix_start, local_nix, ReionGridDim, (float)R, run_globals.params.TsHeatingFilterType);
   #endif
-        if (run_globals.params.physics.Flag_IncludeAGNXray == 1 || run_globals.params.physics.Flag_IncludeAGNXray == 2)
+        if (agn_hard_needed)
           filter(BHXrayEmissivity_filtered, local_ix_start, local_nix, ReionGridDim, (float)R, run_globals.params.TsHeatingFilterType);
-        if (run_globals.params.physics.Flag_IncludeAGNXray == 1 || run_globals.params.physics.Flag_IncludeAGNXray == 3)
+        if (agn_soft_needed)
           filter(BHXrayEmissivity_soft_filtered, local_ix_start, local_nix, ReionGridDim, (float)R, run_globals.params.TsHeatingFilterType);
 #if USE_MINI_HALOS
         if (run_globals.params.Flag_IncludeLymanWerner)
@@ -522,9 +522,9 @@ void _ComputeTs(int snapshot)
   #if USE_MINI_HALOS
       fftwf_execute(run_globals.reion_grids.sfrIII_filtered_reverse_plan);
   #endif
-      if (run_globals.params.physics.Flag_IncludeAGNXray == 1 || run_globals.params.physics.Flag_IncludeAGNXray == 2)
+      if (agn_hard_needed)
         fftwf_execute(run_globals.reion_grids.BHXrayEmissivity_filtered_reverse_plan);
-      if (run_globals.params.physics.Flag_IncludeAGNXray == 1 || run_globals.params.physics.Flag_IncludeAGNXray == 3)
+      if (agn_soft_needed)
         fftwf_execute(run_globals.reion_grids.BHXrayEmissivity_soft_filtered_reverse_plan);
 #if USE_MINI_HALOS
       if (run_globals.params.Flag_IncludeLymanWerner)
@@ -558,15 +558,15 @@ void _ComputeTs(int snapshot)
                                                 pow(units->UnitLength_in_cm, -3.) / SOLAR_MASS;
 #endif
 
-              if (run_globals.params.physics.Flag_IncludeAGNXray == 1 || run_globals.params.physics.Flag_IncludeAGNXray == 2) {
+              if (agn_hard_needed) {
                 ((float*)BHXrayEmissivity_filtered)[i_padded] = fmaxf(((float*)BHXrayEmissivity_filtered)[i_padded], 0.0);
 
                 bh = ((float*)BHXrayEmissivity_filtered)[i_padded];
-                SMOOTHED_AGN[i_smoothed_heating] = (double)bh * 1e10 * SOLAR_LUM / pixel_volume
+                SMOOTHED_AGN_hard[i_smoothed_heating] = (double)bh * 1e10 * SOLAR_LUM / pixel_volume
                                               * pow(units->UnitLength_in_cm, -3.0);
-                agn_xray_hard_ave += SMOOTHED_AGN[i_smoothed_heating];
+                agn_xray_hard_ave += SMOOTHED_AGN_hard[i_smoothed_heating];
               }
-              if (run_globals.params.physics.Flag_IncludeAGNXray == 1 || run_globals.params.physics.Flag_IncludeAGNXray == 3) {
+              if (agn_soft_needed) {
                 ((float*)BHXrayEmissivity_soft_filtered)[i_padded] =
                   fmaxf(((float*)BHXrayEmissivity_soft_filtered)[i_padded], 0.0);
 
@@ -659,14 +659,14 @@ void _ComputeTs(int snapshot)
                                                 pow(units->UnitLength_in_cm, -3.) / SOLAR_MASS;
 #endif
 
-              if (run_globals.params.physics.Flag_IncludeAGNXray == 1 || run_globals.params.physics.Flag_IncludeAGNXray == 2) {
+              if (agn_hard_needed) {
                 ((float*)BHXrayEmissivity_filtered)[i_padded] = fmaxf(((float*)BHXrayEmissivity_filtered)[i_padded], 0.0);
 
                 bh = ((float*)BHXrayEmissivity_filtered)[i_padded];
-                SMOOTHED_AGN[i_smoothed_heating] = (double)bh * 1e10 * SOLAR_LUM / pixel_volume
+                SMOOTHED_AGN_hard[i_smoothed_heating] = (double)bh * 1e10 * SOLAR_LUM / pixel_volume
                                               * pow(units->UnitLength_in_cm, -3.0);
               }
-              if (run_globals.params.physics.Flag_IncludeAGNXray == 1 || run_globals.params.physics.Flag_IncludeAGNXray == 3) {
+              if (agn_soft_needed) {
                 ((float*)BHXrayEmissivity_soft_filtered)[i_padded] =
                   fmaxf(((float*)BHXrayEmissivity_soft_filtered)[i_padded], 0.0);
 
@@ -818,7 +818,7 @@ void _ComputeTs(int snapshot)
         upper_int_limit_AGN_hard = run_globals.params.physics.NuXrayMax * NU_over_EV * (1. + zp) / (1. + zpp);
       }
 
-      /* AGN amplitudes come per-cell, per-band, from SMOOTHED_AGN(_soft);
+      /* AGN amplitudes come per-cell, per-band, from SMOOTHED_AGN_hard(_soft);
        * zeroed here at shell level, overwritten per cell below. */
       agn_emissivity_zpp  = 0.0;
       XAGN_soft[R_ct]  = 0.0;
@@ -1041,7 +1041,7 @@ void _ComputeTs(int snapshot)
     }
     /* Unlike Luminosity_converstion_factor_GAL above, no SEC_PER_YEAR here:
      * LXrayGal is calibrated per (Msun/yr) of SFR, so the stellar formula needs SEC_PER_YEAR to cancel that "per year" against SFR_GAL's per-second rate. 
-     * SMOOTHED_AGN is already a luminosity density in erg/s/cm^3. (from gal->BHXrayEmissivity, an actual X-ray luminosity. */
+     * SMOOTHED_AGN_hard is already a luminosity density in erg/s/cm^3. (from gal->BHXrayEmissivity, an actual X-ray luminosity. */
     Luminosity_converstion_factor_AGN_soft /= (PLANCK);
 
     /* --- Hard component: [NuXraySoftCut, NuXrayMax], not [NuXrayThreshold, NuXraySoftCut] ---
@@ -1160,7 +1160,7 @@ void _ComputeTs(int snapshot)
 
             {
               XAGN_soft[R_ct] = agn_soft_needed ? SMOOTHED_AGN_soft[i_smoothed_heating] : 0.0;
-              XAGN_hard[R_ct] = agn_hard_needed ? SMOOTHED_AGN[i_smoothed_heating] : 0.0;
+              XAGN_hard[R_ct] = agn_hard_needed ? SMOOTHED_AGN_hard[i_smoothed_heating] : 0.0;
             }
 #if USE_MINI_HALOS
             SFR_III[R_ct] = SMOOTHED_SFR_III[i_smoothed_heating];
