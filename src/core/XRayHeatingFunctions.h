@@ -52,32 +52,21 @@ double* zpp_edge;
 // freed in cleanup.c — same lifecycle as run_globals.ZZ/LTTime/AA.
 double* stored_fcoll;
 double* stored_fcollIII;
-/* Volume-averaged AGN X-ray emissivity density [erg/s/cm^3] per snapshot,
- * one value per band — for plotting an epsilon_X-style curve vs redshift*/
 double* stored_XrayEmissivity_hard;
 double* stored_XrayEmissivity_soft;
-// Volume-averaged HMXB (galaxy/stellar) X-ray emissivity density [erg/s/cm^3] per snapshot.
 double* stored_XrayEmissivity_HMXB;
 double* sum_lyn;
 double* sum_lyn_LW;
 double* sum_lyn_III;
 double* sum_lyn_LW_III;
-// Per-shell AGN LW shape weight: (nu/NU_LL)^-SpecIndexUVAGNSoft evaluated at
-// each redshifted Lyman window, same picket-fence treatment as sum_lyn_LW
-// but for the AGN continuum instead of the tabulated stellar SED. The whole
-// LW band sits on the same (SpecIndexUVAGNSoft) side of the break as the near/
-// far-UV continuum — Lusso et al. (2015) place the break AT the Lyman limit
-// (NU_LL, 912A), not at 1200A. AGN_LW[R_ct] carries the amplitude (L_nu at
-// NU_LL); this carries the per-window shape.
+/* (nu/NU_LL)^-SpecIndexUVAGNSoft */
 double* sum_lyn_LW_AGN;
 double growth_factor_zp;
 double dgrowth_factor_dzp;
 double const_zp_prefactor_GAL;
 double const_zp_prefactor_III;
-// AGN broken power-law prefactors (soft/hard bands), set per snapshot in ComputeTs.c.
 double const_zp_prefactor_AGN_soft;
 double const_zp_prefactor_AGN_hard;
-// AGN Lyman-Werner prefactor (NU_LW -> NU_LL band), same convention.
 double const_zp_prefactor_AGN_LW;
 float x_int_XHII[x_int_NXHII];
 #else
@@ -209,7 +198,6 @@ extern "C"
   double interpolate_fcoll(double redshift, int snap_i, int flag_population);
 
 #if USE_MINI_HALOS
-// THIS ADDITION IS MADE TO ADD THE X-RAY CONTRIBUTION BY AGN in the case of mini-halos
   void evolveInt(float zp,
                  float curr_delNL0,
                  const double SFR_GAL[],
@@ -233,7 +221,6 @@ extern "C"
                  const double y[],
                  double deriv[]);
 #else
-  // THIS ADDITION IS MADE TO ADD THE X-RAY CONTRIBUTION BY AGN
   void evolveInt(float zp,
                  float curr_delNL0,
                  const double SFR_GAL[],

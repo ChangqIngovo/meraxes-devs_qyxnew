@@ -55,14 +55,7 @@ int init_heat()
     sum_lyn_LW_III = calloc(TsNumFilterSteps, sizeof(double));
     sum_lyn_LW_AGN = calloc(TsNumFilterSteps, sizeof(double));
 
-    /* AGN LW prefactor: AGN_LW*sum_lyn_LW_AGN is still an erg/s/cm^3-like density
-     * (sum_lyn_LW_AGN is a dimensionless shape weight, built per shell in
-     * ComputeTs.c), so no Luminosity_converstion_factor step is needed here
-     * either — this just converts to the photon-flux convention dstarlyLW_dt_GAL
-     * uses. Unlike const_zp_prefactor_GAL/AGN_soft/hard, this has no
-     * zp-dependence at all — it's a run constant, so set once here rather than
-     * every snapshot in ComputeTs.c. (When this flag is off, it stays at its
-     * zero-initialised default.) */
+    /* const_zp_prefactor_AGN_LW = c / (4*pi) / (h * NU_LW) */
     const_zp_prefactor_AGN_LW = SPEED_OF_LIGHT / (4.0 * M_PI) / (PLANCK * NU_LW);
   }
 #endif
@@ -1261,7 +1254,6 @@ int locate_xHII_index(float xHII_call)
 //  This function creates the d/dz' integrands
 // *********************************************************************
 #if USE_MINI_HALOS
-// THIS ADDITION IS MADE TO ADD THE X-RAY CONTRIBUTION BY AGN
 void evolveInt(float zp,
                float curr_delNL0,
                const double SFR_GAL[],
@@ -1286,7 +1278,6 @@ void evolveInt(float zp,
                double deriv[])
 #else
 
-//THIS ADDITION IS MADE TO ADD THE X-RAY CONTRIBUTION BY AGN, normal halo 
 void evolveInt(float zp,
                float curr_delNL0,
                const double SFR_GAL[],
@@ -1320,8 +1311,6 @@ void evolveInt(float zp,
   double dspec_dzp_II, dxheat_dzp_II;
 #endif
 
-  /* Time-integrated AGN X-ray contributions over all shells (zpp_ct loop).
-   * dxheat_dt_AGN [eV/s/baryon], dxion_source_dt_AGN [s^-1], dxlya_dt_AGN [s^-1 cm^-2 Hz^-1 sr^-1]. */
   double dxheat_dt_AGN      = 0.0;
   double dxion_source_dt_AGN = 0.0;
   double dxlya_dt_AGN       = 0.0;
@@ -1330,12 +1319,6 @@ void evolveInt(float zp,
   double dxion_source_dt_AGN_hard = 0.0;
   double dxlya_dt_AGN_hard       = 0.0;
   double zpp_integrand_AGN_hard;
-  /* AGN contribution to Lyman-Werner flux, same role as dstarlyLW_dt_GAL/_III:
-   * AGN_LW carries the amplitude (QuasarLuv extrapolated to the SED's break
-   * via SpecIndexUVAGNSoft — see calculate_BHemissivity), sum_lyn_LW_AGN carries
-   * the picket-fence window shape, single power law throughout the LW band
-   * with the break at NU_LL (912A, the Lyman limit — Lusso et al. 2015),
-   * not at 1200A. Only meaningful under USE_MINI_HALOS + Flag_IncludeLymanWerner. */
   double dstarlyLW_dt_AGN = 0.0;
 
   x_e = y[0];
@@ -1400,11 +1383,6 @@ void evolveInt(float zp,
       if (run_globals.params.Flag_IncludeLymanWerner) {
         dstarlyLW_dt_GAL += SFR_GAL[zpp_ct] * pow(1 + zp, 2) * (1 + zpp) * sum_lyn_LW[zpp_ct] * dt_dzpp * dzpp;
         dstarlyLW_dt_III += SFR_III[zpp_ct] * pow(1 + zp, 2) * (1 + zpp) * sum_lyn_LW_III[zpp_ct] * dt_dzpp * dzpp;
-        /* AGN_LW[zpp_ct] is the specific luminosity at the SED's 1200A break
-         * (the amplitude); sum_lyn_LW_AGN[zpp_ct] is the picket-fence,
-         * window-by-window shape weight built alongside sum_lyn_LW — same
-         * role as SFR_GAL*sum_lyn_LW above, just with an AGN amplitude
-         * instead of an SFR-driven one. */
         dstarlyLW_dt_AGN += AGN_LW[zpp_ct] * pow(1 + zp, 2) * (1 + zpp) * sum_lyn_LW_AGN[zpp_ct] * dt_dzpp * dzpp;
       }
 #endif
@@ -1456,9 +1434,6 @@ void evolveInt(float zp,
     }
 #endif
 
-    /* const_zp_prefactor_AGN_soft/hard are guaranteed finite here — ComputeTs.c
-     * aborts the run if either ever comes out non-finite, rather than letting
-     * a bad value reach this far. */
     dxheat_dt_AGN       *= const_zp_prefactor_AGN_soft;
     dxion_source_dt_AGN *= const_zp_prefactor_AGN_soft;
     dxlya_dt_AGN        *= const_zp_prefactor_AGN_soft * n_b;
@@ -1467,12 +1442,6 @@ void evolveInt(float zp,
     dxion_source_dt_AGN_hard *= const_zp_prefactor_AGN_hard;
     dxlya_dt_AGN_hard        *= const_zp_prefactor_AGN_hard * n_b;
 
-    /* AGN soft/hard dT_K/dz contributions, kept separate (not the combined dxheat_dt_AGN
-     * computed below) for ComputeTs.c's AGN_Xheat_soft/hard diagnostic log. That diagnostic
-     * needs the true per-band split; a single zp-only ratio (e.g. from const_zp_prefactor_AGN_soft/
-     * hard alone) can't reconstruct it after summing, since the real split also depends on
-     * XAGN_soft vs XAGN_hard and freq_int_heat_AGN_soft vs _hard, both of which vary per
-     * cell/shell — see the discussion on this PR. Same dT_K/dz conversion as dxheat_dzp below. */
     deriv[11] = dxheat_dt_AGN      * dt_dzp * 2.0 / 3.0 / BOLTZMANN / (1.0 + x_e);
     deriv[12] = dxheat_dt_AGN_hard * dt_dzp * 2.0 / 3.0 / BOLTZMANN / (1.0 + x_e);
 
@@ -1488,9 +1457,7 @@ void evolveInt(float zp,
 
   dxion_sink_dt = alpha_A(T) * CLUMPING_FACTOR * x_e * x_e * f_H * n_b;
 
-  /* AGN photo-ionisation in both code paths:
-   *   dx_e/dz = dt/dz × [Γ_ion,GAL (+Γ_ion,III) + Γ_ion,AGN − α_A·C·x_e²·f_H·n_b]
-   * AGN is present regardless of Pop III tracking — BHs live in the same Pop II host halos. */
+  /* dx_e/dz = dt/dz × [Γ_ion,GAL (+Γ_ion,III) + Γ_ion,AGN − α_A·C·x_e²·f_H·n_b] */
 #if USE_MINI_HALOS
   dxe_dzp = dt_dzp * (dxion_source_dt_GAL + dxion_source_dt_III
                       + dxion_source_dt_AGN - dxion_sink_dt);
@@ -1531,8 +1498,7 @@ void evolveInt(float zp,
 #endif /* USE_MINI_HALOS — dadia_dzp_II / dcomp_dzp_II block */
 
   /* dT_K/dz = dT_K/dz|_adiabatic + |_Compton + |_species + |_Xray,GAL + |_Xray,AGN, where
-   *   dT_K/dz|_Xray,AGN = dxheat_dt_AGN × (dt/dz) × (2/3)/k_B/(1+x_e)
-   * Hard X-rays (Γ~1.7) reach farther/later, complementing the softer stellar spectrum. */
+   *   dT_K/dz|_Xray,AGN = dxheat_dt_AGN × (dt/dz) × (2/3)/k_B/(1+x_e) */
 #if USE_MINI_HALOS
   dxheat_dzp = (dxheat_dt_GAL + dxheat_dt_III + dxheat_dt_AGN)
                * dt_dzp * 2.0 / 3.0 / BOLTZMANN / (1.0 + x_e);
@@ -1550,8 +1516,6 @@ void evolveInt(float zp,
 #if USE_MINI_HALOS
   deriv[6] = dxheat_dzp_II + dcomp_dzp_II + dspec_dzp_II + dadia_dzp_II;
 
-  /* AGN X-rays produce secondary electrons that excite HI into Ly-alpha, added to
-   * J_alpha via dxlya_dt_AGN. dstarlya_dt (stellar recombination lines) is untouched. */
   deriv[2] = (dxlya_dt_GAL + dxlya_dt_III + dxlya_dt_AGN)
              + (dstarlya_dt_GAL + dstarlya_dt_III);
   deriv[7] = (dxlya_dt_GAL + dxlya_dt_AGN) + dstarlya_dt_GAL;
@@ -1565,15 +1529,10 @@ void evolveInt(float zp,
   deriv[8] = dxheat_dzp_II;
 
   if (run_globals.params.Flag_IncludeLymanWerner) {
-    /* AGN LW flux is external to any individual mini-halo (comes from a
-     * distinct galaxy), same as GAL — so it's added in both boxes, mirroring
-     * how dxlya_dt_AGN joins dxlya_dt_GAL in both deriv[2] and deriv[7] above. */
     deriv[5] = (dstarlyLW_dt_GAL + dstarlyLW_dt_III + dstarlyLW_dt_AGN) * (PLANCK * 1e21);
     deriv[10] = (dstarlyLW_dt_GAL + dstarlyLW_dt_AGN) * (PLANCK * 1e21);
   }
 
-  /* AGN photo-ionisation added to deriv[4]/deriv[9] (total ionisation rate).
-   * deriv[9] is Pop II-only — AGN is an extra source on top of it. */
   deriv[4] = dt_dzp * (dxion_source_dt_GAL + dxion_source_dt_III
                        + dxion_source_dt_AGN);
   deriv[9] = dt_dzp * (dxion_source_dt_GAL + dxion_source_dt_AGN);

@@ -56,8 +56,6 @@ static const double mm83[14][5] = {
   { 8.331, 10.000, 701.2,     25.2,      0.0 },
 };
 
-/* NH-obscuration model (5-bin CTN/CTK distribution used by
- * apply_xray_obscuration() / _NH_distribution() in blackhole_feedback.c). */
 #define OBS_EPSILON   1.7     /* ratio logNH=23-24 to logNH=22-23 quasars  */
 /* ε = 1.7 means there are 1.7× more AGN
 in the logNH=23–24 bin than the logNH=22–23 bin (the absorbed bins are not equal).*/

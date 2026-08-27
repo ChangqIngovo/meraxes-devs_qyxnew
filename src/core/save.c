@@ -716,8 +716,6 @@ void calc_hdf5_props()
     h5props->field_h_conv[i] = "None";
     h5props->field_types[i++] = H5T_NATIVE_FLOAT;
 
-    /* Which NH bin (0-4) this snapshot's draw landed in, or -1 if no AGN.
-     * Replaces the old QuasarLX_obs0-4/NHfrac0-4 (10 mostly-zero floats/galaxy). */
     h5props->dst_offsets[i] = HOFFSET(galaxy_output_t, NHbin);
     h5props->dst_field_sizes[i] = sizeof(galout.NHbin);
     h5props->field_names[i] = "NHbin";
@@ -1020,19 +1018,12 @@ void create_master_file()
   // save the number of cores used in this run
   H5LTset_attribute_int(file_id, "/", "NCores", &(run_globals.mpi_size), 1);
 
-  // NHTrans is a run-constant (does not depend on redshift/snapshot — see
-  // write_snapshot()), so write it once here rather than per-snapshot.
   if (run_globals.params.Flag_OutputXrayLF) {
     double s_T_vals[5];
     get_nh_transmission(s_T_vals);
     hsize_t nhtrans_dim = 5;
     H5LTmake_dataset_double(file_id, "NHTrans", 1, &nhtrans_dim, s_T_vals);
 
-    /* NHfrac only depends on redshift through _psi_ref(z), which saturates
-     * at z=2 (zeff = min(z,2) in blackhole_feedback.c) — so for any run
-     * whose output snapshots are all z>=2 (true here: this simulation stops
-     * at z=5), it's a run constant too. Evaluate at z=2.0 (or anywhere
-     * above it — same result) and write it once, same as NHTrans. */
     int n_lx_bins_nhfrac = (int)((run_globals.params.XrayLF_MaxLogL - run_globals.params.XrayLF_MinLogL) *
                                  run_globals.params.XrayLF_BinsPerDex);
     if (n_lx_bins_nhfrac < 1)
@@ -1206,9 +1197,6 @@ void create_master_file()
       sprintf(source_ds, "Snap%03d/XrayLF_obs", run_globals.ListOutputSnaps[i_out]);
       H5Lcreate_external(relative_source_file, source_ds, snap_group_id, "XrayLF_obs", H5P_DEFAULT, H5P_DEFAULT);
     }
-    // NHTrans and NHfrac are now single run-level datasets written once
-    // above, not linked per-snapshot.
-
     H5Gclose(source_group_id);
     H5Fclose(source_file_id);
 

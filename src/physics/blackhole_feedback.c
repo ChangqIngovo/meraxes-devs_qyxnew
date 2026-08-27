@@ -218,20 +218,13 @@ void calculate_BHemissivity(double BlackHoleMass, double accreted_mass,
   *quasar_lx      = Lbol / kb_hard;
   *quasar_lx_soft = Lbol / kb_soft;
 
-  /* L912 amplitude at the break (NU_LL, 912A — see blackhole_feedback.h for
-   * the full derivation). Computed at runtime from physics->SpecIndexUVAGNSoft
-   * so a .par change never requires hand-recomputing LB2EMISSIVITY. */
+  /* break_factor = (NU_LL/NU_1450)^-SpecIndexUVAGNSoft */
   double break_factor = pow(NU_LL / NU_1450, -physics->SpecIndexUVAGNSoft);
 
   // Approximation using the emissivity at the MIDDLE of accretion time
   *emissivity = physics->quasar_fobs * *quasar_luv * LB2EMISSIVITY * break_factor / physics->SpecIndexUVAGNHard
                * *accretion_time * run_globals.units.UnitTime_in_s
                / run_globals.params.Hubble_h;
-
-  /* Lyman-Werner: the whole LW band sits on the Soft side of the break, so
-   * its amplitude is just quasar_luv*break_factor*AGNLWEfficiency — folded
-   * into run_globals.QuasarLWScale (init.c), not returned here. The band
-   * integral itself happens later in ComputeTs.c's sum_lyn_LW_AGN loop. */
 }
 
 static double get_vvir(galaxy_t* gal) {
@@ -451,9 +444,6 @@ void previous_merger_driven_BH_growth(galaxy_t* gal, int snapshot)
     gal->QuasarLuv        += quasar_luv;
     gal->QuasarLX         += quasar_lx;
     gal->NHbin              = NH_bin; /* -1 if no AGN activity this step */
-    /* Kept in 1e10 Lsun, not raw erg/s — a float can't hold bright-AGN
-     * luminosities without overflowing. Converted downstream in
-     * ComputeTs.c, same point as SMOOTHED_SFR_GAL's stellar conversion. */
     gal->BHXrayEmissivity      += quasar_lx      * obs_fraction_hard;
     gal->BHXrayEmissivity_soft += quasar_lx_soft * obs_fraction_soft;
     gal->EffectiveBHAR += BHemissivity;

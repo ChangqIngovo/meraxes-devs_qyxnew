@@ -109,13 +109,9 @@ void _ComputeTs(int snapshot)
   double upper_int_limit_GAL;
   double upper_int_limit_AGN_soft;
   double upper_int_limit_AGN_hard;
-  double nu_tau_one_zpp; /* shared opacity-cutoff frequency for this (zp, zpp) shell — nu_tau_one()
-                          * has no spectral-index/band dependence at all, so GAL's lower_int_limit_GAL
-                          * and both AGN bands' limits all reuse this one Brent root-solve instead of
-                          * repeating it (per @qyx268's review). */
+  double nu_tau_one_zpp;
   double Luminosity_converstion_factor_AGN_soft;  /* soft band: nu_thresh -> nu_break   */
   double Luminosity_converstion_factor_AGN_hard;  /* hard band: nu_break  -> nu_hard_cut */
-  double agn_emissivity_zpp;       /* AGN emissivity at shell redshift z'': integral of LF x SED */
   float bh, bh_soft;                /* per-cell BHXrayEmissivity(_soft), read while building SMOOTHED_AGN_hard(_soft) */
 #if USE_MINI_HALOS
   float bh_lw;                      /* per-cell BHLWEmissivity, read while building SMOOTHED_AGN_LW */
@@ -143,20 +139,11 @@ void _ComputeTs(int snapshot)
   double freq_int_heat_tbl_GAL[x_int_NXHII][TsNumFilterSteps], freq_int_ion_tbl_GAL[x_int_NXHII][TsNumFilterSteps],
     freq_int_lya_tbl_GAL[x_int_NXHII][TsNumFilterSteps];
 
-  /* AGN broken power law: separate soft/hard tables (soft = intrinsic soft +
-   * redshifted hard; hard = still-hard at observation z). Flag_IncludeAGNXray
-   * (1=both, 2=hard, 3=soft) selects which bands are needed; computed once
-   * here (rather than per shell in the R_ct loop below) and reused throughout. */
   bool agn_soft_needed = (run_globals.params.physics.Flag_IncludeAGNXray == 1 ||
                           run_globals.params.physics.Flag_IncludeAGNXray == 3);
   bool agn_hard_needed = (run_globals.params.physics.Flag_IncludeAGNXray == 1 ||
                           run_globals.params.physics.Flag_IncludeAGNXray == 2);
 
-  /* Per @qyx268's review: only malloc these if the corresponding band is
-   * actually needed (agn_soft_needed/agn_hard_needed above), rather than
-   * always reserving both as unconditional VLAs. Every access to these is
-   * already gated behind the same flags further down, so a NULL pointer
-   * here is never dereferenced. */
   double (*freq_int_heat_tbl_AGN_soft)[TsNumFilterSteps] = NULL;
   double (*freq_int_ion_tbl_AGN_soft)[TsNumFilterSteps] = NULL;
   double (*freq_int_lya_tbl_AGN_soft)[TsNumFilterSteps] = NULL;
@@ -174,8 +161,6 @@ void _ComputeTs(int snapshot)
     freq_int_lya_tbl_AGN_hard  = malloc(sizeof(*freq_int_lya_tbl_AGN_hard)  * x_int_NXHII);
   }
 
-  /* Per-cell interpolated AGN integrals, kept separate for soft/hard so
-   * Flag_IncludeAGNXray (0=off, 1=both, 2=hard, 3=soft) can select components. */
   double freq_int_heat_AGN_soft[TsNumFilterSteps];
   double freq_int_ion_AGN_soft[TsNumFilterSteps];
   double freq_int_lya_AGN_soft[TsNumFilterSteps];
@@ -194,8 +179,6 @@ void _ComputeTs(int snapshot)
 
   double ans[2], dansdz[20], xHII_call;
   double SFR_GAL[TsNumFilterSteps];
-  /* AGN source term per shell — kept separate for soft and hard so that
-   * Flag_IncludeAGNXray can zero out either component independently.        */
   double XAGN_soft[TsNumFilterSteps];
   double XAGN_hard[TsNumFilterSteps];
 #if USE_MINI_HALOS
@@ -221,14 +204,11 @@ void _ComputeTs(int snapshot)
   fftwf_complex* sfr_unfiltered = run_globals.reion_grids.sfr_unfiltered;
   fftwf_complex* sfr_filtered = run_globals.reion_grids.sfr_filtered;
 
-  /* NULL unless Flag_IncludeAGNXray is on — only dereferenced inside blocks
-   * gated on that flag below. */
   fftwf_complex* BHXrayEmissivity_unfiltered = run_globals.reion_grids.BHXrayEmissivity_unfiltered;
   fftwf_complex* BHXrayEmissivity_filtered = run_globals.reion_grids.BHXrayEmissivity_filtered;
   fftwf_complex* BHXrayEmissivity_soft_unfiltered = run_globals.reion_grids.BHXrayEmissivity_soft_unfiltered;
   fftwf_complex* BHXrayEmissivity_soft_filtered = run_globals.reion_grids.BHXrayEmissivity_soft_filtered;
 #if USE_MINI_HALOS
-  /* NULL unless Flag_IncludeLymanWerner is on — same convention as above. */
   fftwf_complex* BHLWEmissivity_unfiltered = run_globals.reion_grids.BHLWEmissivity_unfiltered;
   fftwf_complex* BHLWEmissivity_filtered = run_globals.reion_grids.BHLWEmissivity_filtered;
 #endif
@@ -256,7 +236,6 @@ void _ComputeTs(int snapshot)
   double J_alpha_ave, xalpha_ave, Xheat_ave, Xion_ave, J_LW_ave;
   J_alpha_ave = xalpha_ave = Xheat_ave = Xion_ave = J_LW_ave = 0.0;
 
-  /* AGN diagnostic averages — kept separate to track soft/hard contributions */
   double Xheat_ave_AGN_soft = 0.0;
   double Xheat_ave_AGN_hard = 0.0;
 
@@ -482,9 +461,6 @@ void _ComputeTs(int snapshot)
         sfrIII_unfiltered[ii] /= (float)total_n_cells;
   #endif
 
-      /* Same shell-filtering pipeline as sfr/sfr_filtered, smoothing
-       * BHXrayEmissivity(_soft) over radius R. Each band's plans only exist
-       * when selected by Flag_IncludeAGNXray, so gated independently here too. */
       if (agn_hard_needed) {
         fftwf_execute(run_globals.reion_grids.BHXrayEmissivity_forward_plan);
         for (int ii = 0; ii < slab_n_complex; ii++)
@@ -496,7 +472,6 @@ void _ComputeTs(int snapshot)
           BHXrayEmissivity_soft_unfiltered[ii] /= (float)total_n_cells;
       }
 #if USE_MINI_HALOS
-      /* Same smoothing pipeline, independent flag (Flag_IncludeLymanWerner). */
       if (run_globals.params.Flag_IncludeLymanWerner) {
         fftwf_execute(run_globals.reion_grids.BHLWEmissivity_forward_plan);
         for (int ii = 0; ii < slab_n_complex; ii++)
@@ -737,12 +712,6 @@ void _ComputeTs(int snapshot)
       filling_factor_of_HI_zp = 1. - ReionEfficiency * collapse_fraction / (1.0 - x_e_ave);
 #endif
 
-      // GAL/III have no soft/hard split — their calibration already accounts
-      // for whatever redshift dependence is needed, so the band edges stay
-      // unscaled here (unlike the AGN soft/hard limits below).
-      /* nu_tau_one() doesn't depend on band/spectral index — it's a pure IGM-opacity
-       * horizon for this (zp, zpp) shell — so it's computed once here and reused below
-       * for the AGN soft/hard limits too, instead of repeating this GSL root-solve. */
       nu_tau_one_zpp = nu_tau_one(zp, zpp, x_e_ave, filling_factor_of_HI_zp, snapshot);
       lower_int_limit_GAL = fmax(nu_tau_one_zpp,
                                  run_globals.params.physics.NuXrayThreshold * NU_over_EV);
@@ -803,51 +772,25 @@ void _ComputeTs(int snapshot)
 
 
       if (run_globals.params.physics.Flag_IncludeAGNXray > 0) {
-      /* K_b(zp,zpp,x_e) = Int_{nu_lo(zp,zpp)}^{nu_hi(zp,zpp)} f_dep(nu,x_e) * (nu/nu_th)^(-alpha_b-1) dnu
-       *
-       * Soft: integrate [max(nu_tau_one, nu_thresh_AGN), nu_break] — captures locally
-       * absorbed soft photons plus redshifted-in hard photons; nu_tau_one enforces the
-       * tau=1 opacity cutoff. Hard: [max(nu_tau_one, nu_break), nu_hard_cut] — starts
-       * at nu_break to avoid double-counting with soft. */
-
-      /* AGN soft/hard split needs a redshift factor GAL/III don't: band edges are
-       * rest-frame (at zpp) but nu_tau_one() is arrival-frame (at zp), so scaling
-       * by (1+zp)/(1+zpp) is what lets a hard photon redshift into the soft band. */
-
-      /* nu_tau_one_zpp already computed once above, alongside lower_int_limit_GAL —
-       * reused here for both AGN bands rather than recomputed. agn_soft_needed/
-       * agn_hard_needed are computed once outside this loop, not per shell. */
+      /* K_b(zp,zpp,x_e) = Int_{nu_lo(zp,zpp)}^{nu_hi(zp,zpp)} f_dep(nu,x_e) * (nu/nu_th)^(-alpha_b-1) dnu */
 
       if (agn_soft_needed) {
-        /* Soft band lower limit: opacity cutoff or AGN threshold, whichever is higher */
         lower_int_limit_AGN_soft = fmax(
           nu_tau_one_zpp,
           run_globals.params.physics.NuXrayThreshold * NU_over_EV * (1. + zp) / (1. + zpp));
-        /* Soft band upper limit: capped at the soft/hard break, not NuXrayMax */
         upper_int_limit_AGN_soft = run_globals.params.physics.NuXraySoftCut * NU_over_EV * (1. + zp) / (1. + zpp);
       }
 
       if (agn_hard_needed) {
-        /* Hard band lower limit: start at break frequency (no double counting) */
         lower_int_limit_AGN_hard = fmax(
           nu_tau_one_zpp,
           run_globals.params.physics.NuXraySoftCut * NU_over_EV * (1. + zp) / (1. + zpp));
         upper_int_limit_AGN_hard = run_globals.params.physics.NuXrayMax * NU_over_EV * (1. + zp) / (1. + zpp);
       }
 
-      /* AGN amplitudes come per-cell, per-band, from SMOOTHED_AGN_hard(_soft);
-       * zeroed here at shell level, overwritten per cell below. */
-      agn_emissivity_zpp  = 0.0;
-      XAGN_soft[R_ct]  = 0.0;
-      XAGN_hard[R_ct]  = 0.0;
-#if USE_MINI_HALOS
-      AGN_LW[R_ct] = 0.0;
-#endif
-
       for (x_e_ct = 0; x_e_ct < x_int_NXHII; x_e_ct++) {
 
         if (agn_soft_needed) {
-          /* Soft component integrals: alpha_soft, from lower_soft to nu_break */
           freq_int_heat_tbl_AGN_soft[x_e_ct][R_ct] = integrate_over_nu(
             zp, x_int_XHII[x_e_ct],
             lower_int_limit_AGN_soft,
@@ -893,12 +836,6 @@ void _ComputeTs(int snapshot)
             run_globals.params.physics.SpecIndexXrayAGNHard, 2);
         }
       }
-      } else {
-        XAGN_soft[R_ct] = 0.0;
-        XAGN_hard[R_ct] = 0.0;
-#if USE_MINI_HALOS
-        AGN_LW[R_ct] = 0.0;
-#endif
       }
 
       // and create the sum over Lya transitions from direct Lyn flux
@@ -928,17 +865,7 @@ void _ComputeTs(int snapshot)
           sum_lyn_LW[R_ct] += spectral_emissivity(nuprime, 2, 2);
           sum_lyn_LW_III[R_ct] += spectral_emissivity(nuprime, 2, 3);
 
-          /* AGN continuum shape at this same redshifted window: nuprime is
-           * in Ly-alpha units, so nuprime*Ly_alpha_HZ is the actual
-           * frequency; (nu/NU_LL)^-SpecIndexUVAGNSoft is the shape relative
-           * to AGN_LW's amplitude at the break, which Lusso et al. (2015)
-           * place AT the Lyman limit (NU_LL, 912A) itself — not at 1200A.
-           * The entire LW band (NU_LW to NU_LL) sits on the SAME side of
-           * that break as the near/far-UV continuum, so SpecIndexUVAGNSoft
-           * (not SpecIndexUVAGNHard, and not ReionAlphaUVBH) applies
-           * throughout the band; there is no second slope until shortward
-           * of NU_LL, which is outside the LW band entirely (see
-           * calculate_BHemissivity). */
+          /* (nuprime*Ly_alpha_HZ/NU_LL)^-SpecIndexUVAGNSoft */
           sum_lyn_LW_AGN[R_ct] +=
             pow(nuprime * Ly_alpha_HZ / NU_LL, -run_globals.params.physics.SpecIndexUVAGNSoft);
         }
@@ -1017,7 +944,7 @@ void _ComputeTs(int snapshot)
      *   alpha == 1:  C = 1 / (nu_th * ln(nu_hi/nu_lo))
      * [nu_lo,nu_hi]: GAL/III/AGN-soft -> [NuXrayThreshold,NuXraySoftCut], AGN-hard -> [NuXraySoftCut,NuXrayMax].
      */
-    if (fabs(run_globals.params.physics.SpecIndexXrayGal - 1.0) < SPEC_INDEX_UNITY_TOL) {
+    if (fabs(run_globals.params.physics.SpecIndexXrayGal - 1.0) < REL_TOL) {
       Luminosity_converstion_factor_GAL =
         (run_globals.params.physics.NuXrayThreshold * NU_over_EV) *
         log(run_globals.params.physics.NuXraySoftCut / run_globals.params.physics.NuXrayThreshold);
@@ -1037,8 +964,7 @@ void _ComputeTs(int snapshot)
 
     Luminosity_converstion_factor_GAL *= (SEC_PER_YEAR) / (PLANCK);
 
-    /* --- Soft component: nu_thresh to nu_break --- */
-    if (fabs(run_globals.params.physics.SpecIndexXrayAGNSoft - 1.0) < SPEC_INDEX_UNITY_TOL) {
+    if (fabs(run_globals.params.physics.SpecIndexXrayAGNSoft - 1.0) < REL_TOL) {
       Luminosity_converstion_factor_AGN_soft =
         (run_globals.params.physics.NuXrayThreshold * NU_over_EV) *
         log(run_globals.params.physics.NuXraySoftCut /
@@ -1056,15 +982,9 @@ void _ComputeTs(int snapshot)
             -run_globals.params.physics.SpecIndexXrayAGNSoft) *
         (1.0 - run_globals.params.physics.SpecIndexXrayAGNSoft);
     }
-    /* Unlike Luminosity_converstion_factor_GAL above, no SEC_PER_YEAR here:
-     * LXrayGal is calibrated per (Msun/yr) of SFR, so the stellar formula needs SEC_PER_YEAR to cancel that "per year" against SFR_GAL's per-second rate. 
-     * SMOOTHED_AGN_hard is already a luminosity density in erg/s/cm^3. (from gal->BHXrayEmissivity, an actual X-ray luminosity. */
     Luminosity_converstion_factor_AGN_soft /= (PLANCK);
 
-    /* --- Hard component: [NuXraySoftCut, NuXrayMax], not [NuXrayThreshold, NuXraySoftCut] ---
-     * quasar_lx is calibrated over the hard band, so C must be derived over that same band.
-     * Pivot frequency stays NuXrayThreshold, matching const_zp_prefactor_AGN_hard below. */
-    if (fabs(run_globals.params.physics.SpecIndexXrayAGNHard - 1.0) < SPEC_INDEX_UNITY_TOL) {
+    if (fabs(run_globals.params.physics.SpecIndexXrayAGNHard - 1.0) < REL_TOL) {
       Luminosity_converstion_factor_AGN_hard =
         (run_globals.params.physics.NuXrayThreshold * NU_over_EV) *
         log(run_globals.params.physics.NuXrayMax /
@@ -1082,16 +1002,12 @@ void _ComputeTs(int snapshot)
             -run_globals.params.physics.SpecIndexXrayAGNHard) *
         (1.0 - run_globals.params.physics.SpecIndexXrayAGNHard);
     }
-    /* Same as the soft-band comment above: no SEC_PER_YEAR needed. */
     Luminosity_converstion_factor_AGN_hard /= (PLANCK);
-
-    // const_zp_prefactor_AGN_LW is a run constant (no zp-dependence) — set once in
-    // init_heat() instead of being recomputed here every snapshot.
 
     // Do the same for Pop III.
 
 #if USE_MINI_HALOS
-    if (fabs(run_globals.params.physics.SpecIndexXrayIII - 1.0) < SPEC_INDEX_UNITY_TOL) {
+    if (fabs(run_globals.params.physics.SpecIndexXrayIII - 1.0) < REL_TOL) {
       Luminosity_converstion_factor_III =
         (run_globals.params.physics.NuXrayThreshold * NU_over_EV) *
         log(run_globals.params.physics.NuXraySoftCut / run_globals.params.physics.NuXrayThreshold);
@@ -1129,8 +1045,6 @@ void _ComputeTs(int snapshot)
       (run_globals.params.physics.NuXrayThreshold * NU_over_EV) * SPEED_OF_LIGHT *
       pow(1.0 + zp, run_globals.params.physics.SpecIndexXrayAGNSoft + 3.0);
     if (!isfinite(const_zp_prefactor_AGN_soft)) {
-      /* Likely cause: NuXraySoftCut == NuXrayThreshold (zero-width band) — a
-       * parameter error, so stop rather than silently zeroing the soft band. */
       mlog_error("const_zp_prefactor_AGN_soft is not finite — check NuXrayThreshold/NuXraySoftCut/SpecIndexXrayAGNSoft.");
       ABORT(EXIT_FAILURE);
     }
@@ -1156,8 +1070,6 @@ void _ComputeTs(int snapshot)
     // this same factor higher than 21cmFAST, but at least it is understood why and trivially accounted for.
 
     // interpolate to correct nu integral value based on the cell's ionization state
-    // agn_soft_needed/agn_hard_needed already computed once, at function scope (Flag_IncludeAGNXray
-    // doesn't change mid-snapshot) — reused here rather than re-derived.
     for (int ix = 0; ix < local_nix; ix++)
       for (int iy = 0; iy < ReionGridDim; iy++)
         for (int iz = 0; iz < ReionGridDim; iz++) {
@@ -1241,7 +1153,6 @@ void _ComputeTs(int snapshot)
 #endif
 
             if (agn_soft_needed) {
-            /* --- soft component --- */
             freq_int_heat_AGN_soft[R_ct] =
               (freq_int_heat_tbl_AGN_soft[m_xHII_high][R_ct] - freq_int_heat_tbl_AGN_soft[m_xHII_low][R_ct]) /
               (x_int_XHII[m_xHII_high] - x_int_XHII[m_xHII_low]);
@@ -1266,7 +1177,6 @@ void _ComputeTs(int snapshot)
             }
 
             if (agn_hard_needed) {
-            /* --- hard component --- */
             freq_int_heat_AGN_hard[R_ct] =
               (freq_int_heat_tbl_AGN_hard[m_xHII_high][R_ct] - freq_int_heat_tbl_AGN_hard[m_xHII_low][R_ct]) /
               (x_int_XHII[m_xHII_high] - x_int_XHII[m_xHII_low]);
@@ -1294,10 +1204,6 @@ void _ComputeTs(int snapshot)
 
           // Perform the calculation of the heating/ionisation integrals, updating relevant quantities etc. GET BACK AT
           // THIS FOR USE_MINI_HALOS!!
-          /* evolveInt sums stellar + AGN contributions to dx_e/dz, dT_K/dz, J_alpha —
-           * soft/hard passed as independent amplitude/freq_int pairs, each through its
-           * own prefactor. No flag special-casing needed: excluded bands' XAGN_soft/hard
-           * were already zeroed above, so they contribute zero regardless. */
           {
 #if USE_MINI_HALOS
           evolveInt((float)zp,
@@ -1341,12 +1247,6 @@ void _ComputeTs(int snapshot)
                     ans,
                     dansdz);
 #endif
-          /* dansdz[3] (== dansdz[1] minus Compton/adiabatic/species terms) is GAL+III+AGN
-           * combined, not AGN-only — it can't be split into soft/hard after the fact via a
-           * single zp-only ratio (per @qyx268's "why?..."). deriv[11]/deriv[12] in evolveInt()
-           * carry the true per-band AGN-only rates instead; each is already naturally zero
-           * when its band is excluded (XAGN_soft/hard were zeroed above), so no flag_agn
-           * special-casing is needed here either. */
           Xheat_ave_AGN_soft += dansdz[11];
           Xheat_ave_AGN_hard += dansdz[12];
           }
@@ -1524,7 +1424,6 @@ void _ComputeTs(int snapshot)
        Xion_ave,
        J_LW_ave,
        J_LW_aveII);
-  /* AGN broken power law diagnostic — soft and hard tracked separately */
   mlog("zp = %e  AGN_Xheat_soft = %e  AGN_Xheat_hard = %e  (Flag_IncludeAGNXray=%d)",
        MLOG_MESG, zp, Xheat_ave_AGN_soft, Xheat_ave_AGN_hard,
        run_globals.params.physics.Flag_IncludeAGNXray);
@@ -1537,14 +1436,11 @@ void _ComputeTs(int snapshot)
        xalpha_ave,
        Xheat_ave,
        Xion_ave);
-  /* AGN broken power law diagnostic — soft and hard tracked separately */
   mlog("zp = %e  AGN_Xheat_soft = %e  AGN_Xheat_hard = %e  (Flag_IncludeAGNXray=%d)",
        MLOG_MESG, zp, Xheat_ave_AGN_soft, Xheat_ave_AGN_hard,
        run_globals.params.physics.Flag_IncludeAGNXray);
 #endif
 
-  // Free the AGN soft/hard tables malloc'd above (free(NULL) is a no-op, so
-  // this is safe regardless of which bands agn_soft_needed/agn_hard_needed selected).
   free(freq_int_heat_tbl_AGN_soft);
   free(freq_int_ion_tbl_AGN_soft);
   free(freq_int_lya_tbl_AGN_soft);

@@ -151,7 +151,6 @@ static void read_snap_list()
   }
   MPI_Bcast(run_globals.AA, run_globals.params.SnaplistLength, MPI_DOUBLE, 0, run_globals.mpi_comm);
 
-  // Per-snapshot X-ray-heating diagnostic buffers, only needed if spin-temp runs.
   if (run_globals.params.Flag_IncludeSpinTemp) {
     stored_fcoll = calloc((size_t)run_globals.params.SnaplistLength, sizeof(double));
     stored_fcollIII = calloc((size_t)run_globals.params.SnaplistLength, sizeof(double));
@@ -314,7 +313,6 @@ void init_meraxes()
   set_ReionEfficiency();
   set_quasar_fobs();
 
-  // Build the AGN NH-obscuration transmission tables once.
   init_xray_obscuration_tables();
 
   if (run_globals.params.Flag_IncludeSpinTemp){

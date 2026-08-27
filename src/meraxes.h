@@ -36,19 +36,6 @@
 #define TCMB 2.728
 #define NU_LL (double)(3.29e15)
 #define NU_LW (double)(2.71e15)
-/* NU_LL doubles as the AGN UV/LW SED break frequency (912A, the Lyman
- * limit) — Lusso et al. (2015, MNRAS 449, 4204) measure the AGN continuum
- * break to sit AT 912A itself, not at 1200A as earlier versions of this
- * code assumed (that used a since-removed NU_1200=2.49825e15 constant).
- * SpecIndexUVAGNSoft applies for nu<=NU_LL (redward of/at the break, which
- * covers the entire LW band NU_LW-NU_LL); SpecIndexUVAGNHard, the steeper
- * index, applies only shortward of NU_LL, used for the ionizing/912A
- * photon budget only (see calculate_BHemissivity) —
- * ReionAlphaUVBH is a distinct, separately-tuned reionization parameter
- * and is not used for the AGN LW band). */
-/* Frequency [Hz] corresponding to 1450 Angstrom (SPEED_OF_LIGHT / 1450e-8 cm),
- * the reference wavelength QuasarLuv is defined at. Not unique to black holes
- * (per @qyx268's review) — moved here from blackhole_feedback.h. */
 #define NU_1450 (double)(2.0675e15)
 #define PLANCK_EV (double)(4.1357e-15)
 #define T_RE 1e4
@@ -73,14 +60,6 @@
 #define STRLEN 256 //!< Default string length
 #define REL_TOL (float)1e-5
 #define ABS_TOL (float)1e-8
-/* How close a spectral index can get to 1 before the power-law calibration's
- * closed-form solution switches to the log branch (1/(1-alpha) is singular
- * at alpha=1) — see ComputeTs.c's Luminosity_converstion_factor_* blocks.
- * Deliberately its own constant (per @qyx268's review): despite the name
- * REL_TOL previously used here, this is an absolute tolerance on alpha's
- * distance from 1, unrelated to REL_TOL/ABS_TOL's near-zero floor usage
- * elsewhere, so it must not be conflated with (or retuned by) either. */
-#define SPEC_INDEX_UNITY_TOL (float)1e-5
 // ======================================================
 
 // Define things used for aborting exceptions
@@ -194,22 +173,9 @@ typedef struct physics_params_t
   int Flag_IncludeAGNXray;      /* 0=no AGN, 1=soft+hard, 2=hard only, 3=soft only */
   double SpecIndexXrayAGNSoft;
   double SpecIndexXrayAGNHard;
-  /* AGN UV/EUV continuum slopes (nu^-alpha), Lusso et al. (2015), break AT NU_LL
-   * (912A, the Lyman limit) — same Soft/Hard naming convention as the X-ray
-   * pair above. QuasarLuv (1450A) is extrapolated down through the LW band
-   * using Soft; Hard governs only the ionizing (<=912A) photon budget in
-   * calculate_BHemissivity and never applies inside the LW band. */
   double SpecIndexUVAGNSoft;    /* lambda > 912A (redward of/at the break) — LW band amplitude/shape */
   double SpecIndexUVAGNHard;    /* lambda <= 912A (shortward of the break) — ionizing photon rate only */
-  double AGNLWEfficiency;       /* Scale factor on the AGN LW amplitude (run_globals.QuasarLWScale) only —
-                                    QuasarLuv/QuasarMag/QuasarLF are untouched. A genuine tunable double, not
-                                    a binary switch (per @qyx268's review) — though every run so far leaves it
-                                    at 1.0 (i.e. AGN LW scales 1:1 with QuasarLuv). Its main use is isolating
-                                    AGN's own LW contribution independently of Flag_IncludeLymanWerner (which
-                                    gates the whole LW mechanism, GAL included) — e.g. set to 0 to turn AGN's
-                                    contribution off while leaving stellar LW on. The physically meaningful
-                                    suppression near Lyman resonances is handled separately, by sum_lyn_LW_AGN's
-                                    per-window treatment. */
+  double AGNLWEfficiency;       /* scale factor on the AGN LW amplitude (run_globals.QuasarLWScale) */
 
   double ReionMaxHeatingRedshift;
 
@@ -570,8 +536,6 @@ typedef struct reion_grids_t
   float* bh_lw_histories;         //!< Ring-buffer of NstoreSnapshots_Heating past BHLWEmissivity snapshots
 #endif
 
-  // Spatial (k-space, radius-R) smoothing buffers/plans for BHXrayEmissivity(_soft) —
-  // same shell-filtering pipeline as sfr/sfr_filtered, mirroring effective_bhm above.
   fftwf_complex* BHXrayEmissivity_unfiltered;
   fftwf_complex* BHXrayEmissivity_filtered;
   fftwf_plan BHXrayEmissivity_forward_plan;
@@ -970,12 +934,7 @@ typedef struct run_globals_t
   double G;
   double Csquare;
   double EddingtonTimescale;
-  double QuasarLWScale;      //!< AGN LW emissivity per unit QuasarLuv: pow(NU_LL/NU_1450,
-                              //!< -SpecIndexUVAGNSoft) * AGNLWEfficiency — amplitude AT the Lyman-limit
-                              //!< break (Lusso et al. 2015), not at 1200A. Run-constant (per
-                              //!< @qyx268's review — quasar_lw was just QuasarLuv times this, not
-                              //!< worth its own per-galaxy field), computed once here instead of
-                              //!< per galaxy.
+  double QuasarLWScale;      //!< pow(NU_LL/NU_1450, -SpecIndexUVAGNSoft) * AGNLWEfficiency
   loiii_params_t loiii_params;
   // PopIII stuff
 
