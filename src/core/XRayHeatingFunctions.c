@@ -53,6 +53,10 @@ int init_heat()
   if (run_globals.params.Flag_IncludeLymanWerner) {
     sum_lyn_LW = calloc(TsNumFilterSteps, sizeof(double));
     sum_lyn_LW_III = calloc(TsNumFilterSteps, sizeof(double));
+    sum_lyn_LW_AGN = calloc(TsNumFilterSteps, sizeof(double));
+
+    /* const_zp_prefactor_AGN_LW = c / (4*pi) / (h * NU_LW) */
+    const_zp_prefactor_AGN_LW = SPEED_OF_LIGHT / (4.0 * M_PI) / (PLANCK * NU_LW);
   }
 #endif
 
@@ -93,13 +97,10 @@ void destruct_heat()
   if (run_globals.params.Flag_IncludeLymanWerner) {
     free(sum_lyn_LW);
     free(sum_lyn_LW_III);
+    free(sum_lyn_LW_AGN);
   }
 #endif
 }
-
-// ******************************************************************** //
-//  ************************ RECFAST quantities ************************ //
-//  ******************************************************************** //
 
 // * IGM temperature from RECFAST; includes Compton heating and adiabatic expansion only. * //
 double T_RECFAST(float z, int flag)
@@ -368,8 +369,23 @@ double tauX(double nu, double x_e, double zp, double zpp, double HI_filling_fact
   p.snap_i = snap_i;
 
   F.params = &p;
-  gsl_integration_qag(&F, zpp, zp, 0, rel_tol, 1000, GSL_INTEG_GAUSS61, w, &result, &error);
+  int status = gsl_integration_qag(&F, zpp, zp, 0, rel_tol, 1000, GSL_INTEG_GAUSS61, w, &result, &error);
   gsl_integration_workspace_free(w);
+
+  /* At extreme redshift/ionisation states (e.g. deeply neutral IGM near
+   * cosmic dawn) this integral can be too stiff/large for QAG to reach
+   * rel_tol within 1000 subdivisions. That failure means "optical depth
+   * here is very high," not "result is garbage" — nu_tau_one_helper()
+   * only needs to know this frequency is still deep in tau >> 1 territory
+   * to keep its root search moving in the right direction, so returning a
+   * large finite value on failure is safe; trusting an unconverged result
+   * (or letting GSL's default handler abort the whole run) is not. */
+  if (status != GSL_SUCCESS) {
+    mlog("WARNING: tauX integral failed to converge (snap %d, zp=%.3f, zpp=%.3f, nu=%.3e): %s — "
+         "falling back to tau=1e10\n",
+         MLOG_MESG, snap_i, zp, zpp, nu, gsl_strerror(status));
+    return 1e10;
+  }
 
   return result;
 }
@@ -762,6 +778,7 @@ double integrand_in_nu_lya_integral(double nu, void* params)
 double integrate_over_nu(double zp,
                          double local_x_e,
                          double lower_int_limit,
+                         double upper_int_limit,
                          double thresh_energy,
                          double spec_index,
                          int FLAG)
@@ -769,6 +786,10 @@ double integrate_over_nu(double zp,
   double result, error;
   double rel_tol = 0.01; //<- relative tolerance
   gsl_function F;
+
+  if (lower_int_limit >= upper_int_limit)
+    return 0.0;
+
   gsl_integration_workspace* w = gsl_integration_workspace_alloc(1000);
 
   int_over_nu_params p;
@@ -787,17 +808,19 @@ double integrate_over_nu(double zp,
     F.function = &integrand_in_nu_lya_integral;
   }
 
-  gsl_integration_qag(&F,
-                      lower_int_limit,
-                      run_globals.params.physics.NuXrayMax * NU_over_EV,
-                      0,
-                      rel_tol,
-                      1000,
-                      GSL_INTEG_GAUSS61,
-                      w,
-                      &result,
-                      &error);
+  int status = gsl_integration_qag(&F,
+                                   lower_int_limit,
+                                   upper_int_limit,
+                                   0,
+                                   rel_tol,
+                                   1000,
+                                   GSL_INTEG_GAUSS61,
+                                   w,
+                                   &result,
+                                   &error);
   gsl_integration_workspace_free(w);
+  if (status != GSL_SUCCESS)
+    return 0.0;
 
   // if it is the Lya integral, add prefactor
   if (FLAG == 2)
@@ -1238,25 +1261,43 @@ void evolveInt(float zp,
                const double XRAY_LUMINOSITY_GAL[],
 #endif
                const double SFR_III[],
+               const double XAGN_soft[],
+               const double XAGN_hard[],
+               const double AGN_LW[],
                const double freq_int_heat_GAL[],
                const double freq_int_ion_GAL[],
                const double freq_int_lya_GAL[],
                const double freq_int_heat_III[],
                const double freq_int_ion_III[],
                const double freq_int_lya_III[],
+               const double freq_int_heat_AGN_soft[],
+               const double freq_int_ion_AGN_soft[],
+               const double freq_int_lya_AGN_soft[],
+               const double freq_int_heat_AGN_hard[],
+               const double freq_int_ion_AGN_hard[],
+               const double freq_int_lya_AGN_hard[],
                int COMPUTE_Ts,
                const double y[],
                double deriv[])
 #else
+
 void evolveInt(float zp,
                float curr_delNL0,
                const double SFR_GAL[],
 #if USE_STOCHASTICITY
                const double XRAY_LUMINOSITY_GAL[],
 #endif
+               const double XAGN_soft[],
+               const double XAGN_hard[],
                const double freq_int_heat_GAL[],
                const double freq_int_ion_GAL[],
                const double freq_int_lya_GAL[],
+               const double freq_int_heat_AGN_soft[],
+               const double freq_int_ion_AGN_soft[],
+               const double freq_int_lya_AGN_soft[],
+               const double freq_int_heat_AGN_hard[],
+               const double freq_int_ion_AGN_hard[],
+               const double freq_int_lya_AGN_hard[],
                int COMPUTE_Ts,
                const double y[],
                double deriv[])
@@ -1275,6 +1316,16 @@ void evolveInt(float zp,
   double dxlya_dt_III, dstarlya_dt_III, dstarlyLW_dt_III, dxheat_dt_III, dxion_source_dt_III, zpp_integrand_III;
   double dspec_dzp_II, dxheat_dzp_II;
 #endif
+
+  double dxheat_dt_AGN      = 0.0;
+  double dxion_source_dt_AGN = 0.0;
+  double dxlya_dt_AGN       = 0.0;
+  double zpp_integrand_AGN;
+  double dxheat_dt_AGN_hard      = 0.0;
+  double dxion_source_dt_AGN_hard = 0.0;
+  double dxlya_dt_AGN_hard       = 0.0;
+  double zpp_integrand_AGN_hard;
+  double dstarlyLW_dt_AGN = 0.0;
 
   x_e = y[0];
   T = y[1];
@@ -1297,6 +1348,8 @@ void evolveInt(float zp,
   dstarlya_dt_III = 0;
   dstarlyLW_dt_III = 0;
 #endif
+  deriv[11] = 0.0
+  deriv[12] = 0.0
 
   if (!COMPUTE_Ts) {
     for (zpp_ct = 0; zpp_ct < run_globals.params.TsNumFilterSteps; zpp_ct++) {
@@ -1343,8 +1396,27 @@ void evolveInt(float zp,
       if (run_globals.params.Flag_IncludeLymanWerner) {
         dstarlyLW_dt_GAL += SFR_GAL[zpp_ct] * pow(1 + zp, 2) * (1 + zpp) * sum_lyn_LW[zpp_ct] * dt_dzpp * dzpp;
         dstarlyLW_dt_III += SFR_III[zpp_ct] * pow(1 + zp, 2) * (1 + zpp) * sum_lyn_LW_III[zpp_ct] * dt_dzpp * dzpp;
+        dstarlyLW_dt_AGN += AGN_LW[zpp_ct] * pow(1 + zp, 2) * (1 + zpp) * sum_lyn_LW_AGN[zpp_ct] * dt_dzpp * dzpp;
       }
 #endif
+
+      /* dX_AGN_soft/dt += (dt/dz'')dz'' × XAGN_soft[zpp_ct] × (1+z'')^-alpha_soft × freq_int_X_AGN_soft[zpp_ct]
+       * dX_AGN_hard/dt += (dt/dz'')dz'' × XAGN_hard[zpp_ct] × (1+z'')^-alpha_hard × freq_int_X_AGN_hard[zpp_ct] */
+      zpp_integrand_AGN = XAGN_soft[zpp_ct]
+                          * pow(1 + zpp,
+                                -run_globals.params.physics.SpecIndexXrayAGNSoft);
+
+      dxheat_dt_AGN      += dt_dzpp * dzpp * zpp_integrand_AGN * freq_int_heat_AGN_soft[zpp_ct];
+      dxion_source_dt_AGN += dt_dzpp * dzpp * zpp_integrand_AGN * freq_int_ion_AGN_soft[zpp_ct];
+      dxlya_dt_AGN       += dt_dzpp * dzpp * zpp_integrand_AGN * freq_int_lya_AGN_soft[zpp_ct];
+
+      zpp_integrand_AGN_hard = XAGN_hard[zpp_ct]
+                              * pow(1 + zpp,
+                                    -run_globals.params.physics.SpecIndexXrayAGNHard);
+
+      dxheat_dt_AGN_hard       += dt_dzpp * dzpp * zpp_integrand_AGN_hard * freq_int_heat_AGN_hard[zpp_ct];
+      dxion_source_dt_AGN_hard += dt_dzpp * dzpp * zpp_integrand_AGN_hard * freq_int_ion_AGN_hard[zpp_ct];
+      dxlya_dt_AGN_hard        += dt_dzpp * dzpp * zpp_integrand_AGN_hard * freq_int_lya_AGN_hard[zpp_ct];
     }
 
     // After you finish the loop for each Radius, you add prefactors which are constants for the redshift (snapshot) and
@@ -1371,8 +1443,25 @@ void evolveInt(float zp,
     if (run_globals.params.Flag_IncludeLymanWerner) {
       dstarlyLW_dt_GAL *= Conversion_factor;
       dstarlyLW_dt_III *= Conversion_factor;
+      dstarlyLW_dt_AGN *= const_zp_prefactor_AGN_LW;
     }
 #endif
+
+    dxheat_dt_AGN       *= const_zp_prefactor_AGN_soft;
+    dxion_source_dt_AGN *= const_zp_prefactor_AGN_soft;
+    dxlya_dt_AGN        *= const_zp_prefactor_AGN_soft * n_b;
+
+    dxheat_dt_AGN_hard       *= const_zp_prefactor_AGN_hard;
+    dxion_source_dt_AGN_hard *= const_zp_prefactor_AGN_hard;
+    dxlya_dt_AGN_hard        *= const_zp_prefactor_AGN_hard * n_b;
+
+    deriv[11] = dxheat_dt_AGN      * dt_dzp * 2.0 / 3.0 / BOLTZMANN / (1.0 + x_e);
+    deriv[12] = dxheat_dt_AGN_hard * dt_dzp * 2.0 / 3.0 / BOLTZMANN / (1.0 + x_e);
+
+    /* dx_heat/dt|_AGN = dx_heat/dt|_soft + dx_heat/dt|_hard */
+    dxheat_dt_AGN       += dxheat_dt_AGN_hard;
+    dxion_source_dt_AGN += dxion_source_dt_AGN_hard;
+    dxlya_dt_AGN        += dxlya_dt_AGN_hard;
 
   } // end COMPUTE_Ts if statement YOU CAN SAVE SOME MORE OUTPUTS BUT FOR THE MOMENT THIS SHOULD BE FINE!
 
@@ -1380,10 +1469,14 @@ void evolveInt(float zp,
   // *** First let's do dxe_dzp *** //
 
   dxion_sink_dt = alpha_A(T) * CLUMPING_FACTOR * x_e * x_e * f_H * n_b;
+
+  /* dx_e/dz = dt/dz × [Γ_ion,GAL (+Γ_ion,III) + Γ_ion,AGN − α_A·C·x_e²·f_H·n_b] */
 #if USE_MINI_HALOS
-  dxe_dzp = dt_dzp * ((dxion_source_dt_GAL + dxion_source_dt_III) - dxion_sink_dt);
+  dxe_dzp = dt_dzp * (dxion_source_dt_GAL + dxion_source_dt_III
+                      + dxion_source_dt_AGN - dxion_sink_dt);
 #else
-  dxe_dzp = dt_dzp * (dxion_source_dt_GAL - dxion_sink_dt);
+  dxe_dzp = dt_dzp * (dxion_source_dt_GAL + dxion_source_dt_AGN
+                      - dxion_sink_dt);
 #endif
 
   deriv[0] = dxe_dzp;
@@ -1415,11 +1508,18 @@ void evolveInt(float zp,
   dspec_dzp_II = -dxe_dzp * TII / (1 + x_e);
 
   dcomp_dzp_II = dT_comp(zp, TII, x_e);
+#endif /* USE_MINI_HALOS — dadia_dzp_II / dcomp_dzp_II block */
 
-  dxheat_dzp = (dxheat_dt_GAL + dxheat_dt_III) * dt_dzp * 2.0 / 3.0 / BOLTZMANN / (1.0 + x_e);
-  dxheat_dzp_II = dxheat_dt_GAL * dt_dzp * 2.0 / 3.0 / BOLTZMANN / (1.0 + x_e);
+  /* dT_K/dz = dT_K/dz|_adiabatic + |_Compton + |_species + |_Xray,GAL + |_Xray,AGN, where
+   *   dT_K/dz|_Xray,AGN = dxheat_dt_AGN × (dt/dz) × (2/3)/k_B/(1+x_e) */
+#if USE_MINI_HALOS
+  dxheat_dzp = (dxheat_dt_GAL + dxheat_dt_III + dxheat_dt_AGN)
+               * dt_dzp * 2.0 / 3.0 / BOLTZMANN / (1.0 + x_e);
+  dxheat_dzp_II = (dxheat_dt_GAL + dxheat_dt_AGN)
+                  * dt_dzp * 2.0 / 3.0 / BOLTZMANN / (1.0 + x_e);
 #else
-  dxheat_dzp = dxheat_dt_GAL * dt_dzp * 2.0 / 3.0 / BOLTZMANN / (1.0 + x_e);
+  dxheat_dzp = (dxheat_dt_GAL + dxheat_dt_AGN)
+               * dt_dzp * 2.0 / 3.0 / BOLTZMANN / (1.0 + x_e);
 #endif
 
   // summing them up...
@@ -1429,10 +1529,11 @@ void evolveInt(float zp,
 #if USE_MINI_HALOS
   deriv[6] = dxheat_dzp_II + dcomp_dzp_II + dspec_dzp_II + dadia_dzp_II;
 
-  deriv[2] = (dxlya_dt_GAL + dxlya_dt_III) + (dstarlya_dt_GAL + dstarlya_dt_III);
-  deriv[7] = dxlya_dt_GAL + dstarlya_dt_GAL;
+  deriv[2] = (dxlya_dt_GAL + dxlya_dt_III + dxlya_dt_AGN)
+             + (dstarlya_dt_GAL + dstarlya_dt_III);
+  deriv[7] = (dxlya_dt_GAL + dxlya_dt_AGN) + dstarlya_dt_GAL;
 #else
-  deriv[2] = dxlya_dt_GAL + dstarlya_dt_GAL;
+  deriv[2] = (dxlya_dt_GAL + dxlya_dt_AGN) + dstarlya_dt_GAL;
 #endif
 
   // stuff for marcos
@@ -1441,14 +1542,15 @@ void evolveInt(float zp,
   deriv[8] = dxheat_dzp_II;
 
   if (run_globals.params.Flag_IncludeLymanWerner) {
-    deriv[5] = (dstarlyLW_dt_GAL + dstarlyLW_dt_III) * (PLANCK * 1e21);
-    deriv[10] = dstarlyLW_dt_GAL * (PLANCK * 1e21);
+    deriv[5] = (dstarlyLW_dt_GAL + dstarlyLW_dt_III + dstarlyLW_dt_AGN) * (PLANCK * 1e21);
+    deriv[10] = (dstarlyLW_dt_GAL + dstarlyLW_dt_AGN) * (PLANCK * 1e21);
   }
 
-  deriv[4] = dt_dzp * (dxion_source_dt_GAL + dxion_source_dt_III);
-  deriv[9] = dt_dzp * dxion_source_dt_GAL;
+  deriv[4] = dt_dzp * (dxion_source_dt_GAL + dxion_source_dt_III
+                       + dxion_source_dt_AGN);
+  deriv[9] = dt_dzp * (dxion_source_dt_GAL + dxion_source_dt_AGN);
 #else
-  deriv[4] = dt_dzp * dxion_source_dt_GAL;
+  deriv[4] = dt_dzp * (dxion_source_dt_GAL + dxion_source_dt_AGN);
 #endif
 }
 

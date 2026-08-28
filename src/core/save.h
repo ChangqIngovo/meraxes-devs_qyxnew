@@ -62,16 +62,13 @@ typedef struct galaxy_output_t
   float BHemissivity;
   float QuasarMag;
   float QuasarLX;        //!< Intrinsic hard X-ray luminosity [1e10 L_sun, 2-10 keV]; 0 if inactive
-  int   NHbin;           //!< Which of the 5 NH bins this snapshot's draw landed in (0-4), or
-                          //!< -1 if no AGN activity — see meraxes.h galaxy_t.NHbin for detail.
+  int   NHbin;           //!< Which of the 5 NH bins this snapshot's draw landed in (0-4), or -1 if no AGN activity — see meraxes.h galaxy_t.NHbin for detail.
   float BHXrayEmissivity; //!< Observed hard X-ray emissivity [1e10 L_sun, 2-10 keV], obscuration-weighted
   float EffectiveBHM;
   float BlackHoleAccretedHotMass;
   float BlackHoleAccretedColdMass;
   float DutyCycleAGN;
-
-  int Galaxy_Population; // You need it also if you are not disentangling PopIII/PopII (when Mini_halos is off, this is
-                         // = 2)
+  int Galaxy_Population; // You need it also if you are not disentangling PopIII/PopII (when Mini_halos is off, this is = 2)
 #if USE_MINI_HALOS
   float GrossStellarMassIII;
   float FescIII;

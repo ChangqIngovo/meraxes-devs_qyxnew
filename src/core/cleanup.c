@@ -10,6 +10,7 @@
 #include "read_halos.h"
 #include "recombinations.h"
 #include "reionization.h"
+#include "XRayHeatingFunctions.h"
 
 #if USE_MINI_HALOS
 #include "metal_evo.h"
@@ -79,6 +80,13 @@ void cleanup()
   free(run_globals.LTTime);
   free(run_globals.ZZ);
   free(run_globals.AA);
+
+  free(stored_fcoll);
+  free(stored_fcollIII);
+  free(stored_XrayEmissivity_hard);
+  free(stored_XrayEmissivity_soft);
+  free(stored_XrayEmissivity_HMXB);
+
   if (run_globals.gpu != NULL)
     free(run_globals.gpu);
 

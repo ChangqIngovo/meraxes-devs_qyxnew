@@ -77,19 +77,12 @@ static void store_params(entry_t entry[123],
   char key[STRLEN + 64];
 
   for (int i_entry = 0; i_entry < n_entries; i_entry++) {
-    // DEBUG
-    // mlog("Checking %s", MLOG_MESG, entry[i_entry].key);
-
-    // reset prefix if we have descended an indentation level
     if (entry[i_entry].level < level)
       *prefix = '\0';
 
     strncpy(key, prefix, STRLEN);
     strncat(key, entry[i_entry].key, STRLEN);
     level = entry[i_entry].level;
-
-    // DEBUG
-    // mlog("level = %d :: prefix = %s", MLOG_MESG, level, prefix);
 
     int tag_index = -1;
     for (int ii = 0; ii < n_param; ii++)
@@ -494,14 +487,9 @@ void read_parameter_file(char* fname, int mode)
       required_tag[n_param] = 1;
       params_type[n_param++] = PARAM_TYPE_INT;
      
-      strncpy(params_tag[n_param], "Flag_includeAGN", tag_length);
-      params_addr[n_param] = &(run_params->physics.Flag_includeAGN);
-      required_tag[n_param] = 1;
-      params_type[n_param++] = PARAM_TYPE_INT;
-
       strncpy(params_tag[n_param], "Flag_IncludeAGNXray", tag_length);
       params_addr[n_param] = &(run_params->physics.Flag_IncludeAGNXray);
-      required_tag[n_param] = 0;
+      required_tag[n_param] = 1;
       params_type[n_param++] = PARAM_TYPE_INT;
 
       strncpy(params_tag[n_param], "FlagMCMC", tag_length);
@@ -1259,6 +1247,21 @@ void read_parameter_file(char* fname, int mode)
 
       strcpy(params_tag[n_param], "SpecIndexXrayAGNHard");
       params_addr[n_param] = &(run_params->physics).SpecIndexXrayAGNHard;
+      required_tag[n_param] = 1;
+      params_type[n_param++] = PARAM_TYPE_DOUBLE;
+
+      strcpy(params_tag[n_param], "SpecIndexUVAGNSoft");
+      params_addr[n_param] = &(run_params->physics).SpecIndexUVAGNSoft;
+      required_tag[n_param] = 1;
+      params_type[n_param++] = PARAM_TYPE_DOUBLE;
+
+      strcpy(params_tag[n_param], "SpecIndexUVAGNHard");
+      params_addr[n_param] = &(run_params->physics).SpecIndexUVAGNHard;
+      required_tag[n_param] = 1;
+      params_type[n_param++] = PARAM_TYPE_DOUBLE;
+
+      strcpy(params_tag[n_param], "AGNLWEfficiency");
+      params_addr[n_param] = &(run_params->physics).AGNLWEfficiency;
       required_tag[n_param] = 1;
       params_type[n_param++] = PARAM_TYPE_DOUBLE;
 
