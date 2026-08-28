@@ -1348,8 +1348,8 @@ void evolveInt(float zp,
   dstarlya_dt_III = 0;
   dstarlyLW_dt_III = 0;
 #endif
-  deriv[11] = 0.0
-  deriv[12] = 0.0
+  deriv[11] = 0.0;
+  deriv[12] = 0.0;
 
   if (!COMPUTE_Ts) {
     for (zpp_ct = 0; zpp_ct < run_globals.params.TsNumFilterSteps; zpp_ct++) {
