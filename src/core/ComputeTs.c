@@ -133,8 +133,12 @@ void _ComputeTs(int snapshot)
   double R_values[TsNumFilterSteps];
   int snapshot_counter_backwards[TsNumFilterSteps];
   double zedge;
-// When USE_MINI_HALO: ans[0] = x_e_box_prev[i_padded], ans[1] = Tk_box[i_real], #if USE_MINI_HALOS ans[2] = Tk_boxII[i_real]; #endif, so need 3, also in evolveInt
-  double ans[3], dansdz[20], xHII_call;
+#if USE_MINI_HALOS
+  double ans[3], dansdz[11];
+#else
+  double ans[2], dansdz[5];
+#endif
+  double xHII_call;
   double SFR_GAL[TsNumFilterSteps];
 #if USE_STOCHASTICITY
   double XRAY_LUMINOSITY_GAL[TsNumFilterSteps];
@@ -558,7 +562,6 @@ void _ComputeTs(int snapshot)
 #if USE_MINI_HALOS
     if ((collapse_fraction + collapse_fractionIII) > 0.0)
 #else
-#if USE_STOCHASTICITY
     if (collapse_fraction > 0.0)
 #endif
     {
@@ -741,6 +744,7 @@ void _ComputeTs(int snapshot)
         pow(run_globals.params.physics.NuXrayThreshold * NU_over_EV, -run_globals.params.physics.SpecIndexXrayGal) *
         (1 - run_globals.params.physics.SpecIndexXrayGal);
     }
+    Luminosity_converstion_factor_GAL *= 1.0 / PLANCK;
 
 #if USE_MINI_HALOS
     if (fabs(run_globals.params.physics.SpecIndexXrayIII - 1.0) < 0.000001) {
@@ -758,7 +762,6 @@ void _ComputeTs(int snapshot)
         pow(run_globals.params.physics.NuXrayThreshold * NU_over_EV, -run_globals.params.physics.SpecIndexXrayIII) *
         (1 - run_globals.params.physics.SpecIndexXrayIII);
     }
-
     Luminosity_converstion_factor_III *= (SEC_PER_YEAR) / (PLANCK);
 #endif
 
