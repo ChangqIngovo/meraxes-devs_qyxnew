@@ -12,6 +12,7 @@
 #include "physics/blackhole_feedback.h"
 #include "reionization.h"
 #include "save.h"
+#include "XRayHeatingFunctions.h"
 #if USE_MINI_HALOS
 #include "metal_evo.h"
 #endif
@@ -715,12 +716,6 @@ void calc_hdf5_props()
     h5props->field_h_conv[i] = "None";
     h5props->field_types[i++] = H5T_NATIVE_FLOAT;
 
-    /* Which of the 5 NH bins this snapshot's stochastic draw landed in
-     * (0-4), or -1 if no AGN activity. Replaces the old QuasarLX_obs0-4/
-     * NHfrac0-4 (10 mostly-zero floats per galaxy, since only one bin is
-     * ever nonzero per draw) — BHXrayEmissivity below already carries
-     * that bin's observed (obscured) luminosity, so (NHbin,
-     * BHXrayEmissivity) is sufficient to reconstruct a per-bin XLF. */
     h5props->dst_offsets[i] = HOFFSET(galaxy_output_t, NHbin);
     h5props->dst_field_sizes[i] = sizeof(galout.NHbin);
     h5props->field_names[i] = "NHbin";
@@ -1023,13 +1018,49 @@ void create_master_file()
   // save the number of cores used in this run
   H5LTset_attribute_int(file_id, "/", "NCores", &(run_globals.mpi_size), 1);
 
-  // NHTrans is a run-constant (does not depend on redshift/snapshot — see
-  // write_snapshot()), so write it once here rather than per-snapshot.
   if (run_globals.params.Flag_OutputXrayLF) {
     double s_T_vals[5];
     get_nh_transmission(s_T_vals);
     hsize_t nhtrans_dim = 5;
     H5LTmake_dataset_double(file_id, "NHTrans", 1, &nhtrans_dim, s_T_vals);
+
+    int n_lx_bins_nhfrac = (int)((run_globals.params.XrayLF_MaxLogL - run_globals.params.XrayLF_MinLogL) *
+                                 run_globals.params.XrayLF_BinsPerDex);
+    if (n_lx_bins_nhfrac < 1)
+      n_lx_bins_nhfrac = 1;
+    double lx_bin_width_nhfrac =
+      (run_globals.params.XrayLF_MaxLogL - run_globals.params.XrayLF_MinLogL) / n_lx_bins_nhfrac;
+
+    double f_det[5];
+    double lx_log_center, lx_lin_1e10Lsun;
+    double* nhfrac_table = malloc((size_t)n_lx_bins_nhfrac * 5 * sizeof(double));
+    for (int ilx = 0; ilx < n_lx_bins_nhfrac; ilx++) {
+      lx_log_center = run_globals.params.XrayLF_MinLogL + (ilx + 0.5) * lx_bin_width_nhfrac;
+      lx_lin_1e10Lsun = pow(10.0, lx_log_center - 10.0 - LOG_10_SOLAR_LUM);
+      get_nh_fracs(lx_lin_1e10Lsun, 2.0, f_det);
+      for (int ib = 0; ib < 5; ib++)
+        nhfrac_table[ilx * 5 + ib] = f_det[ib];
+    }
+    hsize_t nhfrac_dims[2] = { (hsize_t)n_lx_bins_nhfrac, 5 };
+    H5LTmake_dataset_double(file_id, "NHfrac", 2, nhfrac_dims, nhfrac_table);
+    free(nhfrac_table);
+
+
+    double* xray_hard_all = malloc((size_t)run_globals.NOutputSnaps * sizeof(double));
+    double* xray_soft_all = malloc((size_t)run_globals.NOutputSnaps * sizeof(double));
+    double* xray_hmxb_all = malloc((size_t)run_globals.NOutputSnaps * sizeof(double));
+    for (int i_out = 0; i_out < run_globals.NOutputSnaps; i_out++) {
+      xray_hard_all[i_out] = stored_XrayEmissivity_hard[run_globals.ListOutputSnaps[i_out]];
+      xray_soft_all[i_out] = stored_XrayEmissivity_soft[run_globals.ListOutputSnaps[i_out]];
+      xray_hmxb_all[i_out] = stored_XrayEmissivity_HMXB[run_globals.ListOutputSnaps[i_out]];
+    }
+    hsize_t n_xray_snaps = (hsize_t)run_globals.NOutputSnaps;
+    H5LTmake_dataset_double(file_id, "XrayEmissivity_hard", 1, &n_xray_snaps, xray_hard_all);
+    H5LTmake_dataset_double(file_id, "XrayEmissivity_soft", 1, &n_xray_snaps, xray_soft_all);
+    H5LTmake_dataset_double(file_id, "XrayEmissivity_HMXB", 1, &n_xray_snaps, xray_hmxb_all);
+    free(xray_hard_all);
+    free(xray_soft_all);
+    free(xray_hmxb_all);
   }
 
   char target_group[50];
@@ -1166,16 +1197,6 @@ void create_master_file()
       sprintf(source_ds, "Snap%03d/XrayLF_obs", run_globals.ListOutputSnaps[i_out]);
       H5Lcreate_external(relative_source_file, source_ds, snap_group_id, "XrayLF_obs", H5P_DEFAULT, H5P_DEFAULT);
     }
-    if (run_globals.params.Flag_OutputXrayLF) {
-      // NHTrans is now a single run-level dataset written once above, not
-      // linked per-snapshot.
-      // NHfrac: single 2D (n_lx_bins_nhfrac, 5) dataset per snapshot.
-      if (H5LTfind_dataset(source_group_id, "NHfrac")) {
-        sprintf(source_ds, "Snap%03d/NHfrac", run_globals.ListOutputSnaps[i_out]);
-        H5Lcreate_external(relative_source_file, source_ds, snap_group_id, "NHfrac", H5P_DEFAULT, H5P_DEFAULT);
-      }
-    }
-
     H5Gclose(source_group_id);
     H5Fclose(source_file_id);
 
@@ -1624,24 +1645,6 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
   int bin_idx;
   double lx_int_lin, lx_obs_lin;
 
-  /* NHfrac depends on Lx as well as NH (_psi() in blackhole_feedback.c
-   * makes obscured fraction decrease with luminosity — the "receding
-   * torus" effect) — so it's binned by Lx, reusing XrayLF's exact bin
-   * scheme (same formula as df_init) so the two are directly comparable.
-   * get_nh_fracs() is a deterministic function of (Lx, z) only — every
-   * galaxy in the same bin at this redshift gets the same fractions — so
-   * per @qyx268's review comment it's evaluated once per Lx bin after the
-   * galaxy loop below, not accumulated/duty-cycle-weighted per galaxy. */
-  int n_lx_bins_nhfrac = (int)((run_globals.params.XrayLF_MaxLogL - run_globals.params.XrayLF_MinLogL) *
-                               run_globals.params.XrayLF_BinsPerDex);
-  if (n_lx_bins_nhfrac < 1)
-    n_lx_bins_nhfrac = 1;
-  double lx_bin_width_nhfrac =
-    (run_globals.params.XrayLF_MaxLogL - run_globals.params.XrayLF_MinLogL) / n_lx_bins_nhfrac;
-
-  // Same for every galaxy in this output batch, per @qyx268's review comment.
-  double z_snap = run_globals.ZZ[run_globals.ListOutputSnaps[i_out]];
-
   int buffer_count = 0;
   while (gal != NULL) {
     // Don't output galaxies which merged at this timestep
@@ -1730,13 +1733,7 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
         }
       }
 #endif
-      
-      // XrayLF — intrinsic 2-10 keV X-ray luminosity function.
-      // XrayLF_obs — observed (post-obscuration) 2-10 keV X-ray luminosity function,
-      // sourced from BHXrayEmissivity (hard band, obscuration-weighted via
-      // apply_xray_obscuration()'s obs_fraction_hard). Stored in 1e10 Lsun
-      // (same convention as QuasarLX), so convert to erg/s here at the
-      // point of use, same as QuasarLX/lx_int_lin below.
+
       if (run_globals.params.Flag_OutputXrayLF) {
         lx_int_lin = (double)output_buffer[buffer_count].QuasarLX;
         lx_obs_lin = (double)output_buffer[buffer_count].BHXrayEmissivity;
@@ -1885,56 +1882,14 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
     df_free(&xraylf);
     df_free(&xraylf_obs);
 
-    /* NHfrac (binned by Lx using XrayLF's own bin scheme) and NHTrans.
-     * Replaces the old NH-only NHfrac0-4 (5 scalars) — per review, a single
-     * NH-only mean hides the luminosity dependence _psi() builds into the
-     * obscured fraction, so this needs a value per (Lx bin, NH bin) pair,
-     * not just per NH bin. get_nh_fracs() depends only on (Lx, z), not on
-     * any individual galaxy, so per @qyx268's review comment each Lx bin's
-     * fractions are evaluated once here, at the bin center, using this
-     * snapshot's z_snap — no per-galaxy accumulation or MPI reduction
-     * needed, since every rank computes the same values from
-     * run_globals.params alone. */
-    if (run_globals.mpi_rank == 0) {
-      hid_t grp = H5Gopen(file_id, target_group, H5P_DEFAULT);
-      double f_det[5];
-      double lx_log_center, lx_lin_1e10Lsun;
-      /* Single 2D dataset (n_lx_bins_nhfrac, 5) instead of one scalar dataset
-       * per (Lx bin, NH bin) pair — per @qyx268's review comment. */
-      double* nhfrac_table = malloc((size_t)n_lx_bins_nhfrac * 5 * sizeof(double));
-      for (int ilx = 0; ilx < n_lx_bins_nhfrac; ilx++) {
-        lx_log_center = run_globals.params.XrayLF_MinLogL + (ilx + 0.5) * lx_bin_width_nhfrac;
-        lx_lin_1e10Lsun = pow(10.0, lx_log_center - 10.0 - LOG_10_SOLAR_LUM);
-        get_nh_fracs(lx_lin_1e10Lsun, z_snap, f_det);
-        for (int ib = 0; ib < 5; ib++)
-          nhfrac_table[ilx * 5 + ib] = f_det[ib];
-      }
-      hsize_t nhfrac_dims[2] = { (hsize_t)n_lx_bins_nhfrac, 5 };
-      H5LTmake_dataset_double(grp, "NHfrac", 2, nhfrac_dims, nhfrac_table);
-      free(nhfrac_table);
-
-      /* NHTrans is a run-constant (band-averaged photoelectric transmission per
-       * NH bin — depends only on NuXraySoftCut/NuXrayMax/SpecIndexXrayAGNHard,
-       * not on redshift), so per @qyx268's review it's written once in
-       * create_master_file() instead of being repeated in every snapshot. */
-
-      H5Gclose(grp);
-    }
   }
+
+  
 
   // Close the group.
   H5Gclose(group_id);
 
-  // Close the file.
-  // H5Fclose(file_id);
-
-  // Do NOT close file_id here — it is run_globals.output_file_id, which is
-  // kept open for the lifetime of the run.  close_hdf5_file() handles the
-  // final close.
-
-  // Flush (but do not close) this snapshot's data to disk now, so it
-  // survives a crash later in the run rather than being lost with
-  // everything that was never flushed.
+  // Flush (but do not close) this snapshot's data to disk now, so it survives a crash later in the run rather than being lost with everything that was never flushed.
   H5Fflush(run_globals.output_file_id, H5F_SCOPE_GLOBAL);
 
   // Update the value of last_n_write

@@ -1,3 +1,4 @@
+#include <gsl/gsl_errno.h>
 #include <gsl/gsl_integration.h>
 #include <string.h>
 #include <time.h>
@@ -20,6 +21,7 @@
 #include "save.h"
 #include "stellar_feedback.h"
 #include "virial_properties.h"
+#include "XRayHeatingFunctions.h"
 #include "physics/emission_lines.h"
 #include "physics/blackhole_feedback.h"
 #if USE_MINI_HALOS
@@ -151,6 +153,14 @@ static void read_snap_list()
     run_globals.rhocrit = malloc(sizeof(double) * run_globals.params.SnaplistLength);
   }
   MPI_Bcast(run_globals.AA, run_globals.params.SnaplistLength, MPI_DOUBLE, 0, run_globals.mpi_comm);
+
+  if (run_globals.params.Flag_IncludeSpinTemp) {
+    stored_fcoll = calloc((size_t)run_globals.params.SnaplistLength, sizeof(double));
+    stored_fcollIII = calloc((size_t)run_globals.params.SnaplistLength, sizeof(double));
+    stored_XrayEmissivity_hard = calloc((size_t)run_globals.params.SnaplistLength, sizeof(double));
+    stored_XrayEmissivity_soft = calloc((size_t)run_globals.params.SnaplistLength, sizeof(double));
+    stored_XrayEmissivity_HMXB = calloc((size_t)run_globals.params.SnaplistLength, sizeof(double));
+  }
 }
 
 double integrand_time_to_present(double a, void* params)
@@ -205,6 +215,15 @@ void set_units()
   // convert some physical input parameters to internal units
   run_globals.Hubble = HUBBLE * units->UnitTime_in_s;
   run_globals.EddingtonTimescale = EDDINGTON_TIME_SCALE * run_globals.params.Hubble_h / units->UnitTime_in_Megayears;
+  /* gal->QuasarLuv is nu*L_nu at 1450A (Lbol/kb, with kb the Shen et al. 2020
+   * bolometric correction calibrated against L1450 = nu_1450*L_nu(1450), not
+   * L_nu itself). Rescaling a nu*L_nu amplitude via a single L_nu ~ nu^-alpha
+   * power law from NU_1450 to NU_LL needs an extra +1 in the exponent versus
+   * the plain L_nu ratio: NU_LL*L_nu(NU_LL) = NU_1450*L_nu(NU_1450) *
+   * (NU_LL/NU_1450)^(1-alpha). Using exponent -alpha alone (as before)
+   * underweights QuasarLWScale by a factor of NU_LL/NU_1450 ~ 1.59. */
+  run_globals.QuasarLWScale = pow(NU_LL / NU_1450, 1.0 - run_globals.params.physics.SpecIndexUVAGNSoft) *
+                              run_globals.params.physics.AGNLWEfficiency;
 
   // compute a few quantitites
   run_globals.RhoCrit = 3 * run_globals.Hubble * run_globals.Hubble / (8 * M_PI * run_globals.G);
@@ -230,6 +249,8 @@ void init_meraxes()
 {
   int i;
   int snaplist_len;
+
+  gsl_set_error_handler_off();
 
   // initialize GPU
   init_gpu();
@@ -306,13 +327,11 @@ void init_meraxes()
   set_ReionEfficiency();
   set_quasar_fobs();
 
-  // Build the AGN NH-obscuration transmission tables once here, rather
-  // than lazily (with a guard check) on every single AGN every snapshot.
   init_xray_obscuration_tables();
 
   if (run_globals.params.Flag_IncludeSpinTemp){
-    run_globals.NstoreSnapshots_SFR = set_sfr_history();
-    mlog("Storing %d snapshots of SFR histories for Ts.", MLOG_MESG, run_globals.NstoreSnapshots_SFR);
+    run_globals.NstoreSnapshots_Heating = set_sfr_history();
+    mlog("Storing %d snapshots of SFR histories for Ts.", MLOG_MESG, run_globals.NstoreSnapshots_Heating);
   }
 
   // Determine the size of the light-cone for initialising the light-cone grid
