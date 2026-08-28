@@ -186,12 +186,26 @@ void merge_with_target(galaxy_t* gal, int* dead_gals, int snapshot)
   parent->GrossStellarMassIII += gal->GrossStellarMassIII;
   parent->FescIIIWeightedGSM += gal->FescIIIWeightedGSM;
   parent->FescIIIWeightedSfr += gal->FescIIIWeightedSfr;
+#if USE_STOCHASTICITY
+  parent->SfrIIINoScatter += gal->SfrIIINoScatter;
+  parent->GrossStellarMassIIINoScatter +=
+      gal->GrossStellarMassIIINoScatter;
+  parent->StochasticityTreatedFescIIIWeightedGSM += gal->StochasticityTreatedFescIIIWeightedGSM;
+  parent->StochasticityTreatedFescIIIWeightedSfr += gal->StochasticityTreatedFescIIIWeightedSfr;
+#endif
 #endif
   parent->GrossStellarMass += gal->GrossStellarMass;
   parent->FescWeightedGSM += gal->FescWeightedGSM;
+#if USE_STOCHASTICITY
+  // Cumulative no-scatter source histories.
+  parent->SfrNoScatter += gal->SfrNoScatter;
+  parent->GrossStellarMassNoScatter += gal->GrossStellarMassNoScatter;
+  parent->StochasticityTreatedFescWeightedGSM += gal->StochasticityTreatedFescWeightedGSM;
+  parent->StochasticityTreatedFescWeightedSfr += gal->StochasticityTreatedFescWeightedSfr;
+#endif
   parent->MetalsStellarMass += gal->MetalsStellarMass;
   parent->Sfr += gal->Sfr;
-  parent->FescWeightedSfr += gal->Sfr * gal->Fesc;
+  parent->FescWeightedSfr += gal->FescWeightedSfr;
   parent->HotGas += gal->HotGas;
   parent->MetalsHotGas += gal->MetalsHotGas;
   parent->ColdGas += gal->ColdGas;

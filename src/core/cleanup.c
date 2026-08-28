@@ -2,6 +2,9 @@
 
 #include "magnitudes.h"
 #include "meraxes.h"
+#if USE_STOCHASTICITY
+#include "Stochasticity.h"
+#endif
 #include "parse_paramfile.h"
 #include "read_grids.h"
 #include "read_halos.h"
@@ -37,6 +40,10 @@ void cleanup()
     free_reionization_grids();
     fftwf_mpi_cleanup();
   }
+
+#if USE_STOCHASTICITY
+  no_shmr_sources_free();
+#endif
 
   if (run_globals.params.Flag_IncludeRecombinations) {
     free_MHR();

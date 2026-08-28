@@ -10,6 +10,9 @@
 #include "magnitudes.h"
 #include "meraxes.h"
 #include "misc_tools.h"
+#if USE_STOCHASTICITY
+#include "Stochasticity.h"
+#endif
 #include "parse_paramfile.h"
 #include "read_halos.h"
 #include "recombinations.h"
@@ -268,6 +271,10 @@ void init_meraxes()
   // read the input snaps list
   read_snap_list();
 
+#if USE_STOCHASTICITY
+  if (run_globals.params.physics.Flag_RemoveSHMRScatter == 1)
+    no_shmr_sources_init();
+#endif
   // parse the requested output snaps
   parse_output_snaps(run_globals.params.OutputSnapsString);
 

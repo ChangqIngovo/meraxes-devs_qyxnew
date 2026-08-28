@@ -1,6 +1,11 @@
 #include <assert.h>
 #include <math.h>
 
+#if USE_STOCHASTICITY
+#include <gsl/gsl_cdf.h>
+#include <gsl/gsl_rng.h>
+#endif
+
 #include "debug.h"
 #include "meraxes.h"
 #include "misc_tools.h"
@@ -46,6 +51,29 @@ double calc_metallicity(double total_gas, double metals)
 
   return Z;
 }
+
+#if USE_STOCHASTICITY
+double apply_lognormal_scatter(double mean_esc, double scatter_dex)
+{
+  double sigma_ln;
+  double zeta;
+  double u;
+  double g;
+  double scattered_fesc;
+
+  if (scatter_dex <= 0.0 || mean_esc <= 0.0)
+    return mean_esc;
+
+  sigma_ln = log(10.0) * scatter_dex;
+  zeta = log(mean_esc);
+  u = gsl_rng_uniform(run_globals.random_generator);
+  g = gsl_cdf_ugaussian_Pinv(u);
+
+  scattered_fesc = exp(zeta + sigma_ln * g);
+  CLAMP_0_1(scattered_fesc);
+  return scattered_fesc;
+}
+#endif
 
 int compare_ints(const void* a, const void* b)
 {

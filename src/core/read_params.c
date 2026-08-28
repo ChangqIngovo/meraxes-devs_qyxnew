@@ -10,6 +10,44 @@ static void check_problem_params(run_params_t* run_params)
     ABORT(EXIT_FAILURE);
   }
 
+#if USE_STOCHASTICITY
+  if (run_params->physics.EscapeFracScatterDex > ABS_TOL &&
+      run_params->physics.Flag_RemoveSHMRScatter != 0) {
+      mlog_error(
+            "Both EscapeFracScatterDex and Flag_RemoveSHMRScatter are set. "
+            "Please choose one or the other."
+      );
+      ABORT(EXIT_FAILURE);      
+  }
+  if (run_params->physics.EscapeFracScatterDex <= ABS_TOL &&
+      run_params->physics.Flag_RemoveSHMRScatter == 0 && 
+      run_params->physics.Flag_SourceRecalibration != 0) {
+      mlog_error(
+            "Flag_SourceRecalibration is set, but neither EscapeFracScatterDex nor Flag_RemoveSHMRScatter are set. "
+            "Please choose one of these options."
+      );
+      ABORT(EXIT_FAILURE);      
+  }
+  if (run_params->physics.Flag_RemoveSHMRScatter != 0 &&
+      (run_params->physics.EscapeFracDependency > 1 && 
+      run_params->physics.EscapeFracDependency != 5)) {
+      mlog_error(
+            "Flag_RemoveSHMRScatter is set, but EscapeFracDependency is set to %d. "
+            "Please set EscapeFracDependency to 0, 1 or 5.", run_params->physics.EscapeFracDependency);
+      ABORT(EXIT_FAILURE);
+  }
+#else
+  if (run_params->physics.EscapeFracScatterDex > ABS_TOL ||
+      run_params->physics.Flag_RemoveSHMRScatter != 0 ||
+      run_params->physics.Flag_SourceRecalibration != 0) {
+    mlog_error(
+        "A scatter prescription was requested, but Meraxes was compiled "
+        "with USE_STOCHASTICITY=OFF."
+    );
+    ABORT(EXIT_FAILURE);
+  }
+#endif
+
   if (strlen(run_globals.params.ForestIDFile) != 0) {
     mlog("*** YOU HAVE PROVIDED A REQUESTED FORESTID FILE. THIS FEATURE HAS NOT BE WELL TESTED. YMMV! ***", MLOG_MESG);
   }
@@ -171,7 +209,7 @@ void read_parameter_file(char* fname, int mode)
       required_tag[n_param] = 1;
 #endif
       params_type[n_param++] = PARAM_TYPE_STRING;
-
+            
       strcpy(params_tag[n_param], "TargetSnaps");
       params_addr[n_param] = run_params->TargetSnaps;
 #ifndef CALC_MAGS
@@ -547,6 +585,11 @@ void read_parameter_file(char* fname, int mode)
 #else
       required_tag[n_param] = 0;
 #endif
+      params_type[n_param++] = PARAM_TYPE_INT;
+
+      strncpy(params_tag[n_param],"Flag_SourceRecalibration",tag_length);
+      params_addr[n_param] = &(run_params->physics).Flag_SourceRecalibration;
+      required_tag[n_param] = 0;
       params_type[n_param++] = PARAM_TYPE_INT;
 
       strncpy(params_tag[n_param], "SfEfficiency", tag_length);
@@ -1087,6 +1130,17 @@ void read_parameter_file(char* fname, int mode)
       params_addr[n_param] = &(run_params->physics).EscapeFracBHScaling;
       required_tag[n_param] = 1;
       params_type[n_param++] = PARAM_TYPE_DOUBLE;
+
+      strncpy(params_tag[n_param], "EscapeFracScatterDex", tag_length);
+      params_addr[n_param] = &(run_params->physics).EscapeFracScatterDex;
+      required_tag[n_param] = 0;
+      params_type[n_param++] = PARAM_TYPE_DOUBLE;
+      
+      strncpy(params_tag[n_param], "Flag_RemoveSHMRScatter", tag_length);
+      params_addr[n_param] = &(run_params->physics).Flag_RemoveSHMRScatter;
+      required_tag[n_param] = 0;
+      params_type[n_param++] = PARAM_TYPE_INT;
+
 
       strncpy(params_tag[n_param], "FescCGMSuppressionNorm", tag_length);
       params_addr[n_param] = &(run_params->physics).FescCGMSuppressionNorm;
