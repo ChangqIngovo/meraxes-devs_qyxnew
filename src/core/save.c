@@ -1884,7 +1884,7 @@ void write_snapshot(int n_write, int i_out, int* last_n_write)
 
   }
 
-  
+
 
   // Close the group.
   H5Gclose(group_id);

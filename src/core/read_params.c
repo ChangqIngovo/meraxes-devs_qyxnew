@@ -28,16 +28,9 @@ static void check_problem_params(run_params_t* run_params)
       );
       ABORT(EXIT_FAILURE);      
   }
-  if (run_params->physics.Flag_RemoveSHMRScatter != 0 &&
-      (run_params->physics.EscapeFracDependency > 1 && 
-      run_params->physics.EscapeFracDependency != 5)) {
-      mlog_error(
-            "Flag_RemoveSHMRScatter is set, but EscapeFracDependency is set to %d. "
-            "Please set EscapeFracDependency to 0, 1 or 5.", run_params->physics.EscapeFracDependency);
-      ABORT(EXIT_FAILURE);
-  }
 #else
   if (run_params->physics.EscapeFracScatterDex > ABS_TOL ||
+      run_params->physics.XrayScatterDex > 0.0 ||
       run_params->physics.Flag_RemoveSHMRScatter != 0 ||
       run_params->physics.Flag_SourceRecalibration != 0) {
     mlog_error(
@@ -1230,6 +1223,11 @@ void read_parameter_file(char* fname, int mode)
       strcpy(params_tag[n_param], "LXrayGal");
       params_addr[n_param] = &(run_params->physics).LXrayGal;
       required_tag[n_param] = 1;
+      params_type[n_param++] = PARAM_TYPE_DOUBLE;
+
+      strcpy(params_tag[n_param], "XrayScatterDex");
+      params_addr[n_param] = &(run_params->physics).XrayScatterDex;
+      required_tag[n_param] = 0;
       params_type[n_param++] = PARAM_TYPE_DOUBLE;
 
       strcpy(params_tag[n_param], "NuXrayThreshold");

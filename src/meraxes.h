@@ -33,6 +33,9 @@
 #define SEC_PER_MEGAYEAR 3.155e13
 #define SEC_PER_YEAR 3.155e7
 #define MPC 3.086e24
+#if USE_STOCHASTICITY
+#define XRAY_LUMINOSITY_UNIT 1.0e40 // [erg/s]
+#endif
 #define TCMB 2.728
 #define NU_LL (double)(3.29e15)
 #define NU_LW (double)(2.71e15)
@@ -163,6 +166,7 @@ typedef struct physics_params_t
 
   // Parameters to describe the X-ray properties of the sources
   double LXrayGal;
+  double XrayScatterDex;
   double NuXrayThreshold;
   double SpecIndexXrayGal;
   double LXrayGalIII;
@@ -476,6 +480,15 @@ typedef struct reion_grids_t
   fftwf_plan sfr_filtered_reverse_plan;
   fftwf_plan weighted_sfr_filtered_reverse_plan;
 
+#if USE_STOCHASTICITY
+  float* xray_luminosity;           // Cell luminosity in units of 1e40 erg/s
+  float* xray_luminosity_histories; // Stored luminosity grids in units of 1e40 erg/s
+  fftwf_complex* xray_luminosity_unfiltered;
+  fftwf_complex* xray_luminosity_filtered;
+  fftwf_plan xray_luminosity_forward_plan;
+  fftwf_plan xray_luminosity_filtered_reverse_plan;
+#endif
+
 #if USE_MINI_HALOS
   float* starsIII;
   fftwf_complex* starsIII_unfiltered;
@@ -524,6 +537,9 @@ typedef struct reion_grids_t
 #endif
 
   double* SMOOTHED_SFR_GAL;
+#if USE_STOCHASTICITY
+  double* SMOOTHED_XRAY_LUMINOSITY_GAL; // Per-cell luminosity density per shell [erg/s/cm^3]
+#endif
   double* SMOOTHED_AGN_hard;       //!< per-cell AGN X-ray luminosity density per shell [erg/s/cm^3] (hard band)
   double* SMOOTHED_AGN_soft;  //!< per-cell AGN X-ray luminosity density per shell [erg/s/cm^3] (soft band)
 #if USE_MINI_HALOS

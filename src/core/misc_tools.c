@@ -70,7 +70,6 @@ double apply_lognormal_scatter(double mean_esc, double scatter_dex)
   g = gsl_cdf_ugaussian_Pinv(u);
 
   scattered_fesc = exp(zeta + sigma_ln * g);
-  CLAMP_0_1(scattered_fesc);
   return scattered_fesc;
 }
 #endif

@@ -176,9 +176,16 @@ void _ComputeTs(int snapshot)
   double R_values[TsNumFilterSteps];
   int snapshot_counter_backwards[TsNumFilterSteps];
   double zedge;
-
-  double ans[2], dansdz[20], xHII_call;
+#if USE_MINI_HALOS
+  double ans[3], dansdz[13];
+#else
+  double ans[2], dansdz[13];
+#endif
+  double xHII_call;
   double SFR_GAL[TsNumFilterSteps];
+#if USE_STOCHASTICITY
+  double XRAY_LUMINOSITY_GAL[TsNumFilterSteps];
+#endif
   double XAGN_soft[TsNumFilterSteps];
   double XAGN_hard[TsNumFilterSteps];
 #if USE_MINI_HALOS
@@ -203,6 +210,10 @@ void _ComputeTs(int snapshot)
 
   fftwf_complex* sfr_unfiltered = run_globals.reion_grids.sfr_unfiltered;
   fftwf_complex* sfr_filtered = run_globals.reion_grids.sfr_filtered;
+#if USE_STOCHASTICITY
+  fftwf_complex* xray_luminosity_unfiltered = run_globals.reion_grids.xray_luminosity_unfiltered;
+  fftwf_complex* xray_luminosity_filtered = run_globals.reion_grids.xray_luminosity_filtered;
+#endif
 
   fftwf_complex* BHXrayEmissivity_unfiltered = run_globals.reion_grids.BHXrayEmissivity_unfiltered;
   fftwf_complex* BHXrayEmissivity_filtered = run_globals.reion_grids.BHXrayEmissivity_filtered;
@@ -219,6 +230,9 @@ void _ComputeTs(int snapshot)
 #endif
 
   double* SMOOTHED_SFR_GAL = run_globals.reion_grids.SMOOTHED_SFR_GAL;
+#if USE_STOCHASTICITY
+  double* SMOOTHED_XRAY_LUMINOSITY_GAL = run_globals.reion_grids.SMOOTHED_XRAY_LUMINOSITY_GAL;
+#endif
   double* SMOOTHED_AGN_hard      = run_globals.reion_grids.SMOOTHED_AGN_hard;
   double* SMOOTHED_AGN_soft = run_globals.reion_grids.SMOOTHED_AGN_soft;
 #if USE_MINI_HALOS
@@ -370,8 +384,12 @@ void _ComputeTs(int snapshot)
 #ifdef DEBUG
           mlog("R_ct = %d, went beyong snapshot 0, clear tocf sfr grids.", MLOG_MESG, R_ct);
 #endif
-          for (int ii = 0; ii < slab_n_complex; ii++)
+          for (int ii = 0; ii < slab_n_complex * 2; ii++){
               grids->sfr[ii] = 0;
+#if USE_STOCHASTICITY
+              grids->xray_luminosity[ii] = 0;
+#endif
+          }
           snapshot_counter_backwards[R_ct] += 1;
       }
       else if (zpp_edge[R_ct] > run_globals.ZZ[snapshot - snapshot_counter_backwards[R_ct]]){
@@ -380,8 +398,12 @@ void _ComputeTs(int snapshot)
 #ifdef DEBUG
             mlog("R_ct = %d, reaching %d snapshots earlier, reweighting tocf sfr grids at snapshot %d with a weight of %.2f...", MLOG_OPEN, R_ct, snapshot_counter_backwards[R_ct]-1, snapshot-snapshot_counter_backwards[R_ct]+1, weight);
 #endif
-            for (int ii = 0; ii < slab_n_complex; ii++)
+            for (int ii = 0; ii < slab_n_complex * 2; ii++){
                  grids->sfr[ii] *= weight;
+#if USE_STOCHASTICITY
+                 grids->xray_luminosity[ii] *= weight;
+#endif
+            }
         }
         else{
           if (run_globals.ZZ[snapshot - snapshot_counter_backwards[R_ct]] > zpp_edge[R_ct-1]){
@@ -399,8 +421,12 @@ void _ComputeTs(int snapshot)
 #ifdef DEBUG
             mlog("R_ct = %d, reaching %d snapshots earlier, same as R_ct = %d, clear tocf sfr grids...", MLOG_OPEN, R_ct, snapshot_counter_backwards[R_ct], R_ct - 1);
 #endif
-            for (int ii = 0; ii < slab_n_complex; ii++)
+            for (int ii = 0; ii < slab_n_complex * 2; ii++){
                  grids->sfr[ii] = 0;;
+#if USE_STOCHASTICITY
+                 grids->xray_luminosity[ii] = 0;
+#endif
+            }
           }
         }
         while (zpp_edge[R_ct] > run_globals.ZZ[snapshot - snapshot_counter_backwards[R_ct]]){
@@ -413,8 +439,9 @@ void _ComputeTs(int snapshot)
               break;
           }
           if (zpp_edge[R_ct] < run_globals.ZZ[snapshot - snapshot_counter_backwards[R_ct] - 1]){
-            zedge = zpp_edge[R_ct-1] ?  run_globals.ZZ[snapshot - snapshot_counter_backwards[R_ct]]:zpp_edge[R_ct-1]>run_globals.ZZ[snapshot - snapshot_counter_backwards[R_ct]];
-
+            zedge = prev_zpp > run_globals.ZZ[snapshot - snapshot_counter_backwards[R_ct]]
+            ? prev_zpp
+            : run_globals.ZZ[snapshot - snapshot_counter_backwards[R_ct]];
             weight = zpp_edge[R_ct] - zedge;
             weight *= -dtdz(0.5*(zpp_edge[R_ct]+zedge));
           }
@@ -455,6 +482,11 @@ void _ComputeTs(int snapshot)
       // TODO: Double check that looping over correct number of elements here
       for (int ii = 0; ii < slab_n_complex; ii++)
         sfr_unfiltered[ii] /= (float)total_n_cells;
+#if USE_STOCHASTICITY
+      fftwf_execute(run_globals.reion_grids.xray_luminosity_forward_plan);
+      for (int ii = 0; ii < slab_n_complex; ii++)
+        xray_luminosity_unfiltered[ii] /= (float)total_n_cells;
+#endif
   #if USE_MINI_HALOS
       fftwf_execute(run_globals.reion_grids.sfrIII_forward_plan);
       for (int ii = 0; ii < slab_n_complex; ii++)
@@ -480,6 +512,9 @@ void _ComputeTs(int snapshot)
 #endif
 
       memcpy(sfr_filtered, sfr_unfiltered, sizeof(fftwf_complex) * slab_n_complex);
+#if USE_STOCHASTICITY
+      memcpy(xray_luminosity_filtered, xray_luminosity_unfiltered, sizeof(fftwf_complex) * slab_n_complex);
+#endif
   #if USE_MINI_HALOS
       memcpy(sfrIII_filtered, sfrIII_unfiltered, sizeof(fftwf_complex) * slab_n_complex);
   #endif
@@ -496,6 +531,9 @@ void _ComputeTs(int snapshot)
         int local_ix_start = (int)(run_globals.reion_grids.slab_ix_start[run_globals.mpi_rank]);
 
         filter(sfr_filtered, local_ix_start, local_nix, ReionGridDim, (float)R, run_globals.params.TsHeatingFilterType);
+#if USE_STOCHASTICITY
+        filter(xray_luminosity_filtered, local_ix_start, local_nix, ReionGridDim, (float)R, run_globals.params.TsHeatingFilterType);
+#endif
   #if USE_MINI_HALOS
         filter(sfrIII_filtered, local_ix_start, local_nix, ReionGridDim, (float)R, run_globals.params.TsHeatingFilterType);
   #endif
@@ -511,6 +549,9 @@ void _ComputeTs(int snapshot)
 
       // inverse fourier transform back to real space
       fftwf_execute(run_globals.reion_grids.sfr_filtered_reverse_plan);
+#if USE_STOCHASTICITY
+      fftwf_execute(run_globals.reion_grids.xray_luminosity_filtered_reverse_plan);
+#endif
   #if USE_MINI_HALOS
       fftwf_execute(run_globals.reion_grids.sfrIII_filtered_reverse_plan);
   #endif
@@ -539,9 +580,17 @@ void _ComputeTs(int snapshot)
               SMOOTHED_SFR_GAL[i_smoothed_heating] = (((float*)sfr_filtered)[i_padded] / pixel_volume) *
                                                 (units->UnitMass_in_g / units->UnitTime_in_s) *
                                                 pow(units->UnitLength_in_cm, -3.) / SOLAR_MASS;
+#if USE_STOCHASTICITY
+              SMOOTHED_XRAY_LUMINOSITY_GAL[i_smoothed_heating] =
+                (((float*)xray_luminosity_filtered)[i_padded] / pixel_volume) *
+                XRAY_LUMINOSITY_UNIT * pow(units->UnitLength_in_cm, -3.);
 
+              hmxb_xray_ave += SMOOTHED_XRAY_LUMINOSITY_GAL[i_smoothed_heating];
+#else
+//Should include a hmxb_xray_ave branch in USE_STOCHASTICITY? I've added a line but correct it if I am wrong
               hmxb_xray_ave += run_globals.params.physics.LXrayGal * SEC_PER_YEAR *
                                SMOOTHED_SFR_GAL[i_smoothed_heating];
+#endif
 #if USE_MINI_HALOS
               ((float*)sfrIII_filtered)[i_padded] = fmaxf(((float*)sfrIII_filtered)[i_padded], 0.0);
 
@@ -645,6 +694,11 @@ void _ComputeTs(int snapshot)
               SMOOTHED_SFR_GAL[i_smoothed_heating] = (((float*)sfr_filtered)[i_padded] / pixel_volume) *
                                                 (units->UnitMass_in_g / units->UnitTime_in_s) *
                                                 pow(units->UnitLength_in_cm, -3.) / SOLAR_MASS;
+#if USE_STOCHASTICITY
+              SMOOTHED_XRAY_LUMINOSITY_GAL[i_smoothed_heating] =
+                (((float*)xray_luminosity_filtered)[i_padded] / pixel_volume) *
+                XRAY_LUMINOSITY_UNIT * pow(units->UnitLength_in_cm, -3.);
+#endif
 #if USE_MINI_HALOS
               SMOOTHED_SFR_III[i_smoothed_heating] = (((float*)sfrIII_filtered)[i_padded] / pixel_volume) *
                                                 (units->UnitMass_in_g / units->UnitTime_in_s) *
@@ -959,11 +1013,9 @@ void _ComputeTs(int snapshot)
         pow(run_globals.params.physics.NuXrayThreshold * NU_over_EV, -run_globals.params.physics.SpecIndexXrayGal) *
         (1 - run_globals.params.physics.SpecIndexXrayGal);
     }
+    Luminosity_converstion_factor_GAL *= 1.0 / PLANCK;
     // Finally, convert to the correct units. NU_over_EV*hplank as only want to divide by eV -> erg (owing to the
     // definition of Luminosity)
-
-    Luminosity_converstion_factor_GAL *= (SEC_PER_YEAR) / (PLANCK);
-
     if (fabs(run_globals.params.physics.SpecIndexXrayAGNSoft - 1.0) < REL_TOL) {
       Luminosity_converstion_factor_AGN_soft =
         (run_globals.params.physics.NuXrayThreshold * NU_over_EV) *
@@ -1022,7 +1074,6 @@ void _ComputeTs(int snapshot)
         pow(run_globals.params.physics.NuXrayThreshold * NU_over_EV, -run_globals.params.physics.SpecIndexXrayIII) *
         (1 - run_globals.params.physics.SpecIndexXrayIII);
     }
-
     Luminosity_converstion_factor_III *= (SEC_PER_YEAR) / (PLANCK);
 #endif
 
@@ -1030,9 +1081,15 @@ void _ComputeTs(int snapshot)
     //        const_zp_prefactor_GAL = (1.0/0.59)*( run_globals.params.physics.LXrayGal *
     //        Luminosity_converstion_factor_GAL ) / (run_globals.params.physics.NuXrayThreshold*NU_over_EV) *
     //        SPEED_OF_LIGHT * pow(1+zp, run_globals.params.physics.SpecIndexXrayGal+3);
-    const_zp_prefactor_GAL = (run_globals.params.physics.LXrayGal * Luminosity_converstion_factor_GAL) /
-                             (run_globals.params.physics.NuXrayThreshold * NU_over_EV) * SPEED_OF_LIGHT *
-                             pow(1 + zp, run_globals.params.physics.SpecIndexXrayGal + 3);
+#if USE_STOCHASTICITY
+    const_zp_prefactor_GAL = Luminosity_converstion_factor_GAL / 
+    (run_globals.params.physics.NuXrayThreshold * NU_over_EV) * SPEED_OF_LIGHT *
+    pow(1 + zp,run_globals.params.physics.SpecIndexXrayGal + 3);
+#else
+    const_zp_prefactor_GAL = (run_globals.params.physics.LXrayGal * SEC_PER_YEAR * 
+    Luminosity_converstion_factor_GAL) /(run_globals.params.physics.NuXrayThreshold * NU_over_EV) * 
+    SPEED_OF_LIGHT * pow(1 + zp, run_globals.params.physics.SpecIndexXrayGal + 3);
+#endif
 #if USE_MINI_HALOS
     const_zp_prefactor_III = (run_globals.params.physics.LXrayGalIII * Luminosity_converstion_factor_III) /
                              (run_globals.params.physics.NuXrayThreshold * NU_over_EV) * SPEED_OF_LIGHT *
@@ -1086,7 +1143,9 @@ void _ComputeTs(int snapshot)
             i_smoothed_heating = grid_index_smoothedSFR(R_ct, ix, iy, iz, TsNumFilterSteps, ReionGridDim);
 
             SFR_GAL[R_ct] = SMOOTHED_SFR_GAL[i_smoothed_heating];
-
+#if USE_STOCHASTICITY
+            XRAY_LUMINOSITY_GAL[R_ct] = SMOOTHED_XRAY_LUMINOSITY_GAL[i_smoothed_heating];
+#endif
             {
               XAGN_soft[R_ct] = agn_soft_needed ? SMOOTHED_AGN_soft[i_smoothed_heating] : 0.0;
               XAGN_hard[R_ct] = agn_hard_needed ? SMOOTHED_AGN_hard[i_smoothed_heating] : 0.0;
@@ -1209,6 +1268,9 @@ void _ComputeTs(int snapshot)
           evolveInt((float)zp,
                     run_globals.reion_grids.deltax[i_padded],
                     SFR_GAL,
+#if USE_STOCHASTICITY
+                    XRAY_LUMINOSITY_GAL,
+#endif
                     SFR_III,
                     XAGN_soft,
                     XAGN_hard,
@@ -1232,6 +1294,9 @@ void _ComputeTs(int snapshot)
           evolveInt((float)zp,
                     run_globals.reion_grids.deltax[i_padded],
                     SFR_GAL,
+#if USE_STOCHASTICITY
+                    XRAY_LUMINOSITY_GAL,
+#endif
                     XAGN_soft,
                     XAGN_hard,
                     freq_int_heat_GAL,
@@ -1368,7 +1433,8 @@ void _ComputeTs(int snapshot)
     for (int iy = 0; iy < ReionGridDim; iy++)
       for (int iz = 0; iz < ReionGridDim; iz++) {
         i_real = grid_index(ix, iy, iz, ReionGridDim, INDEX_REAL);
-
+        i_padded = grid_index(ix, iy, iz, ReionGridDim, INDEX_PADDED);
+        
         Ave_Ts += (double)TS_box[i_real];
         Ave_Tk += (double)Tk_box[i_real];
         Ave_x_e += (double)x_e_box_prev[i_padded];
