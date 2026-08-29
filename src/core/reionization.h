@@ -35,6 +35,12 @@
 
 // Parameters taken from 21cmFAST
 #define MAX_TK (float)5e4
+// Floor for Tk_box/Tk_boxII after the trapezoidal-integrator overcooling
+// guard below. 1/TK and 1/TK^2 appear repeatedly in Salpha_tilde()/Tc_eff()
+// (spin-temperature coupling, XRayHeatingFunctions.c) — letting TK reach
+// zero (not just negative) blows those up to Inf/NaN, which get_Ts()'s
+// convergence loop then silently hands back rather than catching.
+#define MIN_TK (float)0.1
 #define L_FACTOR 0.620350491 // Factor relating cube length to filter radius = (4PI/3)^(-1/3)
 #define MAX_DVDR (float)(0.2)
 
@@ -68,6 +74,7 @@ extern "C"
   void gen_grids_fname(const int snapshot, char* name, const bool relative);
   void save_reion_input_grids(int snapshot);
   void load_reion_sfr_grids(int snapshot_counter_backwards, float weight, const int new_load);
+  void load_reion_bh_grids(int snapshot_counter_backwards, float weight, const int new_load);
   void save_reion_output_attributes(int snapshot);
   void save_reion_output_grids(int snapshot);
   bool check_if_reionization_ongoing(int snapshot);

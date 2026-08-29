@@ -58,9 +58,12 @@ NuXraySoftCut              : 2000.           # X-ray soft-band cut off in (eV)
 NuXrayMax                  : 10000.          # Maximum energy for X-ray band integration. 
 
 # Adding AGN broken-power Spectral index
-Flag_IncludeAGNXray        : 0               # 0=off, 1=soft+hard BPL, 2=hard only, 3=Soft only
+Flag_IncludeAGNXray        : 0               # 0=no AGN, 1=soft+hard, 2=hard only, 3=soft only
 SpecIndexXrayAGNSoft       : 2.2             # Soft-band spectral index (nu^{-alpha}, E < E_break)
 SpecIndexXrayAGNHard       : 1.7             # Hard-band spectral index (nu^{-alpha}, E >= E_break)
+SpecIndexUVAGNSoft         : 0.61            # AGN NUV/FUV continuum slope (nu^{-alpha}, lambda > 912A) — Lusso et al. 2015 (MNRAS 449, 4204; arXiv:1503.02075). Same Soft/Hard naming as SpecIndexXrayAGNSoft/Hard above; E_break here is the Lyman limit (912A, NU_LL), not 1200A. The entire Lyman-Werner band (912-1108A) sits on this same (Soft) side of the break, so it applies throughout when Flag_IncludeLymanWerner is on
+SpecIndexUVAGNHard         : 1.70            # AGN EUV continuum slope (nu^{-alpha}, lambda <= 912A) — Lusso et al. 2015, the steepened index shortward of the Lyman limit. Used only for the ionizing (912A) photon budget in calculate_BHemissivity; never applies inside the LW band. Distinct from ReionAlphaUVBH, a separate, independently-tuned reionization parameter
+AGNLWEfficiency            : 1.0             # Tunable scale factor on the AGN LW amplitude only (see meraxes.h) — not a binary switch, though every run so far leaves it at 1.0. Set to 0 to isolate stellar LW by turning off AGN's contribution, independently of Flag_IncludeLymanWerner
 Flag_BHARExponentialCut    : 0               # 0=duty-cycle weighted emissivity, 1=exponential cut with random on-time
 Flag_OutputXrayLF          : 0               # 0=off, 1=output X-ray luminosity function histograms
 XrayLF_MinLogL             : 38.0            # minimum log10(LX/erg/s) for X-ray LF histogram

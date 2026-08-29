@@ -217,9 +217,12 @@ void calculate_BHemissivity(double BlackHoleMass, double accreted_mass,
   *quasar_luv     = Lbol / kb;
   *quasar_lx      = Lbol / kb_hard;
   *quasar_lx_soft = Lbol / kb_soft;
-  
+
+  /* break_factor = (NU_LL/NU_1450)^-SpecIndexUVAGNSoft */
+  double break_factor = pow(NU_LL / NU_1450, -physics->SpecIndexUVAGNSoft);
+
   // Approximation using the emissivity at the MIDDLE of accretion time
-  *emissivity = physics->quasar_fobs * *quasar_luv * LB2EMISSIVITY
+  *emissivity = physics->quasar_fobs * *quasar_luv * LB2EMISSIVITY * break_factor / physics->SpecIndexUVAGNHard
                * *accretion_time * run_globals.units.UnitTime_in_s
                / run_globals.params.Hubble_h;
 }
@@ -441,10 +444,6 @@ void previous_merger_driven_BH_growth(galaxy_t* gal, int snapshot)
     gal->QuasarLuv        += quasar_luv;
     gal->QuasarLX         += quasar_lx;
     gal->NHbin              = NH_bin; /* -1 if no AGN activity this step */
-    /* Kept in 1e10 Lsun (same convention as QuasarLX/QuasarLuv), not raw
-     * erg/s — a float can't hold raw erg/s luminosities for bright AGN
-     * (~1e43-1e44) without overflowing. Consumers convert at the point of
-     * use, same as QuasarLX already does. */
     gal->BHXrayEmissivity      += quasar_lx      * obs_fraction_hard;
     gal->BHXrayEmissivity_soft += quasar_lx_soft * obs_fraction_soft;
     gal->EffectiveBHAR += BHemissivity;

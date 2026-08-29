@@ -27,9 +27,9 @@
 #define BOLTZMANN 1.3806e-16
 #define GAS_CONST 8.31425e7
 #define SPEED_OF_LIGHT 2.9979e10 // [cm/s]
-#define PLANCK 6.6262e-27        //! [erg/s]
+#define PLANCK 6.6262e-27        // [erg/s]
 #define PROTONMASS 1.6726e-24
-#define HUBBLE 3.2407789e-18 //! [h/sec]
+#define HUBBLE 3.2407789e-18 // [h/sec]
 #define SEC_PER_MEGAYEAR 3.155e13
 #define SEC_PER_YEAR 3.155e7
 #define MPC 3.086e24
@@ -39,6 +39,7 @@
 #define TCMB 2.728
 #define NU_LL (double)(3.29e15)
 #define NU_LW (double)(2.71e15)
+#define NU_1450 (double)(2.0675e15)
 #define PLANCK_EV (double)(4.1357e-15)
 #define T_RE 1e4
 #define EDDINGTON_TIME_SCALE 450.514890  // Eddington timescale in Megayears
@@ -173,10 +174,12 @@ typedef struct physics_params_t
   double NuXraySoftCut;
   double NuXrayMax;
 
-  int Flag_includeAGN;      /* 0=no AGN, 1=soft+hard, 2=hard only, 3=soft only */
-  int Flag_IncludeAGNXray;  /* 0=off, 1=soft+hard BPL, 2=hard only, 3=soft only */
+  int Flag_IncludeAGNXray;      /* 0=no AGN, 1=soft+hard, 2=hard only, 3=soft only */
   double SpecIndexXrayAGNSoft;
   double SpecIndexXrayAGNHard;
+  double SpecIndexUVAGNSoft;    /* lambda > 912A (redward of/at the break) — LW band amplitude/shape */
+  double SpecIndexUVAGNHard;    /* lambda <= 912A (shortward of the break) — ionizing photon rate only */
+  double AGNLWEfficiency;       /* scale factor on the AGN LW amplitude (run_globals.QuasarLWScale) */
 
   double ReionMaxHeatingRedshift;
 
@@ -537,13 +540,36 @@ typedef struct reion_grids_t
 #if USE_STOCHASTICITY
   double* SMOOTHED_XRAY_LUMINOSITY_GAL; // Per-cell luminosity density per shell [erg/s/cm^3]
 #endif
-  double* SMOOTHED_AGN;  // per-cell AGN X-ray luminosity density per shell [erg/s/cm^3]
+  double* SMOOTHED_AGN_hard;       //!< per-cell AGN X-ray luminosity density per shell [erg/s/cm^3] (hard band)
+  double* SMOOTHED_AGN_soft;  //!< per-cell AGN X-ray luminosity density per shell [erg/s/cm^3] (soft band)
 #if USE_MINI_HALOS
   double* SMOOTHED_SFR_III;
+  double* SMOOTHED_AGN_LW;    //!< per-cell AGN Lyman-Werner luminosity density per shell [erg/s/cm^3]
 #endif
 
-  float* BHXrayEmissivity;   //!< Per-cell AGN X-ray emissivity grid (current snapshot) [slab_n_complex*2]
-  float* bh_xray_histories;  //!< Ring-buffer of NstoreSnapshots_SFR past BHXrayEmissivity snapshots
+  float* BHXrayEmissivity;        //!< Per-cell AGN X-ray emissivity grid (current snapshot, hard band) [slab_n_complex*2]
+  float* bh_xray_histories;       //!< Ring-buffer of NstoreSnapshots_Heating past BHXrayEmissivity snapshots
+  float* BHXrayEmissivity_soft;   //!< Per-cell AGN X-ray emissivity grid (current snapshot, soft band) [slab_n_complex*2]
+  float* bh_xray_histories_soft;  //!< Ring-buffer of NstoreSnapshots_Heating past BHXrayEmissivity_soft snapshots
+#if USE_MINI_HALOS
+  float* BHLWEmissivity;          //!< Per-cell AGN LW emissivity grid (current snapshot) [slab_n_complex*2]
+  float* bh_lw_histories;         //!< Ring-buffer of NstoreSnapshots_Heating past BHLWEmissivity snapshots
+#endif
+
+  fftwf_complex* BHXrayEmissivity_unfiltered;
+  fftwf_complex* BHXrayEmissivity_filtered;
+  fftwf_plan BHXrayEmissivity_forward_plan;
+  fftwf_plan BHXrayEmissivity_filtered_reverse_plan;
+  fftwf_complex* BHXrayEmissivity_soft_unfiltered;
+  fftwf_complex* BHXrayEmissivity_soft_filtered;
+  fftwf_plan BHXrayEmissivity_soft_forward_plan;
+  fftwf_plan BHXrayEmissivity_soft_filtered_reverse_plan;
+#if USE_MINI_HALOS
+  fftwf_complex* BHLWEmissivity_unfiltered;
+  fftwf_complex* BHLWEmissivity_filtered;
+  fftwf_plan BHLWEmissivity_forward_plan;
+  fftwf_plan BHLWEmissivity_filtered_reverse_plan;
+#endif
 
   // Grids necessary for LW background and future disentangling between MC/AC Pop3/Pop2 stuff
 
@@ -710,12 +736,8 @@ typedef struct galaxy_t
   double BHemissivity;
   double QuasarLuv;         //!< UV luminosity LUV of quasar (1e10 Lsun, summable for mergers)
   double QuasarLX;               //!< Intrinsic hard X-ray luminosity [1e10 Lsun]; 0 if inactive
-  int    NHbin;                  //!< Which of the 5 NH bins this snapshot's stochastic draw landed in
-                                  //!< (0-4; logNH 20-21/21-22/22-23/23-24/24-26 CTK), or -1 if no AGN
-                                  //!< activity this step. BHXrayEmissivity below already carries that
-                                  //!< bin's observed (obscured) luminosity, so this (bin, luminosity)
-                                  //!< pair replaces the old QuasarLX_obs0-4/NHfrac0-4 fields (5
-                                  //!< mostly-zero doubles each, every galaxy).
+  int    NHbin;                  //!< Which of the 5 NH bins this snapshot's stochastic draw landed in (0-4; logNH 20-21/21-22/22-23/23-24/24-26 CTK), or -1 if no AGN.
+                                  //!<This (bin, luminosity) pair replaces the old QuasarLX_obs0-4/NHfrac0-4 fields (5 mostly-zero doubles each, every galaxy).
   double BHXrayEmissivity;       //!< Observed hard X-ray emissivity [1e10 Lsun], obscuration-weighted
   double BHXrayEmissivity_soft;  //!< Observed soft X-ray emissivity [1e10 Lsun], obscuration-weighted
   double EffectiveBHM;
@@ -947,6 +969,7 @@ typedef struct run_globals_t
   double G;
   double Csquare;
   double EddingtonTimescale;
+  double QuasarLWScale;      //!< pow(NU_LL/NU_1450, 1-SpecIndexUVAGNSoft) * AGNLWEfficiency (nu*L_nu scaling, see init.c)
   loiii_params_t loiii_params;
   // PopIII stuff
 
@@ -987,7 +1010,7 @@ typedef struct run_globals_t
   int NFOFGroupsMax;
   int NRequestedForests;
   int NStoreSnapshots;
-  int NstoreSnapshots_SFR;
+  int NstoreSnapshots_Heating;
 
   bool SelectForestsSwitch;
   struct Modifier* mass_ratio_modifier;
