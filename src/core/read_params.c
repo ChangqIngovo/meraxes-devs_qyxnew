@@ -19,6 +19,14 @@ static void check_problem_params(run_params_t* run_params)
       );
       ABORT(EXIT_FAILURE);      
   }
+  if (run_params->physics.XrayScatterDex > 0.0 && run_params->physics.Flag_RemoveSHMRScatter != 0) {
+      mlog(
+        "<WARNING> Both XrayScatterDex and Flag_RemoveSHMRScatter are set. "
+        "This combination is allowed, but should only be used when a "
+        "no-SHMR source model with X-ray luminosity scatter is intended.",
+        MLOG_MESG
+      );
+  }
   if (run_params->physics.EscapeFracScatterDex <= ABS_TOL &&
       run_params->physics.XrayScatterDex <= 0.0 &&
       run_params->physics.Flag_RemoveSHMRScatter == 0 &&

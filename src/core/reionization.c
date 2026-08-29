@@ -2036,7 +2036,6 @@ void construct_baryon_grids(int snapshot, int local_ngals)
     // this does the resetting and prepares for recalibration on SHMR
     apply_no_shmr_treatment(snapshot);
   }
-  // explicitly writen out to prevent call compute_fesc_recalibration_factors() when XrayScatterDex > 0
   if (run_globals.params.physics.Flag_SourceRecalibration) {
   if (run_globals.params.physics.Flag_RemoveSHMRScatter == 1) {
     compute_no_shmr_recalibration_factors(2);
