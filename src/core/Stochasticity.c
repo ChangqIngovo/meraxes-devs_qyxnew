@@ -788,6 +788,9 @@ void apply_no_shmr_treatment(int snapshot)
             gal,
             NO_SHMR_LOG10_SFR_FLOOR
         );
+      // GSM should not decrease due to stochasticity 
+      if (mstar_source < previous_mstar)
+        mstar_source = previous_mstar;
 
       if (raw_mstar > 0.0 || raw_sfr > 0.0) {
         source_view = *gal;
@@ -847,7 +850,6 @@ gal->StochasticityTreatedFescWeightedSfr = source_view.FescWeightedSfr;
     gal = gal->Next;
   }
 }
-
 // Apply fixed-bin global recalibration factors: reduce per-bin raw/source
 // budgets across MPI ranks, compute correction ratios for bins with support,
 // and scale galaxy target weighted GSM/SFR in the corresponding bin.
