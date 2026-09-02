@@ -69,7 +69,6 @@ Flag_OutputXrayLF          : 0               # 0=off, 1=output X-ray luminosity 
 XrayLF_MinLogL             : 38.0            # minimum log10(LX/erg/s) for X-ray LF histogram
 XrayLF_MaxLogL             : 46.0            # maximum log10(LX/erg/s) for X-ray LF histogram
 XrayLF_BinsPerDex          : 5               # number of LF histogram bins per dex
-Flag_includeAGN     : 0 
 
 #---------------------------------------------
 #----- star formation (including PopIII) -----
