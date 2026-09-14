@@ -7,7 +7,7 @@
 #define NO_SHMR_LOG10_MSTAR_FLOOR (-10.0)
 #define NO_SHMR_LOG10_SFR_FLOOR (-10.0)
 
-// Parameters for removing stellar-soxurce--halo scatter.
+// Parameters for removing stellar-source--halo scatter.
 // Both the stellar-mass and SFR tables use this halo-mass grid.
 #define SHMR_NTYPES 3
 #define SHMR_NX     376
