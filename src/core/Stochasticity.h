@@ -2,12 +2,12 @@
 #define STOCHASTICITY_H
 
 #include "meraxes.h"
-#define NO_SHMR_SHMR_MIN_COUNT 3
-#define NO_SHMR_SFR_MIN_COUNT 10
+#define NO_SHMR_SHMR_MIN_COUNT 1
+#define NO_SHMR_SFR_MIN_COUNT 1
 #define NO_SHMR_LOG10_MSTAR_FLOOR (-10.0)
-#define NO_SHMR_LOG10_SFR_FLOOR (-30.0)
+#define NO_SHMR_LOG10_SFR_FLOOR (-10.0)
 
-// Parameters for removing stellar-source--halo scatter.
+// Parameters for removing stellar-soxurce--halo scatter.
 // Both the stellar-mass and SFR tables use this halo-mass grid.
 #define SHMR_NTYPES 3
 #define SHMR_NX     376
