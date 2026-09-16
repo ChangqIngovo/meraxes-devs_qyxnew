@@ -274,8 +274,8 @@ void init_meraxes()
   read_snap_list();
 
 #if USE_STOCHASTICITY
-  if (run_globals.params.physics.Flag_RemoveSHMRScatter == 1)
-    no_shmr_sources_init();
+  if (run_globals.params.physics.Flag_RemoveSFRScatter == 1)
+    no_sfr_sources_init();
 #endif
   // parse the requested output snaps
   parse_output_snaps(run_globals.params.OutputSnapsString);

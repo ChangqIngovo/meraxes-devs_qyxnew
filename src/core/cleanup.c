@@ -42,7 +42,7 @@ void cleanup()
   }
 
 #if USE_STOCHASTICITY
-  no_shmr_sources_free();
+  no_sfr_sources_free();
 #endif
 
   if (run_globals.params.Flag_IncludeRecombinations) {

@@ -241,7 +241,7 @@ typedef struct physics_params_t
   int Flag_FixVmaxOnInfall;
   int Flag_ReheatToFOFGroupTemp;
   int Flag_FescCGMSuppression;
-  int Flag_RemoveSHMRScatter;
+  int Flag_RemoveSFRScatter;
   int Flag_SourceRecalibration;
 } physics_params_t;
 
@@ -289,7 +289,6 @@ typedef struct run_params_t
   char MassRatioModifier[STRLEN];
   char BaryonFracModifier[STRLEN];
   char FFTW3WisdomDir[STRLEN];
-  char SHMRTableFile[STRLEN];//SHMR table
   char SFRTableFile[STRLEN];//sfr atable
   physics_params_t physics;
 
@@ -450,6 +449,17 @@ typedef struct reion_grids_t
   float* buffer;
 
   float* stars;
+#if USE_SFR_INTEGRATION
+  // Persistent emission-cell history, in internal escaped stellar-mass units.
+  // These arrays are never passed to FFTW or recalibrated retrospectively.
+  double* sfr_integrated_stars;
+#if USE_MINI_HALOS
+  double* sfr_integrated_starsIII;
+#endif
+  int sfr_integrated_snapshot;
+  double sfr_integrated_dt;
+  double sfr_integrated_totals[8]; // per population: previous mass, rate, increment, total mass
+#endif
   fftwf_complex* stars_unfiltered;
   fftwf_complex* stars_filtered;
   fftwf_plan stars_forward_plan;
@@ -757,11 +767,11 @@ typedef struct galaxy_t
   double BHAccretionOnTime;     //!< Random on-time fraction [0, 1] for when accretion starts within snapshot; -1 indicates no prior accretion
   double t_resp;                //!< Local relaxation timescale (in Myr)
 #if USE_STOCHASTICITY
-  // Alternative stellar sources with the stellar--halo scatter removed.
-  // The GSM quantities are cumulative; SfrNoScatter is snapshot-local.
+  // Alternative stellar sources with the SFR--halo scatter removed.
+  // Source GSM uses SFR integration or the GSM table; SfrNoScatter is snapshot-local.
   double GrossStellarMassNoScatter;
   double SfrNoScatter;
-  // StochasticityTreated means adding scatter to Fesc or removing scatter from GSM & SFR
+  // StochasticityTreated means adding scatter to Fesc or using the treated source properties
   double StochasticityTreatedFescWeightedGSM;
   double StochasticityTreatedFescWeightedSfr;
 #endif
@@ -992,18 +1002,22 @@ typedef struct run_globals_t
   float* Time_Values;
 
 #if USE_STOCHASTICITY
-  // Both source tables hold only the current snapshot: size SHMR_NTYPES * SHMR_NX.
-  float* SHMRs;
+  // The SFR source table holds only the current snapshot: size SFR_NTYPES * SFR_NX.
   float* SFRs;
+#if !USE_SFR_INTEGRATION
+  float* SHMRs;
+  double *no_sfr_gsm_stochasticity_calibrations;
+#endif
   double *fesc_stochasticity_calibrations;
-  double *no_shmr_gsm_stochasticity_calibrations;
-  double *no_shmr_sfr_stochasticity_calibrations;
+  double *no_sfr_sfr_stochasticity_calibrations;
 #if USE_MINI_HALOS
-  // Independent Pop III tables with the same halo-mass layout.
-  float* SHMRsIII;
+  // Independent Pop III SFR table with the same halo-mass layout.
   float* SFRsIII;
-  double *no_shmr_gsm_stochasticity_calibrations_iii;
-  double *no_shmr_sfr_stochasticity_calibrations_iii;
+#if !USE_SFR_INTEGRATION
+  float* SHMRsIII;
+  double *no_sfr_gsm_stochasticity_calibrations_iii;
+#endif
+  double *no_sfr_sfr_stochasticity_calibrations_iii;
 #endif
 #endif
 #ifdef CALC_MAGS

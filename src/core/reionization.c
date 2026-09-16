@@ -18,7 +18,7 @@
 #include "reionization.h"
 #include "virial_properties.h"
 #include "XRayHeatingFunctions.h"
-#if USE_STOCHASTICITY
+#if USE_STOCHASTICITY || USE_SFR_INTEGRATION
 #include "Stochasticity.h"
 #endif
 
@@ -515,6 +515,12 @@ void init_reion_grids()
 
   mlog("Initialising grids...", MLOG_MESG);
 
+#if USE_SFR_INTEGRATION
+  grids->sfr_integrated_snapshot = -1;
+  grids->sfr_integrated_dt = 0.0;
+  memset(grids->sfr_integrated_totals, 0, sizeof(grids->sfr_integrated_totals));
+#endif
+
   grids->volume_weighted_global_xH = 1.0;
   grids->volume_weighted_global_Gamma12 = 0.0;
   grids->volume_weighted_global_r_bubble = 0.0;
@@ -666,6 +672,14 @@ void init_reion_grids()
   for (int ii = 0; ii < slab_n_complex * 2; ii++) {
     grids->deltax[ii] = 0;
     grids->stars[ii] = 0;
+#if USE_SFR_INTEGRATION
+    if (grids->sfr_integrated_stars != NULL)
+      grids->sfr_integrated_stars[ii] = 0.0;
+#if USE_MINI_HALOS
+    if (grids->sfr_integrated_starsIII != NULL)
+      grids->sfr_integrated_starsIII[ii] = 0.0;
+#endif
+#endif
     if (run_globals.params.physics.Flag_BHFeedback) {
       grids->effective_bhm[ii] = 0;
       grids->effective_bhar[ii] = 0;
@@ -766,6 +780,12 @@ void malloc_reionization_grids()
 
   grids->xH = NULL;
   grids->stars = NULL;
+#if USE_SFR_INTEGRATION
+  grids->sfr_integrated_stars = NULL;
+#if USE_MINI_HALOS
+  grids->sfr_integrated_starsIII = NULL;
+#endif
+#endif
   grids->stars_unfiltered = NULL;
   grids->stars_filtered = NULL;
   grids->effective_bhm = NULL;
@@ -882,6 +902,23 @@ void malloc_reionization_grids()
     ptrdiff_t* slab_nix = run_globals.reion_grids.slab_nix;
     ptrdiff_t slab_n_real = slab_nix[run_globals.mpi_rank] * ReionGridDim * ReionGridDim;
     ptrdiff_t slab_n_complex = run_globals.reion_grids.slab_n_complex[run_globals.mpi_rank];
+
+#if USE_SFR_INTEGRATION
+    // Keep the accumulated emission in double precision and outside FFTW.
+    const size_t count = slab_n_complex > 0 ? (size_t)slab_n_complex * 2 : 1;
+    grids->sfr_integrated_stars = calloc(count, sizeof(double));
+    if (grids->sfr_integrated_stars == NULL) {
+      mlog_error("Failed to allocate cumulative SFR source history.");
+      ABORT(EXIT_FAILURE);
+    }
+#if USE_MINI_HALOS
+    grids->sfr_integrated_starsIII = calloc(count, sizeof(double));
+    if (grids->sfr_integrated_starsIII == NULL) {
+      mlog_error("Failed to allocate cumulative PopIII SFR source history.");
+      ABORT(EXIT_FAILURE);
+    }
+#endif
+#endif
 
     ptrdiff_t slab_n_real_smoothedHeating;
     if (run_globals.params.Flag_IncludeSpinTemp) {
@@ -1541,6 +1578,15 @@ void free_reionization_grids()
   fftwf_free(grids->weighted_sfr_unfiltered);
   fftwf_free(grids->weighted_sfr);
 
+#if USE_SFR_INTEGRATION
+  free(grids->sfr_integrated_stars);
+  grids->sfr_integrated_stars = NULL;
+#if USE_MINI_HALOS
+  free(grids->sfr_integrated_starsIII);
+  grids->sfr_integrated_starsIII = NULL;
+#endif
+#endif
+
   fftwf_destroy_plan(grids->deltax_filtered_reverse_plan);
   fftwf_destroy_plan(grids->deltax_forward_plan);
   fftwf_free(grids->deltax_filtered);
@@ -1992,8 +2038,86 @@ static double calculate_galaxy_xray_luminosity(const galaxy_t* source_view, doub
 }
 #endif
 
+#if USE_SFR_INTEGRATION
+static void accumulate_sfr_source_history(int snapshot)
+{
+  reion_grids_t* grids = &run_globals.reion_grids;
+  const double dt = snapshot == 0 ? 0.0 : run_globals.LTTime[snapshot - 1] - run_globals.LTTime[snapshot];
+  if (!isfinite(dt) || dt < 0.0 || (snapshot > 0 && dt == 0.0)) {
+    mlog_error("Invalid adjacent-snapshot interval for SFR source integration at snapshot %d: %g.", snapshot, dt);
+    ABORT(EXIT_FAILURE);
+  }
+  const size_t nx = (size_t)grids->slab_nix[run_globals.mpi_rank];
+  const int dim = run_globals.params.ReionGridDim;
+  double local[8] = {0.0};
+  int status = integrate_sfr_source_slab(grids->sfr_integrated_stars, grids->weighted_sfr,
+                                        grids->stars, nx, dim, dt, local);
+#if USE_MINI_HALOS
+  if (status == 0)
+    status = integrate_sfr_source_slab(grids->sfr_integrated_starsIII, grids->weighted_sfrIII,
+                                      grids->starsIII, nx, dim, dt, local + 4);
+#endif
+  if (status != 0) {
+    mlog_error("Invalid or overflowing SFR source history at snapshot %d, rank %d (status=%d).",
+               snapshot, run_globals.mpi_rank, status);
+    ABORT(EXIT_FAILURE);
+  }
+  MPI_Allreduce(local, grids->sfr_integrated_totals, 8, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
+  grids->sfr_integrated_dt = dt;
+  grids->sfr_integrated_snapshot = snapshot;
+
+  if (run_globals.mpi_rank == 0) {
+    const double* sums = grids->sfr_integrated_totals;
+    mlog("SFR source integration: snapshot=%d dt_internal=%.12g "
+         "II_rate=%.12g II_delta=%.12g II_total=%.12g II_closure=%.12g",
+         MLOG_MESG, snapshot, dt, sums[1], sums[2], sums[3],
+         dt * sums[1] > 0.0 ? sums[2] / (dt * sums[1]) : 1.0);
+#if USE_MINI_HALOS
+    mlog("SFR source integration: snapshot=%d "
+         "III_rate=%.12g III_delta=%.12g III_total=%.12g III_closure=%.12g",
+         MLOG_MESG, snapshot, sums[5], sums[6], sums[7],
+         dt * sums[5] > 0.0 ? sums[6] / (dt * sums[5]) : 1.0);
+#endif
+  }
+}
+
+static void write_sfr_source_attributes(hid_t file_id)
+{
+  reion_grids_t* grids = &run_globals.reion_grids;
+  const double dt_years = grids->sfr_integrated_dt * run_globals.units.UnitTime_in_s /
+                          run_globals.params.Hubble_h / SEC_PER_YEAR;
+  if (H5LTset_attribute_string(file_id, "/", "StellarSourceBudget", "time_integrated_weighted_sfr") < 0 ||
+      H5LTset_attribute_string(file_id, "/", "SFRIntegrationMethod", "right_endpoint_snapshot_rate") < 0 ||
+      H5LTset_attribute_string(file_id, "/", "SFRIntegrationSpatialConvention", "fixed_comoving_emission_cells") < 0 ||
+      H5LTset_attribute_int(file_id, "/", "SFRIntegrationSnapshot", &grids->sfr_integrated_snapshot, 1) < 0 ||
+      H5LTset_attribute_double(file_id, "/", "SFRIntegrationDeltaTInternal", &grids->sfr_integrated_dt, 1) < 0 ||
+      H5LTset_attribute_double(file_id, "/", "SFRIntegrationDeltaTYears", &dt_years, 1) < 0 ||
+      H5LTset_attribute_double(file_id, "/", "SFRIntegrationTotalsII", grids->sfr_integrated_totals, 4) < 0 ||
+      H5LTset_attribute_string(file_id, "/", "SFRIntegrationTotalsOrder", "previous_mass,rate,actual_increment,cumulative_mass; internal_units") < 0) {
+    mlog_error("Failed to write SFR source integration metadata.");
+    ABORT(EXIT_FAILURE);
+  }
+#if USE_MINI_HALOS
+  if (H5LTset_attribute_double(file_id, "/", "SFRIntegrationTotalsIII", grids->sfr_integrated_totals + 4, 4) < 0) {
+    mlog_error("Failed to write PopIII SFR source integration metadata.");
+    ABORT(EXIT_FAILURE);
+  }
+#endif
+}
+#endif
+
 void construct_baryon_grids(int snapshot, int local_ngals)
 {
+#if USE_SFR_INTEGRATION
+  const int previous = run_globals.reion_grids.sfr_integrated_snapshot;
+  // dracarys prepares the source once; ComputeTs/HII wrappers may reuse it.
+  if (snapshot == previous)
+    return;
+  if (snapshot != previous + 1) {
+    mlog_error("SFR source integration requires consecutive snapshots starting at 0: previous=%d requested=%d.", previous, snapshot);
+    ABORT(EXIT_FAILURE);
+  }
+#endif
   double box_size = run_globals.params.BoxSize;
   float* stellar_grid = run_globals.reion_grids.stars;
   float* effective_bhm_grid = run_globals.reion_grids.effective_bhm;
@@ -2003,9 +2127,9 @@ void construct_baryon_grids(int snapshot, int local_ngals)
 #if USE_STOCHASTICITY
   float* xray_luminosity_grid = run_globals.reion_grids.xray_luminosity;
   float* xray_luminosity_histories_grid = run_globals.reion_grids.xray_luminosity_histories;
-  // Recalibrate the X-ray field only when source recalibration is enabled and either noSHMR treatment or X-ray scatter modifies the source luminosities.
+  // Recalibrate the X-ray field only when source recalibration is enabled and either noSFR treatment or X-ray scatter modifies the source luminosities.
   int recalibrate_xray_sources = run_globals.params.physics.Flag_SourceRecalibration &&
-  (run_globals.params.physics.Flag_RemoveSHMRScatter == 1 || run_globals.params.physics.XrayScatterDex > 0.0);
+  (run_globals.params.physics.Flag_RemoveSFRScatter == 1 || run_globals.params.physics.XrayScatterDex > 0.0);
 #endif
   float* weighted_sfr_grid = run_globals.reion_grids.weighted_sfr;
   int ReionGridDim = run_globals.params.ReionGridDim;
@@ -2031,20 +2155,20 @@ void construct_baryon_grids(int snapshot, int local_ngals)
   int local_n_complex = (int)(run_globals.reion_grids.slab_n_complex[run_globals.mpi_rank]);
 
 #if USE_STOCHASTICITY
-  // this builds the SHMR tables before resetting the properties
-  if (run_globals.params.physics.Flag_RemoveSHMRScatter == 1){
-    build_no_shmr_tables(2);
+  // this builds the source tables before resetting the source properties
+  if (run_globals.params.physics.Flag_RemoveSFRScatter == 1){
+    build_no_sfr_tables(2);
 #if USE_MINI_HALOS
-    build_no_shmr_tables(3);
+    build_no_sfr_tables(3);
 #endif
-    // this does the resetting and prepares for recalibration on SHMR
-    apply_no_shmr_treatment(snapshot);
+    // this sets the source SFR and GSM before recalibration
+    apply_no_sfr_treatment(snapshot);
   }
   if (run_globals.params.physics.Flag_SourceRecalibration) {
-  if (run_globals.params.physics.Flag_RemoveSHMRScatter == 1) {
-    compute_no_shmr_recalibration_factors(2);
+  if (run_globals.params.physics.Flag_RemoveSFRScatter == 1) {
+    compute_no_sfr_recalibration_factors(2);
 #if USE_MINI_HALOS
-    compute_no_shmr_recalibration_factors(3);
+    compute_no_sfr_recalibration_factors(3);
 #endif
   } else if (run_globals.params.physics.EscapeFracScatterDex > ABS_TOL) {
     compute_fesc_recalibration_factors();
@@ -2143,6 +2267,15 @@ void construct_baryon_grids(int snapshot, int local_ngals)
   for (int prop = prop_stellar; prop <= prop_bh_xray_emissivity_soft; prop++) {
 #endif
 
+#if USE_SFR_INTEGRATION
+    if (prop == prop_stellar)
+      continue;
+#if USE_MINI_HALOS
+    if (prop == prop_stellarIII)
+      continue;
+#endif
+#endif
+
     // no need for sfr or sfrIII grid is not using SpinTemp
 #if USE_MINI_HALOS
     if ((!run_globals.params.Flag_IncludeSpinTemp) && (prop == prop_sfrIII))
@@ -2223,7 +2356,7 @@ void construct_baryon_grids(int snapshot, int local_ngals)
             case prop_stellar:
             # if USE_STOCHASTICITY
               if (run_globals.params.physics.EscapeFracScatterDex > ABS_TOL ||
-                  run_globals.params.physics.Flag_RemoveSHMRScatter == 1) {
+                  run_globals.params.physics.Flag_RemoveSFRScatter == 1) {
                 if (run_globals.params.physics.Flag_SourceRecalibration)
                   stochasticity_calibration_factor = extract_recalibration_factors(gal, 2, true);
                 buffer[ind] += gal->StochasticityTreatedFescWeightedGSM * stochasticity_calibration_factor;
@@ -2247,7 +2380,7 @@ void construct_baryon_grids(int snapshot, int local_ngals)
             case prop_stellarIII:
             # if USE_STOCHASTICITY
               if (run_globals.params.physics.EscapeFracScatterDex > ABS_TOL ||
-                  run_globals.params.physics.Flag_RemoveSHMRScatter == 1) {
+                  run_globals.params.physics.Flag_RemoveSFRScatter == 1) {
                 if (run_globals.params.physics.Flag_SourceRecalibration)
                   stochasticity_calibration_factor = extract_recalibration_factors(gal, 3, true);
                 buffer[ind] += gal->StochasticityTreatedFescIIIWeightedGSM * stochasticity_calibration_factor;
@@ -2261,7 +2394,7 @@ void construct_baryon_grids(int snapshot, int local_ngals)
             case prop_weighted_sfrIII:
             #if USE_STOCHASTICITY
               if (run_globals.params.physics.EscapeFracScatterDex > ABS_TOL ||
-                  run_globals.params.physics.Flag_RemoveSHMRScatter == 1) {
+                  run_globals.params.physics.Flag_RemoveSFRScatter == 1) {
                 if (run_globals.params.physics.Flag_SourceRecalibration)
                   stochasticity_calibration_factor = extract_recalibration_factors(gal, 3, false);
                 buffer[ind] += gal->StochasticityTreatedFescIIIWeightedSfr * stochasticity_calibration_factor;
@@ -2276,10 +2409,10 @@ void construct_baryon_grids(int snapshot, int local_ngals)
             # if USE_STOCHASTICITY
               buffer[ind] +=
                   run_globals.params.Flag_InstantaneousSFR
-                ? (run_globals.params.physics.Flag_RemoveSHMRScatter == 1
+                ? (run_globals.params.physics.Flag_RemoveSFRScatter == 1
                   ? gal->SfrIIINoScatter
                   : gal->SfrIII)
-                : (run_globals.params.physics.Flag_RemoveSHMRScatter == 1
+                : (run_globals.params.physics.Flag_RemoveSFRScatter == 1
                   ? gal->GrossStellarMassIIINoScatter
                   : gal->GrossStellarMassIII);                
             #else
@@ -2293,7 +2426,7 @@ void construct_baryon_grids(int snapshot, int local_ngals)
             case prop_weighted_sfr:
             #if USE_STOCHASTICITY
               if (run_globals.params.physics.EscapeFracScatterDex > ABS_TOL ||
-                  run_globals.params.physics.Flag_RemoveSHMRScatter == 1) {
+                  run_globals.params.physics.Flag_RemoveSFRScatter == 1) {
                 if (run_globals.params.physics.Flag_SourceRecalibration)
                   stochasticity_calibration_factor = extract_recalibration_factors(gal, 2, false);
                 buffer[ind] += gal->StochasticityTreatedFescWeightedSfr * stochasticity_calibration_factor;
@@ -2317,7 +2450,7 @@ void construct_baryon_grids(int snapshot, int local_ngals)
                 calculate_galaxy_xray_luminosity(gal, sfr_timescale);
               double xray_raw = xray_target;
 
-              if (run_globals.params.physics.Flag_RemoveSHMRScatter == 1) {
+              if (run_globals.params.physics.Flag_RemoveSFRScatter == 1) {
                 galaxy_t source_view = *gal;
                 source_view.GrossStellarMass =
                   source_view.GrossStellarMassNoScatter;
@@ -2350,10 +2483,10 @@ void construct_baryon_grids(int snapshot, int local_ngals)
               # if USE_STOCHASTICITY
                 buffer[ind] +=
                     run_globals.params.Flag_InstantaneousSFR
-                  ? (run_globals.params.physics.Flag_RemoveSHMRScatter == 1
+                  ? (run_globals.params.physics.Flag_RemoveSFRScatter == 1
                     ? gal->SfrNoScatter
                     : gal->Sfr)
-                  : (run_globals.params.physics.Flag_RemoveSHMRScatter == 1
+                  : (run_globals.params.physics.Flag_RemoveSFRScatter == 1
                     ? gal->GrossStellarMassNoScatter
                     : gal->GrossStellarMass);                
               #else
@@ -2567,6 +2700,10 @@ void construct_baryon_grids(int snapshot, int local_ngals)
          run_globals.params.physics.BlackHoleMassLimitReion);
   }
 
+#if USE_SFR_INTEGRATION
+  accumulate_sfr_source_history(snapshot);
+#endif
+
   mlog("done", MLOG_CLOSE | MLOG_TIMERSTOP);
 }
 
@@ -2613,6 +2750,9 @@ static hid_t create_reion_grid(const int snapshot, const bool parallel)
   hid_t file_id = H5Fcreate(name, H5F_ACC_TRUNC, H5P_DEFAULT, plist_id);
   H5Pclose(plist_id);
 
+#if USE_SFR_INTEGRATION
+  write_sfr_source_attributes(file_id);
+#endif
   return file_id;
 }
 

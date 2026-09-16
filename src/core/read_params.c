@@ -12,28 +12,28 @@ static void check_problem_params(run_params_t* run_params)
 
 #if USE_STOCHASTICITY
   if (run_params->physics.EscapeFracScatterDex > ABS_TOL &&
-      run_params->physics.Flag_RemoveSHMRScatter != 0) {
+      run_params->physics.Flag_RemoveSFRScatter != 0) {
       mlog_error(
-            "Both EscapeFracScatterDex and Flag_RemoveSHMRScatter are set. "
+            "Both EscapeFracScatterDex and Flag_RemoveSFRScatter are set. "
             "Please choose one or the other."
       );
       ABORT(EXIT_FAILURE);      
   }
-  if (run_params->physics.XrayScatterDex > 0.0 && run_params->physics.Flag_RemoveSHMRScatter != 0) {
+  if (run_params->physics.XrayScatterDex > 0.0 && run_params->physics.Flag_RemoveSFRScatter != 0) {
       mlog(
-        "<WARNING> Both XrayScatterDex and Flag_RemoveSHMRScatter are set. "
+        "<WARNING> Both XrayScatterDex and Flag_RemoveSFRScatter are set. "
         "This combination is allowed, but should only be used when a "
-        "no-SHMR source model with X-ray luminosity scatter is intended.",
+        "no-SFR source model with X-ray luminosity scatter is intended.",
         MLOG_MESG
       );
   }
   if (run_params->physics.EscapeFracScatterDex <= ABS_TOL &&
       run_params->physics.XrayScatterDex <= 0.0 &&
-      run_params->physics.Flag_RemoveSHMRScatter == 0 &&
+      run_params->physics.Flag_RemoveSFRScatter == 0 &&
       run_params->physics.Flag_SourceRecalibration != 0) {
       mlog_error(
           "Flag_SourceRecalibration is set, but none of EscapeFracScatterDex, "
-          "XrayScatterDex or Flag_RemoveSHMRScatter are set. "
+          "XrayScatterDex or Flag_RemoveSFRScatter are set. "
           "Please choose one of these options."
       );
       ABORT(EXIT_FAILURE);
@@ -41,7 +41,7 @@ static void check_problem_params(run_params_t* run_params)
 #else
   if (run_params->physics.EscapeFracScatterDex > ABS_TOL ||
       run_params->physics.XrayScatterDex > 0.0 ||
-      run_params->physics.Flag_RemoveSHMRScatter != 0 ||
+      run_params->physics.Flag_RemoveSFRScatter != 0 ||
       run_params->physics.Flag_SourceRecalibration != 0) {
     mlog_error(
         "A scatter prescription was requested, but Meraxes was compiled "
@@ -1139,8 +1139,8 @@ void read_parameter_file(char* fname, int mode)
       required_tag[n_param] = 0;
       params_type[n_param++] = PARAM_TYPE_DOUBLE;
       
-      strncpy(params_tag[n_param], "Flag_RemoveSHMRScatter", tag_length);
-      params_addr[n_param] = &(run_params->physics).Flag_RemoveSHMRScatter;
+      strncpy(params_tag[n_param], "Flag_RemoveSFRScatter", tag_length);
+      params_addr[n_param] = &(run_params->physics).Flag_RemoveSFRScatter;
       required_tag[n_param] = 0;
       params_type[n_param++] = PARAM_TYPE_INT;
 
