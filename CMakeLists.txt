@@ -60,7 +60,6 @@ option(USE_JWST "Calculate JWST band magnitude (70, 90, 115, 150, 200, 277, 356,
 option(USE_HST "Calculate HST band magnitude (125, 160)" OFF)
 option(USE_MINI_HALOS "Consider minihalos" OFF)
 option(USE_STOCHASTICITY "Compile stochastic stellar-source prescriptions" OFF)
-option(USE_SFR_INTEGRATION "Integrate weighted SFR for the reionization source budget" OFF)
 set(SECTOR_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/src/sector" CACHE PATH "Base directory of sector library")
 option(BUILD_TESTS "Build criterion tests" OFF)
 option(GDB "Drop into GDB with mpi_debug_here() calls" OFF)
@@ -113,7 +112,6 @@ target_compile_definitions(meraxes_lib PUBLIC
     MAGS_N_SNAPS=${MAGS_N_SNAPS}
     MAGS_N_BANDS=${MAGS_N_BANDS}
     USE_STOCHASTICITY=$<BOOL:${USE_STOCHASTICITY}>
-    USE_SFR_INTEGRATION=$<BOOL:${USE_SFR_INTEGRATION}>
     $<$<BOOL:${GDB}>:GDB>
     $<$<CONFIG:Debug>:DEBUG>
 )

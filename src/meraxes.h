@@ -181,8 +181,8 @@ typedef struct physics_params_t
   int Flag_IncludeAGNXray;      /* 0=no AGN, 1=soft+hard, 2=hard only, 3=soft only */
   double SpecIndexXrayAGNSoft;
   double SpecIndexXrayAGNHard;
-  double SpecIndexUVAGNSoft;    /* lambda > 912A (redward of/at the break) — LW band amplitude/shape */
-  double SpecIndexUVAGNHard;    /* lambda <= 912A (shortward of the break) — ionizing photon rate only */
+  double SpecIndexUVAGNSoft;    /* lambda > 912A (redward of/at the break) 鈥� LW band amplitude/shape */
+  double SpecIndexUVAGNHard;    /* lambda <= 912A (shortward of the break) 鈥� ionizing photon rate only */
   double AGNLWEfficiency;       /* scale factor on the AGN LW amplitude */ 
 
   double ReionMaxHeatingRedshift;
@@ -449,17 +449,6 @@ typedef struct reion_grids_t
   float* buffer;
 
   float* stars;
-#if USE_SFR_INTEGRATION
-  // Persistent emission-cell history, in internal escaped stellar-mass units.
-  // These arrays are never passed to FFTW or recalibrated retrospectively.
-  double* sfr_integrated_stars;
-#if USE_MINI_HALOS
-  double* sfr_integrated_starsIII;
-#endif
-  int sfr_integrated_snapshot;
-  double sfr_integrated_dt;
-  double sfr_integrated_totals[8]; // per population: previous mass, rate, increment, total mass
-#endif
   fftwf_complex* stars_unfiltered;
   fftwf_complex* stars_filtered;
   fftwf_plan stars_forward_plan;
@@ -768,7 +757,7 @@ typedef struct galaxy_t
   double t_resp;                //!< Local relaxation timescale (in Myr)
 #if USE_STOCHASTICITY
   // Alternative stellar sources with the SFR--halo scatter removed.
-  // Source GSM uses SFR integration or the GSM table; SfrNoScatter is snapshot-local.
+  // Source GSM accumulates SfrNoScatter * dt; SfrNoScatter is snapshot-local.
   double GrossStellarMassNoScatter;
   double SfrNoScatter;
   // StochasticityTreated means adding scatter to Fesc or using the treated source properties
@@ -1004,19 +993,13 @@ typedef struct run_globals_t
 #if USE_STOCHASTICITY
   // The SFR source table holds only the current snapshot: size SFR_NTYPES * SFR_NX.
   float* SFRs;
-#if !USE_SFR_INTEGRATION
-  float* SHMRs;
   double *no_sfr_gsm_stochasticity_calibrations;
-#endif
   double *fesc_stochasticity_calibrations;
   double *no_sfr_sfr_stochasticity_calibrations;
 #if USE_MINI_HALOS
   // Independent Pop III SFR table with the same halo-mass layout.
   float* SFRsIII;
-#if !USE_SFR_INTEGRATION
-  float* SHMRsIII;
   double *no_sfr_gsm_stochasticity_calibrations_iii;
-#endif
   double *no_sfr_sfr_stochasticity_calibrations_iii;
 #endif
 #endif

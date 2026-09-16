@@ -10,6 +10,9 @@
 #include "physics/reionization.h"
 #include "read_halos.h"
 #include "reionization.h"
+#if USE_STOCHASTICITY
+#include "Stochasticity.h"
+#endif
 #if USE_MINI_HALOS
 #include "PopIII.h"
 #include "metal_evo.h"
@@ -355,18 +358,23 @@ void dracarys()
     else
       nout_gals = 0;
 
+#if USE_STOCHASTICITY
+    if (run_globals.params.physics.Flag_RemoveSFRScatter == 1) {
+      build_no_sfr_tables(2);
+#if USE_MINI_HALOS
+      build_no_sfr_tables(3);
+#endif
+      // Update source histories once per snapshot, including snapshots without grids.
+      apply_no_sfr_treatment(snapshot);
+    }
+#endif
+
     log_memory_usage("after evolve_galaxies", snapshot, NGal);
 
     // Add the ghost galaxies into the nout_gals count
     nout_gals += ghost_counter;
 
     if (run_globals.params.Flag_PatchyReion) {
-
-#if USE_SFR_INTEGRATION
-      // Integrate every snapshot, including unsaved no-feedback snapshots and
-      // snapshots after overlap. The wrappers reuse this construction below.
-      construct_baryon_grids(snapshot, nout_gals);
-#endif
 
       if (check_if_reionization_ongoing(snapshot)) {
         if (!run_globals.params.ReionUVBFlag) {
