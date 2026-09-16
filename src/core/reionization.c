@@ -11,7 +11,6 @@
 #include <string.h>
 
 #include "ComputeTs.h"
-#include "Stochasticity.h"
 #include "find_HII_bubbles.h"
 #include "meraxes.h"
 #include "misc_tools.h"
@@ -19,6 +18,9 @@
 #include "reionization.h"
 #include "virial_properties.h"
 #include "XRayHeatingFunctions.h"
+#if USE_STOCHASTICITY || USE_SFR_INTEGRATION
+#include "Stochasticity.h"
+#endif
 
 static hid_t create_reion_grid(const int snapshot, const bool parallel);
 
@@ -513,9 +515,11 @@ void init_reion_grids()
 
   mlog("Initialising grids...", MLOG_MESG);
 
+#if USE_SFR_INTEGRATION
   grids->sfr_integrated_snapshot = -1;
   grids->sfr_integrated_dt = 0.0;
   memset(grids->sfr_integrated_totals, 0, sizeof(grids->sfr_integrated_totals));
+#endif
 
   grids->volume_weighted_global_xH = 1.0;
   grids->volume_weighted_global_Gamma12 = 0.0;
@@ -668,11 +672,13 @@ void init_reion_grids()
   for (int ii = 0; ii < slab_n_complex * 2; ii++) {
     grids->deltax[ii] = 0;
     grids->stars[ii] = 0;
+#if USE_SFR_INTEGRATION
     if (grids->sfr_integrated_stars != NULL)
       grids->sfr_integrated_stars[ii] = 0.0;
 #if USE_MINI_HALOS
     if (grids->sfr_integrated_starsIII != NULL)
       grids->sfr_integrated_starsIII[ii] = 0.0;
+#endif
 #endif
     if (run_globals.params.physics.Flag_BHFeedback) {
       grids->effective_bhm[ii] = 0;
@@ -774,9 +780,11 @@ void malloc_reionization_grids()
 
   grids->xH = NULL;
   grids->stars = NULL;
+#if USE_SFR_INTEGRATION
   grids->sfr_integrated_stars = NULL;
 #if USE_MINI_HALOS
   grids->sfr_integrated_starsIII = NULL;
+#endif
 #endif
   grids->stars_unfiltered = NULL;
   grids->stars_filtered = NULL;
@@ -895,6 +903,7 @@ void malloc_reionization_grids()
     ptrdiff_t slab_n_real = slab_nix[run_globals.mpi_rank] * ReionGridDim * ReionGridDim;
     ptrdiff_t slab_n_complex = run_globals.reion_grids.slab_n_complex[run_globals.mpi_rank];
 
+#if USE_SFR_INTEGRATION
     // Keep the accumulated emission in double precision and outside FFTW.
     const size_t count = slab_n_complex > 0 ? (size_t)slab_n_complex * 2 : 1;
     grids->sfr_integrated_stars = calloc(count, sizeof(double));
@@ -908,6 +917,7 @@ void malloc_reionization_grids()
       mlog_error("Failed to allocate cumulative PopIII SFR source history.");
       ABORT(EXIT_FAILURE);
     }
+#endif
 #endif
 
     ptrdiff_t slab_n_real_smoothedHeating;
@@ -1568,11 +1578,13 @@ void free_reionization_grids()
   fftwf_free(grids->weighted_sfr_unfiltered);
   fftwf_free(grids->weighted_sfr);
 
+#if USE_SFR_INTEGRATION
   free(grids->sfr_integrated_stars);
   grids->sfr_integrated_stars = NULL;
 #if USE_MINI_HALOS
   free(grids->sfr_integrated_starsIII);
   grids->sfr_integrated_starsIII = NULL;
+#endif
 #endif
 
   fftwf_destroy_plan(grids->deltax_filtered_reverse_plan);
@@ -2026,6 +2038,7 @@ static double calculate_galaxy_xray_luminosity(const galaxy_t* source_view, doub
 }
 #endif
 
+#if USE_SFR_INTEGRATION
 static void accumulate_sfr_source_history(int snapshot)
 {
   reion_grids_t* grids = &run_globals.reion_grids;
@@ -2091,9 +2104,11 @@ static void write_sfr_source_attributes(hid_t file_id)
   }
 #endif
 }
+#endif
 
 void construct_baryon_grids(int snapshot, int local_ngals)
 {
+#if USE_SFR_INTEGRATION
   const int previous = run_globals.reion_grids.sfr_integrated_snapshot;
   // dracarys prepares the source once; ComputeTs/HII wrappers may reuse it.
   if (snapshot == previous)
@@ -2102,6 +2117,7 @@ void construct_baryon_grids(int snapshot, int local_ngals)
     mlog_error("SFR source integration requires consecutive snapshots starting at 0: previous=%d requested=%d.", previous, snapshot);
     ABORT(EXIT_FAILURE);
   }
+#endif
   double box_size = run_globals.params.BoxSize;
   float* stellar_grid = run_globals.reion_grids.stars;
   float* effective_bhm_grid = run_globals.reion_grids.effective_bhm;
@@ -2139,13 +2155,13 @@ void construct_baryon_grids(int snapshot, int local_ngals)
   int local_n_complex = (int)(run_globals.reion_grids.slab_n_complex[run_globals.mpi_rank]);
 
 #if USE_STOCHASTICITY
-  // this builds the SFR tables before resetting the source properties
+  // this builds the source tables before resetting the source properties
   if (run_globals.params.physics.Flag_RemoveSFRScatter == 1){
     build_no_sfr_tables(2);
 #if USE_MINI_HALOS
     build_no_sfr_tables(3);
 #endif
-    // this sets the source SFR and integrates the source GSM before recalibration
+    // this sets the source SFR and GSM before recalibration
     apply_no_sfr_treatment(snapshot);
   }
   if (run_globals.params.physics.Flag_SourceRecalibration) {
@@ -2226,10 +2242,12 @@ void construct_baryon_grids(int snapshot, int local_ngals)
 
   enum property
   {
+    prop_stellar,
     prop_effective_bhm,
     prop_effective_bhar,
     prop_weighted_sfr,
 #if USE_MINI_HALOS
+    prop_stellarIII,
     prop_weighted_sfrIII,
     prop_sfrIII,
 #endif
@@ -2244,9 +2262,18 @@ void construct_baryon_grids(int snapshot, int local_ngals)
 #endif
   };
 #if USE_MINI_HALOS
-  for (int prop = prop_effective_bhm; prop <= prop_bh_uv_emissivity; prop++) {
+  for (int prop = prop_stellar; prop <= prop_bh_uv_emissivity; prop++) {
 #else
-  for (int prop = prop_effective_bhm; prop <= prop_bh_xray_emissivity_soft; prop++) {
+  for (int prop = prop_stellar; prop <= prop_bh_xray_emissivity_soft; prop++) {
+#endif
+
+#if USE_SFR_INTEGRATION
+    if (prop == prop_stellar)
+      continue;
+#if USE_MINI_HALOS
+    if (prop == prop_stellarIII)
+      continue;
+#endif
 #endif
 
     // no need for sfr or sfrIII grid is not using SpinTemp
@@ -2326,6 +2353,20 @@ void construct_baryon_grids(int snapshot, int local_ngals)
           stochasticity_calibration_factor = 1.0;
 
           switch (prop) {
+            case prop_stellar:
+            # if USE_STOCHASTICITY
+              if (run_globals.params.physics.EscapeFracScatterDex > ABS_TOL ||
+                  run_globals.params.physics.Flag_RemoveSFRScatter == 1) {
+                if (run_globals.params.physics.Flag_SourceRecalibration)
+                  stochasticity_calibration_factor = extract_recalibration_factors(gal, 2, true);
+                buffer[ind] += gal->StochasticityTreatedFescWeightedGSM * stochasticity_calibration_factor;
+              } else
+                buffer[ind] += gal->FescWeightedGSM;
+            #else
+              buffer[ind] += gal->FescWeightedGSM;
+            #endif
+              break;
+
             case prop_effective_bhm:
               if (gal->BlackHoleMass >=
                   run_globals.params.physics.BlackHoleMassLimitReion) {
@@ -2336,12 +2377,26 @@ void construct_baryon_grids(int snapshot, int local_ngals)
               break;
 
 #if USE_MINI_HALOS
+            case prop_stellarIII:
+            # if USE_STOCHASTICITY
+              if (run_globals.params.physics.EscapeFracScatterDex > ABS_TOL ||
+                  run_globals.params.physics.Flag_RemoveSFRScatter == 1) {
+                if (run_globals.params.physics.Flag_SourceRecalibration)
+                  stochasticity_calibration_factor = extract_recalibration_factors(gal, 3, true);
+                buffer[ind] += gal->StochasticityTreatedFescIIIWeightedGSM * stochasticity_calibration_factor;
+              } else
+                buffer[ind] += gal->FescIIIWeightedGSM;
+            #else
+              buffer[ind] += gal->FescIIIWeightedGSM;
+            #endif
+              break;
+
             case prop_weighted_sfrIII:
             #if USE_STOCHASTICITY
               if (run_globals.params.physics.EscapeFracScatterDex > ABS_TOL ||
                   run_globals.params.physics.Flag_RemoveSFRScatter == 1) {
                 if (run_globals.params.physics.Flag_SourceRecalibration)
-                  stochasticity_calibration_factor = extract_recalibration_factors(gal, 3);
+                  stochasticity_calibration_factor = extract_recalibration_factors(gal, 3, false);
                 buffer[ind] += gal->StochasticityTreatedFescIIIWeightedSfr * stochasticity_calibration_factor;
               } else
                 buffer[ind] += gal->FescIIIWeightedSfr;
@@ -2373,7 +2428,7 @@ void construct_baryon_grids(int snapshot, int local_ngals)
               if (run_globals.params.physics.EscapeFracScatterDex > ABS_TOL ||
                   run_globals.params.physics.Flag_RemoveSFRScatter == 1) {
                 if (run_globals.params.physics.Flag_SourceRecalibration)
-                  stochasticity_calibration_factor = extract_recalibration_factors(gal, 2);
+                  stochasticity_calibration_factor = extract_recalibration_factors(gal, 2, false);
                 buffer[ind] += gal->StochasticityTreatedFescWeightedSfr * stochasticity_calibration_factor;
               } else
                 buffer[ind] += gal->FescWeightedSfr;
@@ -2517,6 +2572,15 @@ void construct_baryon_grids(int snapshot, int local_ngals)
                 }
             break;
 
+          case prop_stellarIII:
+            for (int ix = 0; ix < slab_nix[i_r]; ix++)
+              for (int iy = 0; iy < ReionGridDim; iy++)
+                for (int iz = 0; iz < ReionGridDim; iz++) {
+                  float val = buffer[grid_index(ix, iy, iz, ReionGridDim, INDEX_REAL)];
+                  CLAMP_NEGATIVE(val);
+                  stellarIII_grid[grid_index(ix, iy, iz, ReionGridDim, INDEX_PADDED)] = val;
+                }
+            break;
 #endif
           case prop_sfr:
             for (int ix = 0; ix < slab_nix[i_r]; ix++)
@@ -2577,6 +2641,16 @@ void construct_baryon_grids(int snapshot, int local_ngals)
             break;
 #endif
 
+          case prop_stellar:
+            for (int ix = 0; ix < slab_nix[i_r]; ix++)
+              for (int iy = 0; iy < ReionGridDim; iy++)
+                for (int iz = 0; iz < ReionGridDim; iz++) {
+                  float val = buffer[grid_index(ix, iy, iz, ReionGridDim, INDEX_REAL)];
+                  CLAMP_NEGATIVE(val);
+                  stellar_grid[grid_index(ix, iy, iz, ReionGridDim, INDEX_PADDED)] = val;
+                }
+            break;
+
           case prop_effective_bhm:
             for (int ix = 0; ix < slab_nix[i_r]; ix++)
               for (int iy = 0; iy < ReionGridDim; iy++)
@@ -2619,9 +2693,16 @@ void construct_baryon_grids(int snapshot, int local_ngals)
     }
 #endif
     MPI_Allreduce(MPI_IN_PLACE, &N_BlackHoleMassLimitReion, 1, MPI_LONG, MPI_SUM, run_globals.mpi_comm);
+    if (prop == prop_stellar)
+      mlog("%d quasars are smaller than %g",
+         MLOG_MESG,
+         N_BlackHoleMassLimitReion,
+         run_globals.params.physics.BlackHoleMassLimitReion);
   }
 
+#if USE_SFR_INTEGRATION
   accumulate_sfr_source_history(snapshot);
+#endif
 
   mlog("done", MLOG_CLOSE | MLOG_TIMERSTOP);
 }
@@ -2669,7 +2750,9 @@ static hid_t create_reion_grid(const int snapshot, const bool parallel)
   hid_t file_id = H5Fcreate(name, H5F_ACC_TRUNC, H5P_DEFAULT, plist_id);
   H5Pclose(plist_id);
 
+#if USE_SFR_INTEGRATION
   write_sfr_source_attributes(file_id);
+#endif
   return file_id;
 }
 

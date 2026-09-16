@@ -362,9 +362,11 @@ void dracarys()
 
     if (run_globals.params.Flag_PatchyReion) {
 
+#if USE_SFR_INTEGRATION
       // Integrate every snapshot, including unsaved no-feedback snapshots and
       // snapshots after overlap. The wrappers reuse this construction below.
       construct_baryon_grids(snapshot, nout_gals);
+#endif
 
       if (check_if_reionization_ongoing(snapshot)) {
         if (!run_globals.params.ReionUVBFlag) {
