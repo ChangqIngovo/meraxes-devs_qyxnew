@@ -5,6 +5,7 @@
 
 #include "meraxes.h"
 #define NO_SFR_SFR_MIN_COUNT 1
+#define NO_SHMR_LOG10_SFR_FLOOR (-30.0)
 
 // Parameters for removing SFR--halo scatter.
 // The SFR table uses this halo-mass grid; source GSM is integrated from SFR.

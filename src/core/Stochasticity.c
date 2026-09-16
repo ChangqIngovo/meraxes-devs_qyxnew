@@ -261,7 +261,7 @@ double compute_xray_recalibration_factor(double local_xray_raw,
 // Fill missing values in a one-dimensional binned table.
 // Bins between valid entries are linearly interpolated using the nearest
 // valid values on either side. Bins before the first valid entry and after
-// the last valid entry are marked unavailable. Valid entries are unchanged.
+// the last valid entry are set to the log-SFR floor. Valid entries are unchanged.
 static void no_sfr_fill_inside_only(double* values,
                                     const unsigned char* valid,
                                     int n_values)
@@ -274,10 +274,10 @@ static void no_sfr_fill_inside_only(double* values,
   while (first < n_values && !valid[first])
     first++;
 
-  /* -FLT_MAX marks unavailable log-SFR nodes; it is not a source floor. */
+  /* No valid bins: fill the entire table with the log-SFR floor. */
   if (first == n_values) {
     for (int ii = 0; ii < n_values; ii++)
-      values[ii] = -FLT_MAX;
+      values[ii] = NO_SHMR_LOG10_SFR_FLOOR;
 
     return;
   }
@@ -288,10 +288,10 @@ static void no_sfr_fill_inside_only(double* values,
     last--;
 
   for (int ii = 0; ii < first; ii++)
-    values[ii] = -FLT_MAX;
+    values[ii] = NO_SHMR_LOG10_SFR_FLOOR;
 
   for (int ii = last + 1; ii < n_values; ii++)
-    values[ii] = -FLT_MAX;
+    values[ii] = NO_SHMR_LOG10_SFR_FLOOR;
 
   int left = first;
 
@@ -330,12 +330,12 @@ static double no_sfr_get_table_value(const float* table,
 
   if (log10_mvir <= SFR_XMIN) {
     y0 = table[SFR_INDEX(gal->Type, 0)];
-    return y0 == -FLT_MAX ? 0.0 : pow(10.0, y0);
+    return pow(10.0, fmax(y0, NO_SHMR_LOG10_SFR_FLOOR));
   }
 
   if (log10_mvir >= SFR_XMAX) {
     y0 = table[SFR_INDEX(gal->Type, SFR_NX - 1)];
-    return y0 == -FLT_MAX ? 0.0 : pow(10.0, y0);
+    return pow(10.0, fmax(y0, NO_SHMR_LOG10_SFR_FLOOR));
   }
 
   position = (log10_mvir - SFR_XMIN) / SFR_DX;
@@ -346,12 +346,9 @@ static double no_sfr_get_table_value(const float* table,
   y0 = table[SFR_INDEX(gal->Type, index_left)];
   y1 = table[SFR_INDEX(gal->Type, index_right)];
 
-  if (y0 == -FLT_MAX)
-    return y1 == -FLT_MAX ? 0.0 : pow(10.0, y1);
-  if (y1 == -FLT_MAX)
-    return pow(10.0, y0);
-
   y0 += fraction * (y1 - y0);
+  if (y0 < NO_SHMR_LOG10_SFR_FLOOR)
+    y0 = NO_SHMR_LOG10_SFR_FLOOR;
 
   return pow(10.0, y0);
 }
@@ -562,7 +559,7 @@ static void no_sfr_global_bin_medians(
 
 	    // Write one median table for each galaxy type independently.
        // Interior gaps are interpolated, while values outside the valid
-       // range are marked unavailable.
+       // range are filled with the log-SFR floor.
        for (int type = 0; type < SFR_NTYPES; type++) {
          double values[SFR_NX];
          unsigned char type_valid[SFR_NX];
