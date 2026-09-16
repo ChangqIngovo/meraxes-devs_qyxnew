@@ -26,7 +26,7 @@ Flag_ConstructLightcone    : 0   # Construct reionization light cones
 Flag_IncludeLymanWerner    : 0   # if 1 Meraxes computes Lyman-Werner background (crucial for Minihalos)
 Flag_IncludeMetalEvo       : 0   # if 1 Meraxes computes the metal enrichment of the IGM.
 Flag_IncludeStreamVel      : 0   # if 1 Meraxes computes Streaming Velocities (relevant only for Minihalos)
-Flag_RemoveSHMRScatter     : 0
+Flag_RemoveSFRScatter     : 0
 
 
 #--------------------------------------------------------
