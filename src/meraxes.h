@@ -181,8 +181,8 @@ typedef struct physics_params_t
   int Flag_IncludeAGNXray;      /* 0=no AGN, 1=soft+hard, 2=hard only, 3=soft only */
   double SpecIndexXrayAGNSoft;
   double SpecIndexXrayAGNHard;
-  double SpecIndexUVAGNSoft;    /* lambda > 912A (redward of/at the break) 鈥� LW band amplitude/shape */
-  double SpecIndexUVAGNHard;    /* lambda <= 912A (shortward of the break) 鈥� ionizing photon rate only */
+  double SpecIndexUVAGNSoft;    /* lambda > 912A (redward of/at the break) - LW band amplitude/shape */
+  double SpecIndexUVAGNHard;    /* lambda <= 912A (shortward of the break) - ionizing photon rate only */
   double AGNLWEfficiency;       /* scale factor on the AGN LW amplitude */ 
 
   double ReionMaxHeatingRedshift;

@@ -809,42 +809,42 @@ void compute_no_sfr_recalibration_factors(int population)
   size_t n_bins =
       (size_t)SFR_NTYPES * (size_t)SFR_NX;
 
-    double* local_target_gsm = calloc(n_bins, sizeof(double));
-    double* global_target_gsm = calloc(n_bins, sizeof(double));
-    double* local_target_sfr = calloc(n_bins, sizeof(double));
-    double* global_target_sfr = calloc(n_bins, sizeof(double));
-    double* local_raw_gsm = calloc(n_bins, sizeof(double));
-    double* global_raw_gsm = calloc(n_bins, sizeof(double));
-    double* local_raw_sfr = calloc(n_bins, sizeof(double));
-    double* global_raw_sfr = calloc(n_bins, sizeof(double));
-double* no_sfr_gsm_stochasticity_calibrations;
-double* no_sfr_sfr_stochasticity_calibrations;
+  double* local_target_gsm = calloc(n_bins, sizeof(double));
+  double* global_target_gsm = calloc(n_bins, sizeof(double));
+  double* local_target_sfr = calloc(n_bins, sizeof(double));
+  double* global_target_sfr = calloc(n_bins, sizeof(double));
+  double* local_raw_gsm = calloc(n_bins, sizeof(double));
+  double* global_raw_gsm = calloc(n_bins, sizeof(double));
+  double* local_raw_sfr = calloc(n_bins, sizeof(double));
+  double* global_raw_sfr = calloc(n_bins, sizeof(double));
+  double* no_sfr_gsm_stochasticity_calibrations;
+  double* no_sfr_sfr_stochasticity_calibrations;
 
 #if USE_MINI_HALOS
-if (population == 3) {
-  no_sfr_gsm_stochasticity_calibrations =
-      run_globals.no_sfr_gsm_stochasticity_calibrations_iii;
-  no_sfr_sfr_stochasticity_calibrations =
-      run_globals.no_sfr_sfr_stochasticity_calibrations_iii;
-} else {
+  if (population == 3) {
+    no_sfr_gsm_stochasticity_calibrations =
+        run_globals.no_sfr_gsm_stochasticity_calibrations_iii;
+    no_sfr_sfr_stochasticity_calibrations =
+        run_globals.no_sfr_sfr_stochasticity_calibrations_iii;
+  } else {
+    no_sfr_gsm_stochasticity_calibrations =
+        run_globals.no_sfr_gsm_stochasticity_calibrations;
+    no_sfr_sfr_stochasticity_calibrations =
+        run_globals.no_sfr_sfr_stochasticity_calibrations;
+  }
+#else
   no_sfr_gsm_stochasticity_calibrations =
       run_globals.no_sfr_gsm_stochasticity_calibrations;
   no_sfr_sfr_stochasticity_calibrations =
       run_globals.no_sfr_sfr_stochasticity_calibrations;
-}
-#else
-no_sfr_gsm_stochasticity_calibrations =
-    run_globals.no_sfr_gsm_stochasticity_calibrations;
-no_sfr_sfr_stochasticity_calibrations =
-    run_globals.no_sfr_sfr_stochasticity_calibrations;
 #endif
 
-    long long* local_target_gsm_count = calloc(n_bins, sizeof(long long));
-    long long* global_target_gsm_count = calloc(n_bins, sizeof(long long));
-    long long* local_target_sfr_count = calloc(n_bins, sizeof(long long));
-    long long* global_target_sfr_count = calloc(n_bins, sizeof(long long));
+  long long* local_target_gsm_count = calloc(n_bins, sizeof(long long));
+  long long* global_target_gsm_count = calloc(n_bins, sizeof(long long));
+  long long* local_target_sfr_count = calloc(n_bins, sizeof(long long));
+  long long* global_target_sfr_count = calloc(n_bins, sizeof(long long));
 
-    if (local_target_gsm == NULL || global_target_gsm == NULL ||
+  if (local_target_gsm == NULL || global_target_gsm == NULL ||
       local_target_sfr == NULL || global_target_sfr == NULL ||
       local_raw_gsm == NULL || global_raw_gsm == NULL ||
       local_raw_sfr == NULL || global_raw_sfr == NULL ||
@@ -852,10 +852,10 @@ no_sfr_sfr_stochasticity_calibrations =
       local_target_sfr_count == NULL || global_target_sfr_count == NULL) {
     mlog_error("Failed to allocate noSFR memory.");
     ABORT(EXIT_FAILURE);
-    }
+  }
 
   galaxy_t* gal = run_globals.FirstGal;
-  size_t index; 
+  size_t index;
 
   double log10_mvir, raw_gsm, target_gsm, raw_sfr, target_sfr, new_target_gsm, new_target_sfr;
   int bin, has_gsm, has_sfr;
@@ -863,25 +863,25 @@ no_sfr_sfr_stochasticity_calibrations =
 #if USE_MINI_HALOS
     target_gsm = population == 3 ? gal->FescIIIWeightedGSM : gal->FescWeightedGSM;
     raw_gsm = population == 3 ? gal->StochasticityTreatedFescIIIWeightedGSM : gal->StochasticityTreatedFescWeightedGSM;
-	target_sfr = population == 3 ? gal->FescIIIWeightedSfr : gal->FescWeightedSfr;
-	raw_sfr = population == 3 ? gal->StochasticityTreatedFescIIIWeightedSfr : gal->StochasticityTreatedFescWeightedSfr;
+    target_sfr = population == 3 ? gal->FescIIIWeightedSfr : gal->FescWeightedSfr;
+    raw_sfr = population == 3 ? gal->StochasticityTreatedFescIIIWeightedSfr : gal->StochasticityTreatedFescWeightedSfr;
 #else
     target_gsm = gal->FescWeightedGSM; // original source history
     raw_gsm = gal->StochasticityTreatedFescWeightedGSM; // treated source history
-	target_sfr = gal->FescWeightedSfr;
-	raw_sfr = gal->StochasticityTreatedFescWeightedSfr;
-#endif    
+    target_sfr = gal->FescWeightedSfr;
+    raw_sfr = gal->StochasticityTreatedFescWeightedSfr;
+#endif
     has_gsm = stochasticity_source_eligible(gal) && (raw_gsm > 0.0 || target_gsm > 0.0);
-	has_sfr = stochasticity_source_eligible(gal) && (raw_sfr > 0.0 || target_sfr > 0.0) && galaxy_in_population(gal, population);
+    has_sfr = stochasticity_source_eligible(gal) && (raw_sfr > 0.0 || target_sfr > 0.0) && galaxy_in_population(gal, population);
 
     if (has_gsm || has_sfr) {
-	    log10_mvir = log10(gal->Mvir);
+      log10_mvir = log10(gal->Mvir);
       bin = log10_mvir < SFR_XMIN ? 0 : log10_mvir > SFR_XMAX ? SFR_NX - 1 : (int)floor((log10_mvir - SFR_XMIN) / SFR_DX);
       index = (size_t) (gal->Type * SFR_NX + bin);
 
       if (has_gsm) {
-		// local_target is the original source budget and local_raw is the treated source budget
-		// in other words, the source is the target and the target is the raw data for recalibration purposes
+        // local_target is the original source budget and local_raw is the treated source budget
+        // in other words, the source is the target and the target is the raw data for recalibration purposes
         local_target_gsm[index] += target_gsm;
         local_raw_gsm[index] += raw_gsm;
         if (target_gsm > 0.0)
