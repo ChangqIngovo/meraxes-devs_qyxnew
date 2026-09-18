@@ -10,9 +10,6 @@
 #include "physics/reionization.h"
 #include "read_halos.h"
 #include "reionization.h"
-#if USE_STOCHASTICITY
-#include "Stochasticity.h"
-#endif
 #if USE_MINI_HALOS
 #include "PopIII.h"
 #include "metal_evo.h"
@@ -357,17 +354,6 @@ void dracarys()
 #endif
     else
       nout_gals = 0;
-
-#if USE_STOCHASTICITY
-    if (run_globals.params.physics.Flag_RemoveSFRScatter == 1) {
-      build_no_sfr_tables(2);
-#if USE_MINI_HALOS
-      build_no_sfr_tables(3);
-#endif
-      // Update source histories once per snapshot, including snapshots without grids.
-      apply_no_sfr_treatment(snapshot);
-    }
-#endif
 
     log_memory_usage("after evolve_galaxies", snapshot, NGal);
 

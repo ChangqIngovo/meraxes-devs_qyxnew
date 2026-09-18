@@ -2031,16 +2031,24 @@ void construct_baryon_grids(int snapshot, int local_ngals)
   int local_n_complex = (int)(run_globals.reion_grids.slab_n_complex[run_globals.mpi_rank]);
 
 #if USE_STOCHASTICITY
-  if (run_globals.params.physics.Flag_SourceRecalibration) {
   if (run_globals.params.physics.Flag_RemoveSFRScatter == 1) {
-    compute_no_sfr_recalibration_factors(2);
+    build_no_sfr_tables(2);
 #if USE_MINI_HALOS
-    compute_no_sfr_recalibration_factors(3);
+    build_no_sfr_tables(3);
 #endif
-  } else if (run_globals.params.physics.EscapeFracScatterDex > ABS_TOL) {
-    compute_fesc_recalibration_factors();
+    apply_no_sfr_treatment(snapshot);
   }
-}  
+
+  if (run_globals.params.physics.Flag_SourceRecalibration) {
+    if (run_globals.params.physics.Flag_RemoveSFRScatter == 1) {
+      compute_no_sfr_recalibration_factors(2);
+#if USE_MINI_HALOS
+      compute_no_sfr_recalibration_factors(3);
+#endif
+    } else if (run_globals.params.physics.EscapeFracScatterDex > ABS_TOL) {
+      compute_fesc_recalibration_factors();
+    }
+  }
 #endif
 
   mlog("Constructing stellar mass and sfr grids...", MLOG_OPEN | MLOG_TIMERSTART);
