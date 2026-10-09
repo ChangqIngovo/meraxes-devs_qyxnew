@@ -21,7 +21,8 @@ Please refer to [`BUILD.md`](./BUILD.md) for detailed installation and build ins
 
 
 ## **Documentation**
-Comprehensive documentation is currently under development. For inquiries or assistance, please contact the team.  
+Read the [Meraxes Guide](docs/index.md) for build instructions, model parameters,
+execution workflow, outputs and formulas.
 
 
 ## **Acknowledging**
@@ -59,3 +60,4 @@ If using specific features introduced in Meraxes, please cite the corresponding 
     </tr>
   </tbody>
 </table>
+
