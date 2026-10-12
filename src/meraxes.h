@@ -544,8 +544,8 @@ typedef struct reion_grids_t
 
   double* SMOOTHED_SFR_GAL;
   double* SMOOTHED_XRAY_LUMINOSITY_GAL; // Per-cell luminosity density per shell [erg/s/cm^3]
-  double* SMOOTHED_AGN_hard; //!< per-cell AGN X-ray luminosity density per shell [erg/s/cm^3] (hard band)
-  double* SMOOTHED_AGN_soft; //!< per-cell AGN X-ray luminosity density per shell [erg/s/cm^3] (soft band)
+  double* SMOOTHED_AGN_hard;            //!< per-cell AGN X-ray luminosity density per shell [erg/s/cm^3] (hard band)
+  double* SMOOTHED_AGN_soft;            //!< per-cell AGN X-ray luminosity density per shell [erg/s/cm^3] (soft band)
 #if USE_MINI_HALOS
   double* SMOOTHED_SFR_III;
   double* SMOOTHED_AGN_UV; //!< per-cell AGN UV luminosity density per shell [1e21 erg/s/Hz/cm^3]
@@ -998,14 +998,14 @@ typedef struct run_globals_t
 #if USE_STOCHASTICITY
   // The SFR source table holds only the current snapshot: size SFR_NTYPES * SFR_NX.
   float* SFRs;
-  double *no_sfr_gsm_stochasticity_calibrations;
-  double *fesc_stochasticity_calibrations;
-  double *no_sfr_sfr_stochasticity_calibrations;
+  double* no_sfr_gsm_stochasticity_calibrations;
+  double* fesc_stochasticity_calibrations;
+  double* no_sfr_sfr_stochasticity_calibrations;
 #if USE_MINI_HALOS
   // Independent Pop III SFR table with the same halo-mass layout.
   float* SFRsIII;
-  double *no_sfr_gsm_stochasticity_calibrations_iii;
-  double *no_sfr_sfr_stochasticity_calibrations_iii;
+  double* no_sfr_gsm_stochasticity_calibrations_iii;
+  double* no_sfr_sfr_stochasticity_calibrations_iii;
 #endif
 #endif
 #ifdef CALC_MAGS

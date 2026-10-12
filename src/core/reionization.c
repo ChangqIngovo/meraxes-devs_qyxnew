@@ -18,8 +18,8 @@
 #include "reionization.h"
 #include "virial_properties.h"
 #if USE_STOCHASTICITY
-#include <gsl/gsl_cdf.h>
 #include "Stochasticity.h"
+#include <gsl/gsl_cdf.h>
 #endif
 
 static hid_t create_reion_grid(const int snapshot, const bool parallel);
@@ -1976,8 +1976,7 @@ static double galaxy_xray_band_fraction(void)
     return log(e_max / e_min) / log(2000.0 / 500.0);
 
   double exponent = 1.0 - alpha;
-  return (pow(e_max, exponent) - pow(e_min, exponent)) /
-         (pow(2000.0, exponent) - pow(500.0, exponent));
+  return (pow(e_max, exponent) - pow(e_min, exponent)) / (pow(2000.0, exponent) - pow(500.0, exponent));
 }
 
 static double calculate_galaxy_xray_luminosity(const galaxy_t* source_view, double sfr_timescale, double scatter_dex)
@@ -2001,8 +2000,8 @@ static double calculate_galaxy_xray_luminosity(const galaxy_t* source_view, doub
     double oxygen_abundance = run_globals.params.physics.XrayOxygenAbundanceFactor * z_solar;
 
     // Kyritsis et al. Eq. (8): log10[L_X(0.5-2 keV)/SFR] = B + A * (O/H)/(O/H)_sun + /epsilon
-    log_lx_sfr = run_globals.params.physics.XrayLogLNorm +
-                 run_globals.params.physics.XrayMetallicitySlope * oxygen_abundance;
+    log_lx_sfr =
+      run_globals.params.physics.XrayLogLNorm + run_globals.params.physics.XrayMetallicitySlope * oxygen_abundance;
     band_fraction = galaxy_xray_band_fraction();
   } else {
     if (run_globals.params.physics.LXrayGal <= 0.0)
@@ -2031,7 +2030,7 @@ void construct_baryon_grids(int snapshot, int local_ngals)
   float* effective_bhar_grid = run_globals.reion_grids.effective_bhar;
   float* sfr_grid = run_globals.reion_grids.sfr;
   float* sfr_histories_grid = run_globals.reion_grids.sfr_histories;
-  //Moved grid outside of the USE_STOCHASTICITY block
+  // Moved grid outside of the USE_STOCHASTICITY block
   float* xray_luminosity_grid = run_globals.reion_grids.xray_luminosity;
   float* xray_luminosity_histories_grid = run_globals.reion_grids.xray_luminosity_histories;
 #if USE_STOCHASTICITY
@@ -2349,8 +2348,8 @@ void construct_baryon_grids(int snapshot, int local_ngals)
                 xray_raw = calculate_galaxy_xray_luminosity(
                   &source_view, sfr_timescale, run_globals.params.physics.XrayScatterDex);
               } else if (run_globals.params.physics.XrayScatterDex > 0.0)
-                xray_raw = calculate_galaxy_xray_luminosity(
-                  gal, sfr_timescale, run_globals.params.physics.XrayScatterDex);
+                xray_raw =
+                  calculate_galaxy_xray_luminosity(gal, sfr_timescale, run_globals.params.physics.XrayScatterDex);
 
               if (recalibrate_xray_sources) {
                 local_xray_raw += xray_raw;
