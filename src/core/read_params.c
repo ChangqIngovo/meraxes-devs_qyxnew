@@ -532,6 +532,11 @@ void read_parameter_file(char* fname, int mode)
       required_tag[n_param] = 1;
       params_type[n_param++] = PARAM_TYPE_INT;
 
+      strncpy(params_tag[n_param], "Flag_BHObscuedIonization", tag_length);
+      params_addr[n_param] = &(run_params->physics).Flag_BHObscuedIonization;
+      required_tag[n_param] = 0;
+      params_type[n_param++] = PARAM_TYPE_INT;
+
       strncpy(params_tag[n_param], "Flag_BHARExponentialCut", tag_length);
       params_addr[n_param] = &(run_params->physics).Flag_BHARExponentialCut;
       required_tag[n_param] = 1;
@@ -1125,6 +1130,7 @@ void read_parameter_file(char* fname, int mode)
       required_tag[n_param] = 0;
       params_type[n_param++] = PARAM_TYPE_INT;
 
+
       strncpy(params_tag[n_param], "FescCGMSuppressionNorm", tag_length);
       params_addr[n_param] = &(run_params->physics).FescCGMSuppressionNorm;
       required_tag[n_param] = 0;
@@ -1218,6 +1224,31 @@ void read_parameter_file(char* fname, int mode)
       strcpy(params_tag[n_param], "XrayScatterDex");
       params_addr[n_param] = &(run_params->physics).XrayScatterDex;
       required_tag[n_param] = 0;
+      params_type[n_param++] = PARAM_TYPE_DOUBLE;
+
+      strcpy(params_tag[n_param], "Flag_XrayMetallicity");
+      params_addr[n_param] = &(run_params->physics).Flag_XrayMetallicity;
+      required_tag[n_param] = 1;
+      params_type[n_param++] = PARAM_TYPE_INT;
+
+      strcpy(params_tag[n_param], "XrayLogLNorm");
+      params_addr[n_param] = &(run_params->physics).XrayLogLNorm;
+      required_tag[n_param] = 1;
+      params_type[n_param++] = PARAM_TYPE_DOUBLE;
+
+      strcpy(params_tag[n_param], "XrayMetallicitySlope");
+      params_addr[n_param] = &(run_params->physics).XrayMetallicitySlope;
+      required_tag[n_param] = 1;
+      params_type[n_param++] = PARAM_TYPE_DOUBLE;
+
+      strcpy(params_tag[n_param], "XrayMetallicitySolar");
+      params_addr[n_param] = &(run_params->physics).XrayMetallicitySolar;
+      required_tag[n_param] = 1;
+      params_type[n_param++] = PARAM_TYPE_DOUBLE;
+
+      strcpy(params_tag[n_param], "XrayOxygenAbundanceFactor");
+      params_addr[n_param] = &(run_params->physics).XrayOxygenAbundanceFactor;
+      required_tag[n_param] = 1;
       params_type[n_param++] = PARAM_TYPE_DOUBLE;
 
       strcpy(params_tag[n_param], "NuXrayThreshold");
