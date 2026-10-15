@@ -1,10 +1,27 @@
 #include "meraxes.h"
 #include "mlog.h"
 #include "parse_paramfile.h"
+#include <math.h>
 #include <string.h>
 // test
 static void check_problem_params(run_params_t* run_params)
 {
+  if (run_params->Flag_PhotonConservation) {
+    if (run_params->Flag_PhotonConservation != 1 || !run_params->Flag_PatchyReion || run_params->ReionFilterType != 0 ||
+        run_params->ReionRtoMFilterType != 0 || run_params->ReionGridDim < 1 ||
+        !isfinite(run_params->ReionDeltaRFactor) || run_params->ReionDeltaRFactor <= 1.0 ||
+        run_params->PhotonConservationDebug < 0 || run_params->PhotonConservationDebug > 2 ||
+        run_params->PhotonConservationRequireFull < 0 || run_params->PhotonConservationRequireFull > 1 ||
+        run_params->PhotonConservationShape < 0 || run_params->PhotonConservationShape > 1 ||
+        run_params->PhotonConservationMaxEdges < 1 || run_params->PhotonConservationMemoryMB < 1 ||
+        run_params->PhotonConservationMaxIterations < 1 || run_params->PhotonConservationMaxEvaluations < 1 ||
+        run_params->PhotonConservationMaxCuts < 1 || !isfinite(run_params->PhotonConservationTolerance) ||
+        run_params->PhotonConservationTolerance <= 0.0 || run_params->PhotonConservationTolerance > 1e-5) {
+      mlog_error("Invalid photon-conservation settings: require top-hat filters, DeltaRFactor > 1, "
+                 "positive resource limits and tolerance in (0,1e-5]. See docs/photon_conservation.md.");
+      ABORT(EXIT_FAILURE);
+    }
+  }
   if (run_params->NSteps != 1) {
     mlog_error("The current version of the code only works if NSteps = 1. Sorry! Exiting...");
     ABORT(EXIT_FAILURE);
@@ -164,6 +181,17 @@ void read_parameter_file(char* fname, int mode)
 
       // Initialise values and arrays
       n_param = 0;
+      // Optional settings also have defaults for older parameter files.
+      run_params->Flag_PhotonConservation = 0;
+      run_params->PhotonConservationDebug = 1;
+      run_params->PhotonConservationRequireFull = 0;
+      run_params->PhotonConservationShape = 1;
+      run_params->PhotonConservationMaxEdges = 20000000;
+      run_params->PhotonConservationMemoryMB = 2048;
+      run_params->PhotonConservationMaxIterations = 10000;
+      run_params->PhotonConservationMaxEvaluations = 1000000;
+      run_params->PhotonConservationMaxCuts = 512;
+      run_params->PhotonConservationTolerance = 1e-9;
       for (ii = 0; ii < PARAM_MAX_ENTRIES; ii++) {
         required_tag[ii] = 0;
         hdf5props->params_type[ii] = PARAM_TYPE_UNUSED;
@@ -971,6 +999,56 @@ void read_parameter_file(char* fname, int mode)
       params_addr[n_param] = &(run_params->Flag_IncludeRecombinations);
       required_tag[n_param] = 1;
       params_type[n_param++] = PARAM_TYPE_INT;
+
+      strncpy(params_tag[n_param], "Flag_PhotonConservation", tag_length);
+      params_addr[n_param] = &(run_params->Flag_PhotonConservation);
+      required_tag[n_param] = 0;
+      params_type[n_param++] = PARAM_TYPE_INT;
+
+      strncpy(params_tag[n_param], "PhotonConservationDebug", tag_length);
+      params_addr[n_param] = &(run_params->PhotonConservationDebug);
+      required_tag[n_param] = 0;
+      params_type[n_param++] = PARAM_TYPE_INT;
+
+      strncpy(params_tag[n_param], "PhotonConservationRequireFull", tag_length);
+      params_addr[n_param] = &(run_params->PhotonConservationRequireFull);
+      required_tag[n_param] = 0;
+      params_type[n_param++] = PARAM_TYPE_INT;
+
+      strncpy(params_tag[n_param], "PhotonConservationShape", tag_length);
+      params_addr[n_param] = &(run_params->PhotonConservationShape);
+      required_tag[n_param] = 0;
+      params_type[n_param++] = PARAM_TYPE_INT;
+
+      strncpy(params_tag[n_param], "PhotonConservationMaxEdges", tag_length);
+      params_addr[n_param] = &(run_params->PhotonConservationMaxEdges);
+      required_tag[n_param] = 0;
+      params_type[n_param++] = PARAM_TYPE_INT;
+
+      strncpy(params_tag[n_param], "PhotonConservationMemoryMB", tag_length);
+      params_addr[n_param] = &(run_params->PhotonConservationMemoryMB);
+      required_tag[n_param] = 0;
+      params_type[n_param++] = PARAM_TYPE_INT;
+
+      strncpy(params_tag[n_param], "PhotonConservationMaxIterations", tag_length);
+      params_addr[n_param] = &(run_params->PhotonConservationMaxIterations);
+      required_tag[n_param] = 0;
+      params_type[n_param++] = PARAM_TYPE_INT;
+
+      strncpy(params_tag[n_param], "PhotonConservationMaxEvaluations", tag_length);
+      params_addr[n_param] = &(run_params->PhotonConservationMaxEvaluations);
+      required_tag[n_param] = 0;
+      params_type[n_param++] = PARAM_TYPE_INT;
+
+      strncpy(params_tag[n_param], "PhotonConservationMaxCuts", tag_length);
+      params_addr[n_param] = &(run_params->PhotonConservationMaxCuts);
+      required_tag[n_param] = 0;
+      params_type[n_param++] = PARAM_TYPE_INT;
+
+      strncpy(params_tag[n_param], "PhotonConservationTolerance", tag_length);
+      params_addr[n_param] = &(run_params->PhotonConservationTolerance);
+      required_tag[n_param] = 0;
+      params_type[n_param++] = PARAM_TYPE_DOUBLE;
 
       strncpy(params_tag[n_param], "Flag_EvolvingReionRBubbleMax", tag_length);
       params_addr[n_param] = &(run_params->Flag_EvolvingReionRBubbleMax);

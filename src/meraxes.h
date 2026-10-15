@@ -332,6 +332,16 @@ typedef struct run_params_t
   int Flag_IncludeStreamVel;
   int Flag_IncludeMetalEvo; // New for Metallicity
   int Flag_IncludeRecombinations;
+  int Flag_PhotonConservation;
+  int PhotonConservationDebug;
+  int PhotonConservationRequireFull;
+  int PhotonConservationShape;
+  int PhotonConservationMaxEdges;
+  int PhotonConservationMemoryMB;
+  int PhotonConservationMaxIterations;
+  int PhotonConservationMaxEvaluations;
+  int PhotonConservationMaxCuts;
+  double PhotonConservationTolerance;
   int Flag_EvolvingReionRBubbleMax;
   int Flag_InstantaneousSFR;
   int Flag_TemperatureDependentRec;

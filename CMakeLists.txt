@@ -91,6 +91,17 @@ endif()
 # TODO: This is bad practice, we should really list the sources explicitly
 file(GLOB SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/core/*.[ch] *.h ${CMAKE_CURRENT_SOURCE_DIR}/src/physics/*.[ch])
 list(REMOVE_ITEM SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/core/meraxes.c)
+
+# Conservation certificates require IEEE finite checks and ordered arithmetic,
+# including in Release builds, whose legacy physics uses -ffast-math.
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+    file(GLOB PHOTON_CONSERVATION_SOURCES
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/core/photon_conservation*.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/physics/photon_conservation*.c)
+    set_source_files_properties(${PHOTON_CONSERVATION_SOURCES}
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/core/read_params.c
+        PROPERTIES COMPILE_OPTIONS "-fno-fast-math;-ffp-contract=off")
+endif()
     
 # THE MERAXES TARGETS
 if(BUILD_SHARED_LIBS)

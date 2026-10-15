@@ -48,5 +48,36 @@ set_property(TARGET main_blackhole_feedback PROPERTY C_STANDARD 99)
 target_include_directories(main_blackhole_feedback PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_BINARY_DIR})
 target_link_libraries(main_blackhole_feedback PRIVATE meraxes_lib)
 
+# Photon-allocation tests are ordinary executables, independent of Criterion,
+# MPI execution, external simulation data and Meraxes global state.
+foreach(pc_test photon_conservation photon_conservation_es photon_conservation_shape)
+    add_executable(test_${pc_test}
+        test_${pc_test}.c
+        ${CMAKE_SOURCE_DIR}/src/physics/photon_conservation.c
+        ${CMAKE_SOURCE_DIR}/src/physics/photon_conservation_es.c
+        ${CMAKE_SOURCE_DIR}/src/physics/photon_conservation_shape.c)
+    set_property(TARGET test_${pc_test} PROPERTY C_STANDARD 99)
+    target_include_directories(test_${pc_test} PRIVATE ${CMAKE_SOURCE_DIR}/src/physics)
+    target_link_libraries(test_${pc_test} PRIVATE m)
+    # Several independent oracles use assert; keep their checks active in Release.
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(test_${pc_test} PRIVATE -UNDEBUG)
+    endif()
+    target_compile_options(test_${pc_test} PRIVATE ${SANITIZE_FLAGS})
+    target_link_options(test_${pc_test} PRIVATE ${SANITIZE_FLAGS})
+    add_test(NAME test_${pc_test} COMMAND test_${pc_test})
+endforeach()
+
+add_executable(test_photon_conservation_feedback test_photon_conservation_feedback.c)
+set_property(TARGET test_photon_conservation_feedback PROPERTY C_STANDARD 99)
+target_include_directories(test_photon_conservation_feedback PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_BINARY_DIR})
+target_link_libraries(test_photon_conservation_feedback PRIVATE meraxes_lib)
+foreach(pc_ranks 1 2)
+    add_test(NAME test_photon_conservation_feedback_mpi${pc_ranks}
+        COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${pc_ranks} ${MPIEXEC_PREFLAGS}
+            $<TARGET_FILE:test_photon_conservation_feedback> ${MPIEXEC_POSTFLAGS})
+    set_tests_properties(test_photon_conservation_feedback_mpi${pc_ranks} PROPERTIES PROCESSORS ${pc_ranks})
+endforeach()
+
 # Regression tests on the L10_N512 test set (no Criterion needed)
 add_subdirectory(regression)

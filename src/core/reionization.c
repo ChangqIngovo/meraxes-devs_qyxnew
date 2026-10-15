@@ -379,7 +379,8 @@ void call_find_HII_bubbles(int snapshot, int nout_gals, timer_info* timer)
   // Logic statement to avoid gridding the density field twice: skip grid construction and
   // grid saving if Flag_IncludeSpinTemp is true, since these operations have already been
   // performed by the preceding call_find_HII_bubbles
-  if (!run_globals.params.Flag_IncludeSpinTemp || !run_globals.params.ReionUVBFlag) {
+  if (!run_globals.params.Flag_IncludeSpinTemp ||
+      (!run_globals.params.ReionUVBFlag && !run_globals.params.Flag_PhotonConservation)) {
 
     // Construct the baryon grids
     construct_baryon_grids(snapshot, nout_gals);
@@ -3302,6 +3303,10 @@ void save_reion_output_attributes(int snapshot)
 
 bool check_if_reionization_ongoing(int snapshot)
 {
+  // The photon ledger must continue to account for sources and sinks after overlap.
+  if (run_globals.params.Flag_PhotonConservation)
+    return true;
+
   int started = run_globals.reion_grids.started;
   int finished = run_globals.reion_grids.finished;
 

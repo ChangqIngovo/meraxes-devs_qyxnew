@@ -7,6 +7,7 @@
 #include "meraxes.h"
 #include "meraxes_gpu.h"
 #include "misc_tools.h"
+#include "photon_conservation_meraxes.h"
 #include "recombinations.h"
 #include "reionization.h"
 #include "utils.h"
@@ -147,6 +148,10 @@ void _find_HII_bubbles(const int snapshot)
   if ((box_size / (double)ReionGridDim) < 1.0) // Fairly arbitrary length based on 2 runs Sobacchi did
     cell_length_factor = 1.0;
 
+  photon_conservation_context* photon_context = NULL;
+  if (run_globals.params.Flag_PhotonConservation)
+    photon_context = photon_conservation_begin(snapshot);
+
   // Init xH
   float* xH = run_globals.reion_grids.xH;
   for (int ii = 0; ii < slab_n_real; ii++)
@@ -283,6 +288,9 @@ void _find_HII_bubbles(const int snapshot)
       flag_last_filter_step = true;
       R = cell_length_factor * box_size / (double)ReionGridDim;
     }
+
+    if (photon_context)
+      photon_conservation_radius(photon_context, R, flag_last_filter_step);
 
     // DEBUG
     // mlog("R = %.2e (h=0.678 -> %.2e)", MLOG_MESG, R, R/0.678);
@@ -487,7 +495,9 @@ void _find_HII_bubbles(const int snapshot)
           {
             // If it is the first crossing of the ionisation barrier for this cell (largest R)
             // Store the ionisation background and the reionisation redshift for each cell
-            if ((xH[i_real] > REL_TOL) && (run_globals.params.Flag_IncludeRecombinations)) {
+            if (photon_context)
+              photon_conservation_crossing(photon_context, i_real);
+            if (!photon_context && (xH[i_real] > REL_TOL) && (run_globals.params.Flag_IncludeRecombinations)) {
               Gamma12[i_real] = ((float*)weighted_sfr_filtered)[i_padded] * (float)(Gamma_R_prefactor);
 #if USE_MINI_HALOS
               Gamma12[i_real] += ((float*)weighted_sfrIII_filtered)[i_padded] * (float)(Gamma_R_prefactorIII);
@@ -528,7 +538,7 @@ void _find_HII_bubbles(const int snapshot)
           }
 
           // Check if new ionisation
-          if ((xH[i_real] < REL_TOL) && (z_in[i_real] < 0)) // New ionisation!
+          if (!photon_context && (xH[i_real] < REL_TOL) && (z_in[i_real] < 0)) // New ionisation!
           {
             z_in[i_real] = (float)redshift;
             // Set J_21 at new ionization if ReionUVBFlag = 1 (const J_21)
@@ -545,6 +555,10 @@ void _find_HII_bubbles(const int snapshot)
     // iz
     R /= ReionDeltaRFactor;
   }
+
+  // Commit the conservative map and its feedback before statistics or new recombinations.
+  if (photon_context)
+    photon_conservation_finish(photon_context);
 
   // Find the volume and mass weighted neutral fractions
   // TODO: The deltax grid will have rounding errors from forward and reverse
