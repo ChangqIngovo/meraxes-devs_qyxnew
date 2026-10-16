@@ -330,6 +330,16 @@ certificate is a failure even when all earlier certificates pass. Use a fresh
 work directory for new runs; `--audit-only` examines an existing run without
 restarting it.
 
+A failure in `pos_to_ngp` before a snapshot reaches `find_HII_bubbles` is
+upstream of photon allocation. One such failure in a 32-rank L10_N512 run
+occurred at snapshot 35 after snapshot 34 completed with zero photon
+residual. The VELOCIraptor reader previously left `ProgIndex` and `TreeFlags`
+uninitialised when `FlagIgnoreProgIndex=0`. These fields now explicitly select
+the existing mass-based merger fallback because no progenitor link is loaded;
+see [the reader regression tests](testing.md). Invalid position assertions
+are retained. This correction requires a fresh evolution because it can
+change galaxy histories and therefore the photon sources themselves.
+
 ## Validation and reproduction
 
 The checks completed for this implementation are:

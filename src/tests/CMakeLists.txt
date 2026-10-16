@@ -79,5 +79,18 @@ foreach(pc_ranks 1 2)
     set_tests_properties(test_photon_conservation_feedback_mpi${pc_ranks} PROPERTIES PROCESSORS ${pc_ranks})
 endforeach()
 
+# Real collective HDF5 reader with a self-contained catalogue fixture.
+add_executable(test_velociraptor_reader test_velociraptor_reader.c)
+set_property(TARGET test_velociraptor_reader PROPERTY C_STANDARD 99)
+target_include_directories(test_velociraptor_reader PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_BINARY_DIR})
+target_link_libraries(test_velociraptor_reader PRIVATE meraxes_lib)
+foreach(reader_ranks 1 2)
+    add_test(NAME test_velociraptor_reader_mpi${reader_ranks}
+        COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${reader_ranks} ${MPIEXEC_PREFLAGS}
+            $<TARGET_FILE:test_velociraptor_reader> ${MPIEXEC_POSTFLAGS})
+    set_tests_properties(test_velociraptor_reader_mpi${reader_ranks} PROPERTIES
+        PROCESSORS ${reader_ranks} TIMEOUT 60)
+endforeach()
+
 # Regression tests on the L10_N512 test set (no Criterion needed)
 add_subdirectory(regression)

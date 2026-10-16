@@ -158,6 +158,18 @@ void read_trees__velociraptor(int snapshot,
   mass_unit_to_internal /= 1.0e10;
   H5LTget_attribute_double(fd, snap_group_name, "scalefactor", &scale_factor);
 
+  /* This reader loads descendant links (Head), but no progenitor links
+   * (Tail). In particular, the L10_N512 catalogue does not contain Tail.
+   * Report the existing mass-based fallback when pointers were requested.
+   */
+  static bool warned_missing_progenitors = false;
+  if (!run_globals.params.FlagIgnoreProgIndex && !warned_missing_progenitors) {
+    mlog("VELOCIraptor progenitor indices are not loaded; using progenitor halo mass for merger selection "
+         "(FlagIgnoreProgIndex=0).",
+         MLOG_MESG);
+    warned_missing_progenitors = true;
+  }
+
   // Currently the chunk size is 10000, improving ~10% w.r.t. no chunk or 1k chunk
   int buffer_size = (n_tree_entries > 100000) ? n_tree_entries / 10 : 10000;
   buffer_size = buffer_size > n_tree_entries ? n_tree_entries : buffer_size;
@@ -243,22 +255,16 @@ void read_trees__velociraptor(int snapshot,
         halo->ID = ID[ii];
         halo->DescIndex = id_to_ind(Head[ii]);
 
-        if (run_globals.params.FlagIgnoreProgIndex)
-          halo->ProgIndex = -1;
-        // else
-        //   halo->ProgIndex = id_to_ind(Tail[ii]);
+        /* Reset these fields for every halo, including reused storage. No
+         * progenitor link was read, so connect_galaxy_and_halo must use its
+         * mass-based fallback rather than an uninitialised pointer or flag.
+         */
+        halo->ProgIndex = -1;
+        halo->TreeFlags = TREE_CASE_NO_PROGENITORS;
 
         halo->NextHaloInFOFGroup = NULL;
         halo->Type = hostHaloID[ii] == -1 ? 0 : 1;
         halo->SnapOffset = id_to_snap(Head[ii]) - snapshot;
-
-        // Any other tree flags need to be set using both the current and
-        // progenitor halo information (stored in the galaxy), therefore we
-        // need to leave setting those until later...
-        if (run_globals.params.FlagIgnoreProgIndex)
-          halo->TreeFlags = TREE_CASE_NO_PROGENITORS;
-        // else
-        //   halo->TreeFlags = (unsigned long)Tail[ii] != ID[ii] ? 0 : TREE_CASE_NO_PROGENITORS;
 
         // Here we have a cyclic pointer, indicating that this halo's life ends here
         if ((unsigned long)Head[ii] == ID[ii])

@@ -29,7 +29,9 @@ Debug builds compile with `-Werror=implicit` and run under AddressSanitizer and 
 | Regression comparisons | Python 3 with `h5py` and `numpy` |
 | Regression plots (optional) | `matplotlib` |
 
-Without Criterion, only the two standalone drivers are built. Without Python, the regression runs still happen but aren't compared.
+Without Criterion, the Criterion-based tests are skipped; standalone drivers,
+photon-conservation tests and the VELOCIraptor reader tests remain available.
+Without Python, the regression runs still happen but aren't compared.
 
 | Unit test | Checks |
 |---|---|
@@ -38,6 +40,23 @@ Without Criterion, only the two standalone drivers are built. Without Python, th
 | `test_blackhole_feedback` | Black-hole emissivity, accretion time and luminosities. |
 | `test_emission_lines` | [O III] coefficients and luminosities. |
 | `main_cooling`, `main_blackhole_feedback` | Standalone drivers that print the same quantities for given inputs. |
+| `test_velociraptor_reader_mpi1`, `test_velociraptor_reader_mpi2` | Read a synthetic catalogue into poisoned halo storage with both `FlagIgnoreProgIndex` settings; check deterministic flags and mass-based merger selection. |
+
+The VELOCIraptor reader currently loads descendant links (`Head`), but no
+progenitor links (`Tail`). The L10_N512 catalogue does not contain `Tail`.
+Each halo must therefore start with `ProgIndex=-1` and
+`TREE_CASE_NO_PROGENITORS`, selecting the existing progenitor-halo-mass
+comparison during mergers. The reader reports this fallback when
+`FlagIgnoreProgIndex=0`. Earlier versions left these fields uninitialised in
+that configuration, making galaxy formation and merger decisions dependent
+on reused memory. Affected evolutions must be restarted; their outputs are
+not a reliable regression reference for this correction.
+
+The poisoned-storage test fails against the previous reader and passes after
+the correction with one and two MPI ranks. A local 32-rank L10_N512 evolution
+with photon conservation enabled completes snapshots 0--35, with all 36
+snapshot certificates passing the independent audit. The previous binary
+reproduces the negative-index assertion before completing that range.
 
 ## Regression tests
 
