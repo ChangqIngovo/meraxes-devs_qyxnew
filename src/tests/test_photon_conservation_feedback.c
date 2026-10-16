@@ -111,7 +111,8 @@ int main(int argc, char** argv)
   g->x##_filtered_reverse_plan = inverse[f];
   ASSIGN(stars, 0)
   ASSIGN(weighted_sfr, 1)
-  ASSIGN(effective_bhm, 2) ASSIGN(effective_bhar, 3)
+  ASSIGN(effective_bhm, 2)
+  ASSIGN(effective_bhar, 3)
 #if USE_MINI_HALOS
     ASSIGN(starsIII, 4) ASSIGN(weighted_sfrIII, 5)
 #endif

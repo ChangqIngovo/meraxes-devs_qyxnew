@@ -1,9 +1,9 @@
 #ifndef MERAXES_PHOTON_CONSERVATION_MPI_H
 #define MERAXES_PHOTON_CONSERVATION_MPI_H
 
+#include "../physics/photon_conservation_geometry.h"
 #include <mpi.h>
 #include <stddef.h>
-#include "../physics/photon_conservation_geometry.h"
 
 typedef struct pc_mpi_context pc_mpi_context;
 
@@ -26,8 +26,7 @@ typedef struct
  * this phase. MPI failures abort comm; allocation failure during begin is a
  * clean, collective decline, allowing the original scalar solver to run.
  */
-pc_mpi_context* pc_mpi_create(MPI_Comm comm, size_t max_worker_bytes,
-                             size_t min_targets);
+pc_mpi_context* pc_mpi_create(MPI_Comm comm, size_t max_worker_bytes, size_t min_targets);
 pc_geometry_executor* pc_mpi_executor(pc_mpi_context* context);
 void pc_mpi_worker(pc_mpi_context* context);
 void pc_mpi_stop(pc_mpi_context* context);

@@ -342,8 +342,7 @@ static int pc_geometry_begin(pc_state* s, size_t targets, size_t limit)
   size_t count, entries;
   if (!s->geometry || !targets)
     return 0;
-  accepted = s->geometry->begin(s->geometry->user, s->p->dim, s->kd,
-                              (size_t)s->kd_count, limit, targets);
+  accepted = s->geometry->begin(s->geometry->user, s->p->dim, s->kd, (size_t)s->kd_count, limit, targets);
   if (accepted <= 0) {
     if (accepted < 0)
       s->error = PC_ERR_MEMORY_LIMIT;
@@ -406,8 +405,8 @@ static int pc_geometry_commit(pc_state* s, size_t count, size_t limit, int audit
         s->error = PC_ERR_NUMERICAL;
         return -1;
       }
-      if (!audit && pc_add_edge(s, s->source_offset + source, s->target_offset + j,
-                               (double)(2 * s->photons + 1), 1) < 0)
+      if (!audit &&
+          pc_add_edge(s, s->source_offset + source, s->target_offset + j, (double)(2 * s->photons + 1), 1) < 0)
         return -1;
       ++added;
     }
@@ -818,7 +817,9 @@ const char* pc_status_string(pc_status status)
   }
 }
 
-pc_status pc_allocate_with_geometry(const pc_problem* p, const pc_options* options, pc_result* r,
+pc_status pc_allocate_with_geometry(const pc_problem* p,
+                                    const pc_options* options,
+                                    pc_result* r,
                                     const pc_geometry_executor* geometry)
 {
   pc_state s;

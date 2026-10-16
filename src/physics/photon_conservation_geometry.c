@@ -23,9 +23,15 @@ static double bound(const size_t dim[3], const pc_geometry_node* node, const int
   return total;
 }
 
-static void collect(const size_t dim[3], const pc_geometry_node* tree, int index,
-                    const pc_geometry_query* query, double radius2, double distance2,
-                    int limit, int* neighbours, int* count)
+static void collect(const size_t dim[3],
+                    const pc_geometry_node* tree,
+                    int index,
+                    const pc_geometry_query* query,
+                    double radius2,
+                    double distance2,
+                    int limit,
+                    int* neighbours,
+                    int* count)
 {
   const pc_geometry_node* node = &tree[index];
   if (*count == limit || distance2 > radius2)
@@ -45,13 +51,23 @@ static void collect(const size_t dim[3], const pc_geometry_node* tree, int index
   }
 }
 
-void pc_geometry_collect(const size_t dim[3], const pc_geometry_node* tree,
-                         const pc_geometry_query* query, int limit,
-                         int* neighbours, int* count)
+void pc_geometry_collect(const size_t dim[3],
+                         const pc_geometry_node* tree,
+                         const pc_geometry_query* query,
+                         int limit,
+                         int* neighbours,
+                         int* count)
 {
   *count = 0;
   if (limit <= 0)
     return;
-  collect(dim, tree, 0, query, query->radius * query->radius + 1e-10,
-          bound(dim, &tree[0], query->pos), limit, neighbours, count);
+  collect(dim,
+          tree,
+          0,
+          query,
+          query->radius * query->radius + 1e-10,
+          bound(dim, &tree[0], query->pos),
+          limit,
+          neighbours,
+          count);
 }

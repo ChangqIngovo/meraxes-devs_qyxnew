@@ -5,7 +5,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-enum { PC_MPI_BEGIN = 1, PC_MPI_QUERY, PC_MPI_END, PC_MPI_STOP };
+enum
+{
+  PC_MPI_BEGIN = 1,
+  PC_MPI_QUERY,
+  PC_MPI_END,
+  PC_MPI_STOP
+};
 
 struct pc_mpi_context
 {
@@ -71,21 +77,17 @@ static void release(pc_mpi_context* c)
 
 /* Include the replicated tree when accounting for each worker's memory.
  * Rank zero borrows the original tree and therefore uses less memory. */
-static int required_bytes(const pc_mpi_context* c, size_t nodes,
-                          size_t neighbours, size_t batch, size_t* bytes)
+static int required_bytes(const pc_mpi_context* c, size_t nodes, size_t neighbours, size_t batch, size_t* bytes)
 {
   size_t tree_bytes, per_row, row_bytes, metadata;
   const size_t rows = batch / (size_t)c->ranks + (batch % (size_t)c->ranks != 0);
-  return product(nodes, sizeof(pc_geometry_node), &tree_bytes) &&
-         product(neighbours, sizeof(int), &per_row) &&
-         sum(per_row, sizeof(pc_geometry_query) + sizeof(int), &per_row) &&
-         product(rows, per_row, &row_bytes) &&
-         product((size_t)c->ranks, 4 * sizeof(int), &metadata) &&
-         sum(tree_bytes, row_bytes, bytes) && sum(*bytes, metadata, bytes);
+  return product(nodes, sizeof(pc_geometry_node), &tree_bytes) && product(neighbours, sizeof(int), &per_row) &&
+         sum(per_row, sizeof(pc_geometry_query) + sizeof(int), &per_row) && product(rows, per_row, &row_bytes) &&
+         product((size_t)c->ranks, 4 * sizeof(int), &metadata) && sum(tree_bytes, row_bytes, bytes) &&
+         sum(*bytes, metadata, bytes);
 }
 
-static int prepare(pc_mpi_context* c, const unsigned long long header[7],
-                   const pc_geometry_node* tree)
+static int prepare(pc_mpi_context* c, const unsigned long long header[7], const pc_geometry_node* tree)
 {
   size_t bytes, tree_bytes, cells;
   int valid = 1, accepted;
@@ -98,16 +100,12 @@ static int prepare(pc_mpi_context* c, const unsigned long long header[7],
   c->nodes = (size_t)header[3];
   c->max_neighbors = (size_t)header[4];
   c->batch = (size_t)header[5];
-  valid = valid && c->dim[0] && c->dim[1] && c->dim[2] && c->nodes &&
-          c->max_neighbors && c->max_neighbors <= INT_MAX && c->batch &&
-          c->batch <= INT_MAX / c->max_neighbors &&
-          required_bytes(c, c->nodes, c->max_neighbors, c->batch, &bytes) &&
-          (!c->max_bytes || bytes <= c->max_bytes);
+  valid = valid && c->dim[0] && c->dim[1] && c->dim[2] && c->nodes && c->max_neighbors && c->max_neighbors <= INT_MAX &&
+          c->batch && c->batch <= INT_MAX / c->max_neighbors &&
+          required_bytes(c, c->nodes, c->max_neighbors, c->batch, &bytes) && (!c->max_bytes || bytes <= c->max_bytes);
   if (valid) {
-    const size_t rows = c->batch / (size_t)c->ranks +
-                        (c->batch % (size_t)c->ranks != 0);
-    valid = product(c->nodes, sizeof(pc_geometry_node), &tree_bytes) &&
-            product(rows, c->max_neighbors, &cells);
+    const size_t rows = c->batch / (size_t)c->ranks + (c->batch % (size_t)c->ranks != 0);
+    valid = product(c->nodes, sizeof(pc_geometry_node), &tree_bytes) && product(rows, c->max_neighbors, &cells);
     if (valid) {
       if (c->rank)
         c->owned_tree = malloc(tree_bytes);
@@ -119,9 +117,8 @@ static int prepare(pc_mpi_context* c, const unsigned long long header[7],
       c->row_offsets = malloc((size_t)c->ranks * sizeof(int));
       c->neighbour_counts = malloc((size_t)c->ranks * sizeof(int));
       c->neighbour_offsets = malloc((size_t)c->ranks * sizeof(int));
-      valid = c->tree && c->queries && c->counts && c->neighbours &&
-              c->row_counts && c->row_offsets && c->neighbour_counts &&
-              c->neighbour_offsets;
+      valid = c->tree && c->queries && c->counts && c->neighbours && c->row_counts && c->row_offsets &&
+              c->neighbour_counts && c->neighbour_offsets;
     }
   }
   /* No tree payload or query is sent before every rank owns its buffers. */
@@ -143,8 +140,12 @@ static int prepare(pc_mpi_context* c, const unsigned long long header[7],
   return 1;
 }
 
-static int begin(void* user, const size_t dim[3], const pc_geometry_node* tree,
-                 size_t nodes, size_t max_neighbors, size_t targets)
+static int begin(void* user,
+                 const size_t dim[3],
+                 const pc_geometry_node* tree,
+                 size_t nodes,
+                 size_t max_neighbors,
+                 size_t targets)
 {
   pc_mpi_context* c = user;
   unsigned long long header[7];
@@ -153,8 +154,7 @@ static int begin(void* user, const size_t dim[3], const pc_geometry_node* tree,
   if (c->rank || c->active || c->stopped)
     return -1;
   ++c->stats.begin_calls;
-  if (c->ranks < 2 || targets < c->min_targets || !targets || !nodes ||
-      !max_neighbors)
+  if (c->ranks < 2 || targets < c->min_targets || !targets || !nodes || !max_neighbors)
     goto decline;
   if (!tree || !dim || !dim[0] || !dim[1] || !dim[2] || max_neighbors > INT_MAX)
     return -1;
@@ -162,8 +162,7 @@ static int begin(void* user, const size_t dim[3], const pc_geometry_node* tree,
   if (batch > INT_MAX / max_neighbors)
     batch = INT_MAX / max_neighbors;
   /* Keep the worker limit a hard bound even when neighbour lists grow. */
-  while (batch && (!required_bytes(c, nodes, max_neighbors, batch, &bytes) ||
-                  (c->max_bytes && bytes > c->max_bytes)))
+  while (batch && (!required_bytes(c, nodes, max_neighbors, batch, &bytes) || (c->max_bytes && bytes > c->max_bytes)))
     batch /= 2;
   if (!batch)
     goto decline;
@@ -187,13 +186,11 @@ decline:
   return 0;
 }
 
-static void execute(pc_mpi_context* c, const pc_geometry_query* queries,
-                    size_t count, int* counts, int* neighbours)
+static void execute(pc_mpi_context* c, const pc_geometry_query* queries, size_t count, int* counts, int* neighbours)
 {
   size_t offset = 0;
   for (int rank = 0; rank < c->ranks; ++rank) {
-    const size_t rows = count / (size_t)c->ranks +
-                        ((size_t)rank < count % (size_t)c->ranks);
+    const size_t rows = count / (size_t)c->ranks + ((size_t)rank < count % (size_t)c->ranks);
     c->row_counts[rank] = (int)rows;
     c->row_offsets[rank] = (int)offset;
     c->neighbour_counts[rank] = (int)(rows * c->max_neighbors);
@@ -201,30 +198,37 @@ static void execute(pc_mpi_context* c, const pc_geometry_query* queries,
     offset += rows;
   }
   const int local = c->row_counts[c->rank];
-  checked(c, MPI_Scatterv(queries, c->row_counts, c->row_offsets, c->query_type,
-                         c->queries, local, c->query_type, 0, c->comm));
+  checked(
+    c,
+    MPI_Scatterv(queries, c->row_counts, c->row_offsets, c->query_type, c->queries, local, c->query_type, 0, c->comm));
   for (int i = 0; i < local; ++i) {
     c->counts[i] = 0;
-    pc_geometry_collect(c->dim, c->tree, c->queries + i,
-                         (int)c->max_neighbors,
-                         c->neighbours + (size_t)i * c->max_neighbors,
-                         c->counts + i);
+    pc_geometry_collect(c->dim,
+                        c->tree,
+                        c->queries + i,
+                        (int)c->max_neighbors,
+                        c->neighbours + (size_t)i * c->max_neighbors,
+                        c->counts + i);
   }
-  checked(c, MPI_Gatherv(c->counts, local, MPI_INT, counts, c->row_counts,
-                        c->row_offsets, MPI_INT, 0, c->comm));
-  checked(c, MPI_Gatherv(c->neighbours, c->neighbour_counts[c->rank], MPI_INT,
-                        neighbours, c->neighbour_counts, c->neighbour_offsets,
-                        MPI_INT, 0, c->comm));
+  checked(c, MPI_Gatherv(c->counts, local, MPI_INT, counts, c->row_counts, c->row_offsets, MPI_INT, 0, c->comm));
+  checked(c,
+          MPI_Gatherv(c->neighbours,
+                      c->neighbour_counts[c->rank],
+                      MPI_INT,
+                      neighbours,
+                      c->neighbour_counts,
+                      c->neighbour_offsets,
+                      MPI_INT,
+                      0,
+                      c->comm));
 }
 
-static int query(void* user, const pc_geometry_query* queries, size_t count,
-                 int* counts, int* neighbours)
+static int query(void* user, const pc_geometry_query* queries, size_t count, int* counts, int* neighbours)
 {
   pc_mpi_context* c = user;
   int n;
   const double start = MPI_Wtime();
-  if (c->rank || !c->active || count > c->batch ||
-      (count && (!queries || !counts || !neighbours)))
+  if (c->rank || !c->active || count > c->batch || (count && (!queries || !counts || !neighbours)))
     return 0;
   if (!count)
     return 1;
@@ -247,9 +251,12 @@ static void end(void* user)
   }
 }
 
-static MPI_Datatype datatype(pc_mpi_context* c, int count, const int* lengths,
-                            const MPI_Aint* displacements,
-                            const MPI_Datatype* types, MPI_Aint extent)
+static MPI_Datatype datatype(pc_mpi_context* c,
+                             int count,
+                             const int* lengths,
+                             const MPI_Aint* displacements,
+                             const MPI_Datatype* types,
+                             MPI_Aint extent)
 {
   MPI_Datatype packed, resized;
   checked(c, MPI_Type_create_struct(count, lengths, displacements, types, &packed));
@@ -259,8 +266,7 @@ static MPI_Datatype datatype(pc_mpi_context* c, int count, const int* lengths,
   return resized;
 }
 
-pc_mpi_context* pc_mpi_create(MPI_Comm comm, size_t max_worker_bytes,
-                             size_t min_targets)
+pc_mpi_context* pc_mpi_create(MPI_Comm comm, size_t max_worker_bytes, size_t min_targets)
 {
   pc_mpi_context* c = calloc(1, sizeof(*c));
   if (!c)
@@ -270,22 +276,18 @@ pc_mpi_context* pc_mpi_create(MPI_Comm comm, size_t max_worker_bytes,
   c->min_targets = min_targets;
   checked(c, MPI_Comm_rank(comm, &c->rank));
   checked(c, MPI_Comm_size(comm, &c->ranks));
-  const int node_lengths[] = {3, 3, 1, 1, 1};
-  const MPI_Aint node_offsets[] = {
-    offsetof(pc_geometry_node, lo), offsetof(pc_geometry_node, hi),
-    offsetof(pc_geometry_node, left), offsetof(pc_geometry_node, right),
-    offsetof(pc_geometry_node, leaf)
-  };
-  const MPI_Datatype node_types[] = {MPI_INT, MPI_INT, MPI_INT, MPI_INT, MPI_INT};
-  const int query_lengths[] = {3, 1};
-  const MPI_Aint query_offsets[] = {
-    offsetof(pc_geometry_query, pos), offsetof(pc_geometry_query, radius)
-  };
-  const MPI_Datatype query_types[] = {MPI_INT, MPI_DOUBLE};
-  c->node_type = datatype(c, 5, node_lengths, node_offsets, node_types,
-                          (MPI_Aint)sizeof(pc_geometry_node));
-  c->query_type = datatype(c, 2, query_lengths, query_offsets, query_types,
-                           (MPI_Aint)sizeof(pc_geometry_query));
+  const int node_lengths[] = { 3, 3, 1, 1, 1 };
+  const MPI_Aint node_offsets[] = { offsetof(pc_geometry_node, lo),
+                                    offsetof(pc_geometry_node, hi),
+                                    offsetof(pc_geometry_node, left),
+                                    offsetof(pc_geometry_node, right),
+                                    offsetof(pc_geometry_node, leaf) };
+  const MPI_Datatype node_types[] = { MPI_INT, MPI_INT, MPI_INT, MPI_INT, MPI_INT };
+  const int query_lengths[] = { 3, 1 };
+  const MPI_Aint query_offsets[] = { offsetof(pc_geometry_query, pos), offsetof(pc_geometry_query, radius) };
+  const MPI_Datatype query_types[] = { MPI_INT, MPI_DOUBLE };
+  c->node_type = datatype(c, 5, node_lengths, node_offsets, node_types, (MPI_Aint)sizeof(pc_geometry_node));
+  c->query_type = datatype(c, 2, query_lengths, query_offsets, query_types, (MPI_Aint)sizeof(pc_geometry_query));
   c->stats.ranks = c->ranks;
   c->executor.user = c;
   c->executor.batch_targets = 4096;

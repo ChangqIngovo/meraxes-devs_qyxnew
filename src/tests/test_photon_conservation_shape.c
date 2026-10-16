@@ -7,17 +7,17 @@
 
 #define N 8
 static void check_case_with_cuts(const char* name,
-                       size_t n,
-                       const double* S,
-                       const double* C,
-                       const double* b,
-                       const double* L,
-                       const double* U,
-                       const double* R,
-                       const int* rank,
-                       const double* expected,
-                       const double* prior,
-                       size_t max_hall_cuts)
+                                 size_t n,
+                                 const double* S,
+                                 const double* C,
+                                 const double* b,
+                                 const double* L,
+                                 const double* U,
+                                 const double* R,
+                                 const int* rank,
+                                 const double* expected,
+                                 const double* prior,
+                                 size_t max_hall_cuts)
 {
   pc_problem p = { { n, 1, 1 }, n, S, C, b, L, U, R, rank };
   pc_options fo;

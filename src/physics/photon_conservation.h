@@ -1,8 +1,8 @@
 #ifndef MERAXES_PHOTON_CONSERVATION_H
 #define MERAXES_PHOTON_CONSERVATION_H
 
-#include <stddef.h>
 #include "photon_conservation_geometry.h"
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C"
@@ -96,8 +96,10 @@ extern "C"
   void pc_default_options(pc_options* options);
   const char* pc_status_string(pc_status status);
   pc_status pc_allocate(const pc_problem* problem, const pc_options* options, pc_result* result);
-  pc_status pc_allocate_with_geometry(const pc_problem* problem, const pc_options* options,
-                                      pc_result* result, const pc_geometry_executor* geometry);
+  pc_status pc_allocate_with_geometry(const pc_problem* problem,
+                                      const pc_options* options,
+                                      pc_result* result,
+                                      const pc_geometry_executor* geometry);
 
   /* A fixed-marginal oracle is pc_allocate with lower=upper=desired_y.
    * PC_LOWER_INFEASIBLE still returns a valid first-stage maximum and a complete

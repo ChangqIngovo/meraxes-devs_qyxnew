@@ -8,8 +8,8 @@
 #include "physics/photon_conservation_shape.h"
 #include "reionization.h"
 
-#include <float.h>
 #include <errno.h>
+#include <float.h>
 #include <hdf5_hl.h>
 #include <limits.h>
 #include <math.h>
@@ -280,8 +280,7 @@ void photon_conservation_finish(photon_conservation_context* c)
   const pc_geometry_executor* geometry = NULL;
   pc_mpi_stats mpi_stats = { 0 };
   if (mpi_settings[0] && nranks > 1) {
-    parallel = pc_mpi_create(run_globals.mpi_comm, (size_t)mpi_settings[2] * 1024 * 1024,
-                             (size_t)mpi_settings[1]);
+    parallel = pc_mpi_create(run_globals.mpi_comm, (size_t)mpi_settings[2] * 1024 * 1024, (size_t)mpi_settings[1]);
     int ok = parallel != NULL, all_ok;
     MPI_Allreduce(&ok, &all_ok, 1, MPI_INT, MPI_MIN, run_globals.mpi_comm);
     if (!all_ok)
@@ -379,9 +378,8 @@ void photon_conservation_finish(photon_conservation_context* c)
       shape_options.max_hall_cuts = (size_t)run_globals.params.PhotonConservationMaxCuts;
       shape_options.absolute_tolerance = 1e-12;
       shape_options.relative_tolerance = run_globals.params.PhotonConservationTolerance;
-      pc_shape_status shape_status =
-        pc_shape_refine_with_geometry(&selected, &options, &es.allocation, NULL, &shape_options, &final, &shape,
-                                      geometry);
+      pc_shape_status shape_status = pc_shape_refine_with_geometry(
+        &selected, &options, &es.allocation, NULL, &shape_options, &final, &shape, geometry);
       if (shape_status != PC_SHAPE_OK) {
         fprintf(stderr,
                 "PC shape failure: %s, sweeps=%zu cuts=%zu evaluations=%zu gap=%.17g equality=%.17g "
@@ -418,10 +416,18 @@ void photon_conservation_finish(photon_conservation_context* c)
     }
     mlog("PC MPI snapshot=%d ranks=%d accepted=%zu declined=%zu batches=%zu targets=%zu "
          "setup=%.6fs query=%.6fs worker_peak=%zu worker_limit_mb=%llu min_targets=%llu",
-         MLOG_MESG, c->snapshot, parallel ? nranks : 1, mpi_stats.accepted_begins,
-         mpi_stats.declined_begins, mpi_stats.query_calls, mpi_stats.targets,
-         mpi_stats.begin_seconds, mpi_stats.query_seconds, mpi_stats.bytes_peak,
-         mpi_settings[2], mpi_settings[1]);
+         MLOG_MESG,
+         c->snapshot,
+         parallel ? nranks : 1,
+         mpi_stats.accepted_begins,
+         mpi_stats.declined_begins,
+         mpi_stats.query_calls,
+         mpi_stats.targets,
+         mpi_stats.begin_seconds,
+         mpi_stats.query_seconds,
+         mpi_stats.bytes_peak,
+         mpi_settings[2],
+         mpi_settings[1]);
     if (edges) {
       if (fclose(edges) != 0)
         pc_fail("cannot close edge certificate");

@@ -292,8 +292,10 @@ static int attains_maximum(const es_context* ctx, pc_status status, const pc_met
   return fabs(metrics->absorbed - ctx->maximum_absorption) <= tolerance ? 1 : -1;
 }
 
-pc_status pc_es_complete_with_geometry(const pc_es_problem* input, const pc_options* options,
-                                      pc_es_result* output, const pc_geometry_executor* geometry)
+pc_status pc_es_complete_with_geometry(const pc_es_problem* input,
+                                       const pc_options* options,
+                                       pc_es_result* output,
+                                       const pc_geometry_executor* geometry)
 {
   es_context ctx;
   pc_metrics metrics;

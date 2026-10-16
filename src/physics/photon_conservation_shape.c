@@ -686,7 +686,11 @@ typedef struct
 } shape_dual;
 
 static int shape_components(shape_context* c, const pc_options* fo, const pc_result* reference, pc_result* result);
-static int shape_implied_bounds(const pc_problem* p, const pc_result* reference, double* lower, double* upper, size_t* sources);
+static int shape_implied_bounds(const pc_problem* p,
+                                const pc_result* reference,
+                                double* lower,
+                                double* upper,
+                                size_t* sources);
 
 static pc_shape_status pc_shape_refine_core(const pc_problem* p,
                                             const pc_options* flow_options,
@@ -1092,7 +1096,11 @@ static double component_distance(const pc_problem* p, const size_t a[3], const s
 /* Every photon absorbed by j must come from an eligible source. These
  * implied bounds tighten the global dual domain without changing any
  * local/master iterate or transported field. */
-static int shape_implied_bounds(const pc_problem* p, const pc_result* reference, double* lower, double* upper, size_t* sources)
+static int shape_implied_bounds(const pc_problem* p,
+                                const pc_result* reference,
+                                double* lower,
+                                double* upper,
+                                size_t* sources)
 {
   size_t j, k, ns = 0, changed = 0, n = p->ncell;
   if (!p->dim[0] || !p->dim[1] || !p->dim[2] || p->dim[0] > SIZE_MAX / p->dim[1] ||
@@ -1130,8 +1138,7 @@ static int shape_implied_bounds(const pc_problem* p, const pc_result* reference,
       for (x = 0; x < widths[0] && supply < upper[j]; ++x)
         for (y = 0; y < widths[1] && supply < upper[j]; ++y)
           for (z = 0; z < widths[2] && supply < upper[j]; ++z) {
-            size_t sp[3] = { (starts[0] + x) % p->dim[0], (starts[1] + y) % p->dim[1],
-                             (starts[2] + z) % p->dim[2] };
+            size_t sp[3] = { (starts[0] + x) % p->dim[0], (starts[1] + y) % p->dim[1], (starts[2] + z) % p->dim[2] };
             size_t i = (sp[0] * p->dim[1] + sp[1]) * p->dim[2] + sp[2];
             if (p->source[i] > 0. && component_distance(p, pos, sp) <= r2)
               supply += p->source[i];
@@ -1174,7 +1181,8 @@ static int shape_implied_bounds(const pc_problem* p, const pc_result* reference,
     for (j = 0; j < n; ++j)
       if ((p->priority ? p->priority[j] : 0) == rank) {
         long double others = nextafterl(maximum - fmin(upper[j], p->baseline[j]), INFINITY);
-        long double needed = nextafterl((long double)reference->priority_diagnostics[k].baseline_retained_in_group - others, -INFINITY);
+        long double needed =
+          nextafterl((long double)reference->priority_diagnostics[k].baseline_retained_in_group - others, -INFINITY);
         double bound = (double)needed;
         if ((long double)bound > needed)
           bound = nextafter(bound, -INFINITY);
@@ -1648,10 +1656,13 @@ pc_shape_status pc_shape_refine(const pc_problem* p,
 }
 
 pc_shape_status pc_shape_refine_with_geometry(const pc_problem* p,
-                                const pc_options* flow_options, const pc_result* reference,
-                                const double* prior, const pc_shape_options* options,
-                                pc_result* result, pc_shape_metrics* metrics,
-                                const pc_geometry_executor* geometry)
+                                              const pc_options* flow_options,
+                                              const pc_result* reference,
+                                              const double* prior,
+                                              const pc_shape_options* options,
+                                              pc_result* result,
+                                              pc_shape_metrics* metrics,
+                                              const pc_geometry_executor* geometry)
 {
   return pc_shape_refine_core(p, flow_options, reference, prior, options, result, metrics, 1, NULL, geometry);
 }
