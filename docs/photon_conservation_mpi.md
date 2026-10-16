@@ -132,13 +132,17 @@ and geometric certificate checks are required. Diagnostic level does not
 disable the solver's native acceptance checks. `PC_MEMORY_MB` overrides the
 guard; `PC_RANKS` can use fewer ranks than allocated cores.
 
-The supplied production input may inherit a stored-edge limit of 20 million.
-This is a resource ceiling, not a prediction of the graph size needed at
-N512. An edge-limit failure must be investigated before retrying. If a larger
-ceiling is justified and fits the memory budget, pass `PC_MAX_EDGES` through
-`qsub -v` (or `--max-edges` to the Python runner); omitting it preserves the
-input/default. Raising it does not remove integer index limits or guarantee
-convergence. The exact override is recorded in `run.json`.
+The default `PhotonConservationMaxEdges=0` disables the source-target edge-count
+cap. Flow-arc indices are 64 bit and graph storage grows on demand within
+`PhotonConservationMemoryMB`. Grid/node indices and MPI message counts retain
+their existing integer bounds. Positive edge caps are still supported.
+
+After updating and rebuilding the executable, set
+`PhotonConservationMaxEdges : 0` in an existing input, or pass `PC_MAX_EDGES=0`
+through `qsub -v` (`--max-edges 0` for the Python runner). Omitting the override
+preserves the input/default, including a cap of 20 million inherited from an
+older defaults file. Older executables reject zero. The exact runner override
+is recorded in `run.json`.
 
 To evaluate 96 cores while retaining a total memory request of 1000 GB:
 
@@ -156,7 +160,7 @@ Check that all required density snapshots exist before a long PC run. In
 particular, enabling PC can require early density fields that a previous ES
 run skipped. The scripts do not replace absent snapshots, resample a grid,
 relax convergence or alter the source history to make a run proceed.
-More RAM also does not remove the allocator's existing integer index limits.
+More RAM does not remove the remaining grid/node and MPI count limits.
 There is no demonstrated guarantee that the complete L210 N512 PC evolution
 will finish within 20 h; establish this from a representative pilot.
 

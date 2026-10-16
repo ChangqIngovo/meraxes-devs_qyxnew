@@ -22,7 +22,7 @@ Flag_PhotonConservation : 0
 PhotonConservationDebug : 1 # 0: log; 1: per-snapshot ledger; 2: cell and edge certificates
 PhotonConservationRequireFull : 0 # 1 aborts if any budget remains unabsorbed
 PhotonConservationShape : 1 # unique quadratic target map; 0: staged flow only
-PhotonConservationMaxEdges : 20000000
+PhotonConservationMaxEdges : 0 # 0: no edge-count cap; the memory guard still applies
 PhotonConservationMemoryMB : 2048
 PhotonConservationMaxIterations : 10000
 PhotonConservationMaxEvaluations : 1000000

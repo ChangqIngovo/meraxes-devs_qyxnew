@@ -9,7 +9,7 @@ ReionRtoMFilterType               : 0
 PhotonConservationShape          : 1
 PhotonConservationDebug          : 2
 PhotonConservationRequireFull    : 0
-PhotonConservationMaxEdges       : 20000000
+PhotonConservationMaxEdges       : 0 # 0: no edge-count cap; the memory guard still applies
 PhotonConservationMemoryMB       : 2048
 PhotonConservationMaxIterations  : 10000
 PhotonConservationMaxEvaluations : 1000000

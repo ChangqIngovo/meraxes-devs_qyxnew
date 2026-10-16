@@ -39,7 +39,7 @@ cmake -S "$repo" -B "$build" \
 # Two build workers are intentional on a login node; use PC_BUILD_JOBS in a job.
 cmake --build "$build" --parallel "${PC_BUILD_JOBS:-2}"
 ctest --test-dir "$build" --output-on-failure \
-    -R '^test_photon_conservation(_es|_shape)?$'
+    -R '^test_photon_conservation(_es|_shape|_index)?$'
 module -t list > "$build/pc_loaded_modules.txt" 2>&1 || true
 
 python3 - "$repo" "$build" "$pc_environment" <<'PY'

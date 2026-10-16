@@ -231,17 +231,72 @@ static void invalid_and_limits(void)
   CHECK(pc_allocate(&f.p, &f.o, &f.r) == PC_ERR_INVALID);
   CHECK(f.source[0] == 1);
 
-  initialize(&f, 1);
+  initialize(&f, 2);
   f.source[0] = f.capacity[0] = f.upper[0] = 1;
-  f.o.max_edges = 0;
+  f.source[1] = f.capacity[1] = f.upper[1] = 1;
+  f.o.max_edges = 1;
   CHECK(pc_allocate(&f.p, &f.o, &f.r) == PC_ERR_EDGE_LIMIT);
   CHECK(!f.r.metrics.full_graph_cut_separated);
   CHECK(f.edges == 0);
   initialize(&f, 1);
   f.source[0] = f.capacity[0] = f.upper[0] = 1;
+  f.o.max_edges = 0;
   f.o.max_bytes = 1;
   CHECK(pc_allocate(&f.p, &f.o, &f.r) == PC_ERR_MEMORY_LIMIT);
   CHECK(!f.r.metrics.full_graph_cut_separated);
+}
+
+static void unlimited_edges(void)
+{
+  fixture reference, f;
+  const size_t limits[] = { 0, SIZE_MAX };
+  size_t i, j;
+  initialize(&reference, 8);
+  CHECK(reference.o.max_edges == 0);
+  for (i = 0; i < 8; i++) {
+    reference.source[i] = i % 3 == 0 ? 1.25 : 0;
+    reference.capacity[i] = reference.upper[i] = 1;
+    reference.radius[i] = 2.01;
+    reference.baseline[i] = .25;
+    reference.priority[i] = (int)(i % 2);
+  }
+  reference.o.max_edges = 64;
+  CHECK(solve(&reference) == PC_OK);
+  CHECK(reference.r.metrics.source_target_edges > 1);
+  for (j = 0; j < sizeof(limits) / sizeof(limits[0]); j++) {
+    initialize(&f, 8);
+    memcpy(f.source, reference.source, sizeof(f.source));
+    memcpy(f.capacity, reference.capacity, sizeof(f.capacity));
+    memcpy(f.upper, reference.upper, sizeof(f.upper));
+    memcpy(f.radius, reference.radius, sizeof(f.radius));
+    memcpy(f.baseline, reference.baseline, sizeof(f.baseline));
+    memcpy(f.priority, reference.priority, sizeof(f.priority));
+    f.o.max_edges = limits[j];
+    /* A large count ceiling is not a request to allocate that many edges. */
+    f.o.max_bytes = 1024 * 1024;
+    CHECK(solve(&f) == PC_OK);
+    CHECK(f.r.metrics.bytes_peak <= f.o.max_bytes);
+    CHECK(f.r.metrics.source_target_edges == reference.r.metrics.source_target_edges);
+    CHECK(f.r.metrics.positive_edges == reference.r.metrics.positive_edges);
+    CHECK(f.r.metrics.full_source_budget == reference.r.metrics.full_source_budget);
+    CHECK(f.r.metrics.absorbed == reference.r.metrics.absorbed);
+    CHECK(f.r.metrics.source_residual == reference.r.metrics.source_residual);
+    CHECK(f.r.metrics.mincut_capacity == reference.r.metrics.mincut_capacity);
+    CHECK(f.r.metrics.priority_groups == reference.r.metrics.priority_groups);
+    for (i = 0; i < 8; i++) {
+      CHECK(f.y[i] == reference.y[i]);
+      CHECK(f.spent[i] == reference.spent[i]);
+      CHECK(f.residual[i] == reference.residual[i]);
+      CHECK(f.cut_source[i] == reference.cut_source[i]);
+      CHECK(f.cut_target[i] == reference.cut_target[i]);
+    }
+    for (i = 0; i < f.r.metrics.priority_groups; i++) {
+      CHECK(f.diagnostics[i].priority == reference.diagnostics[i].priority);
+      CHECK(f.diagnostics[i].prefix_flow == reference.diagnostics[i].prefix_flow);
+      CHECK(f.diagnostics[i].retained_in_group == reference.diagnostics[i].retained_in_group);
+      CHECK(f.diagnostics[i].baseline_retained_in_group == reference.diagnostics[i].baseline_retained_in_group);
+    }
+  }
 }
 
 static void chunks_and_memory(void)
@@ -266,17 +321,23 @@ static void chunks_and_memory(void)
   p.lower = p.baseline = p.radius = zero;
   r.y = y;
   r.source_residual = res;
-  source[0] = n;
+  /* One local source-target pair per cell crosses several edge chunks. */
   for (i = 0; i < n; i++)
-    cap[i] = 1;
+    source[i] = cap[i] = 1;
   pc_default_options(&o);
-  CHECK(pc_allocate(&p, &o, &r) == PC_PARTIAL);
-  CHECK(y[0] == 1 && res[0] == n - 1);
+  o.max_edges = 0;
+  CHECK(pc_allocate(&p, &o, &r) == PC_OK);
+  CHECK(r.metrics.source_target_edges == n);
+  CHECK(r.metrics.absorbed == n && r.metrics.source_residual == 0);
+  CHECK(r.metrics.full_graph_cut_separated && r.metrics.full_source_budget);
+  for (i = 0; i < n; i++)
+    CHECK(y[i] == 1 && res[i] == 0);
   peak = r.metrics.bytes_peak;
   o.max_bytes = peak;
-  CHECK(pc_allocate(&p, &o, &r) == PC_PARTIAL);
+  CHECK(pc_allocate(&p, &o, &r) == PC_OK);
   CHECK(r.metrics.bytes_peak <= o.max_bytes);
-  o.max_bytes = peak - 1;
+  /* Metadata size can depend on the budget, so peak - 1 need not fail. */
+  o.max_bytes = peak / 2;
   CHECK(pc_allocate(&p, &o, &r) == PC_ERR_MEMORY_LIMIT);
   CHECK(r.metrics.bytes_peak <= o.max_bytes);
   free(source);
@@ -290,6 +351,7 @@ int main(void)
 {
   analytic_cases();
   invalid_and_limits();
+  unlimited_edges();
   chunks_and_memory();
   if (failures) {
     fprintf(stderr, "%d photon-conservation checks failed\n", failures);

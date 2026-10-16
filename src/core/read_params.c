@@ -13,12 +13,13 @@ static void check_problem_params(run_params_t* run_params)
         run_params->PhotonConservationDebug < 0 || run_params->PhotonConservationDebug > 2 ||
         run_params->PhotonConservationRequireFull < 0 || run_params->PhotonConservationRequireFull > 1 ||
         run_params->PhotonConservationShape < 0 || run_params->PhotonConservationShape > 1 ||
-        run_params->PhotonConservationMaxEdges < 1 || run_params->PhotonConservationMemoryMB < 1 ||
+        run_params->PhotonConservationMaxEdges < 0 || run_params->PhotonConservationMemoryMB < 1 ||
         run_params->PhotonConservationMaxIterations < 1 || run_params->PhotonConservationMaxEvaluations < 1 ||
         run_params->PhotonConservationMaxCuts < 1 || !isfinite(run_params->PhotonConservationTolerance) ||
         run_params->PhotonConservationTolerance <= 0.0 || run_params->PhotonConservationTolerance > 1e-5) {
       mlog_error("Invalid photon-conservation settings: require top-hat filters, DeltaRFactor > 1, "
-                 "positive resource limits and tolerance in (0,1e-5]. See docs/photon_conservation.md.");
+                 "nonnegative MaxEdges (0 disables the edge cap), positive remaining resource limits "
+                 "and tolerance in (0,1e-5]. See docs/photon_conservation.md.");
       ABORT(EXIT_FAILURE);
     }
   }
@@ -186,7 +187,7 @@ void read_parameter_file(char* fname, int mode)
       run_params->PhotonConservationDebug = 1;
       run_params->PhotonConservationRequireFull = 0;
       run_params->PhotonConservationShape = 1;
-      run_params->PhotonConservationMaxEdges = 20000000;
+      run_params->PhotonConservationMaxEdges = 0;
       run_params->PhotonConservationMemoryMB = 2048;
       run_params->PhotonConservationMaxIterations = 10000;
       run_params->PhotonConservationMaxEvaluations = 1000000;

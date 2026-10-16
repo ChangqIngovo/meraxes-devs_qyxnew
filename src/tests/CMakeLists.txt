@@ -69,6 +69,21 @@ foreach(pc_test photon_conservation photon_conservation_es photon_conservation_s
     add_test(NAME test_${pc_test} COMMAND test_${pc_test})
 endforeach()
 
+# Exercise arc handles above the 32-bit range without allocating billions of
+# edges. This white-box fixture includes the allocator implementation itself.
+add_executable(test_photon_conservation_index
+    test_photon_conservation_index.c
+    ${CMAKE_SOURCE_DIR}/src/physics/photon_conservation_geometry.c)
+set_property(TARGET test_photon_conservation_index PROPERTY C_STANDARD 99)
+target_include_directories(test_photon_conservation_index PRIVATE ${CMAKE_SOURCE_DIR}/src/physics)
+target_link_libraries(test_photon_conservation_index PRIVATE m)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(test_photon_conservation_index PRIVATE -UNDEBUG)
+endif()
+target_compile_options(test_photon_conservation_index PRIVATE ${SANITIZE_FLAGS})
+target_link_options(test_photon_conservation_index PRIVATE ${SANITIZE_FLAGS})
+add_test(NAME test_photon_conservation_index COMMAND test_photon_conservation_index)
+
 # MPI changes only read-only spatial queries; compare the full allocation and
 # shape certificates with the serial implementation, including failure paths.
 add_executable(test_photon_conservation_mpi

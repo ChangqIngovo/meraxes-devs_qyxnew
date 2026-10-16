@@ -151,7 +151,7 @@ simulation input file. Start with a small grid and debug level two.
 | `PhotonConservationShape` | 1 | 1: unique quadratic target-map refinement; 0: staged flow only. |
 | `PhotonConservationDebug` | 1 | 0: log; 1: scalar snapshot ledger; 2: cell inventories, positive edges and search attempts. |
 | `PhotonConservationRequireFull` | 0 | Abort after diagnostics unless each source meets the full-absorption tolerance. |
-| `PhotonConservationMaxEdges` | 20000000 | Maximum stored source-target links. |
+| `PhotonConservationMaxEdges` | 0 | 0: no source-target edge-count cap; a positive value sets an explicit cap. |
 | `PhotonConservationMemoryMB` | 2048 | Memory guard for the gathered problem and solver workspace. |
 | `PhotonConservationMaxIterations` | 10000 | Maximum sweeps per master solve; the limit resets when a new cut/refinement starts another master solve. |
 | `PhotonConservationMaxEvaluations` | 1000000 | Global maximum scalar objective/waterfill map evaluations for one quadratic refinement. |
@@ -163,6 +163,19 @@ an explicit residual. That residual is a diagnostic unassigned inventory, not
 a modeled UV background. An exhausted resource limit is an error in either
 mode. Memory guards apply to the reference solver; they do not bound the
 memory occupied by the rest of Meraxes.
+Stored flow-arc indices are 64 bit and graph storage grows on demand, within
+the memory guard. Grid/node indices and MPI message counts retain their
+existing integer bounds. Disabling the edge cap does not disable memory,
+iteration or evaluation limits.
+
+For an existing run, rebuild Meraxes and explicitly set
+`PhotonConservationMaxEdges : 0` in its input. An old input or included defaults
+file specifying `20000000` still imposes that cap; omitting the parameter from
+the top-level input does not override an included defaults file. Older
+executables reject zero. Positive caps remain valid and must fit the input
+parameter's signed 32-bit integer type; zero does not impose that edge-count
+restriction on the solver.
+
 `MaxIterations` limits each master solve; the reported `shape_iterations`
 counts sweeps cumulatively across those solves. `MaxEvaluations` independently
 limits scalar objective/waterfill map calls across the entire refinement. Reaching

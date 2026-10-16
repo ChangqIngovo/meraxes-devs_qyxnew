@@ -499,7 +499,7 @@ def replay(args, report):
         if (not math.isfinite(fo.absolute_tolerance) or fo.absolute_tolerance < 0 or
                 not math.isfinite(fo.relative_tolerance) or not 0 <= fo.relative_tolerance < 1):
             raise ValueError('invalid recorded solver tolerance')
-        fo.max_edges = integer(attrs['max_edges'], 'max_edges')
+        fo.max_edges = integer(attrs['max_edges'], 'max_edges', 0)
         memory = integer(attrs['memory_mb'], 'memory_mb') * 1024 * 1024
         reserve = n * 512 + ct.sizeof(AdapterContext)
         if memory > sys.maxsize or memory <= reserve:

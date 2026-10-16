@@ -13,16 +13,23 @@
 #define PC_CHUNK_SIZE (1u << PC_CHUNK_SHIFT)
 #define PC_CHUNK_MASK (PC_CHUNK_SIZE - 1u)
 #define PC_GEOMETRY_EPS 1e-10
+#define PC_FIXED_ALLOCATIONS 24
+
+/* Node IDs stay int-sized; residual-arc indices must also represent graphs
+ * with more than INT_MAX arcs. Negative one remains the adjacency sentinel. */
+typedef int64_t pc_arc_index;
 
 typedef struct
 {
-  int to, next;
+  int to;
+  pc_arc_index next;
   double cap;
 } pc_arc;
 typedef struct
 {
   size_t cell;
-  int pos[3], handle, priority;
+  int pos[3], priority;
+  pc_arc_index handle;
 } pc_cell;
 typedef pc_geometry_node pc_kd_node;
 typedef struct
@@ -42,7 +49,8 @@ typedef struct
   pc_arc** chunks;
   size_t chunk_capacity, chunk_count, arc_count, pair_count;
   int nv, ns, nt, source_offset, target_offset;
-  int *head, *level, *current, *queue, *path_node, *path_arc;
+  pc_arc_index *head, *current, *path_arc;
+  int *level, *queue, *path_node;
   double* path_min;
   pc_cell *sources, *targets;
   int *kd_order, *target_order, *found;
@@ -102,26 +110,28 @@ static void* pc_memory(pc_state* s, size_t count, size_t size)
   return ptr;
 }
 
-static pc_arc* pc_get_arc(pc_state* s, int index)
+static pc_arc* pc_get_arc(pc_state* s, pc_arc_index index)
 {
-  return &s->chunks[(unsigned)index >> PC_CHUNK_SHIFT][(unsigned)index & PC_CHUNK_MASK];
+  return &s->chunks[(size_t)index >> PC_CHUNK_SHIFT][(size_t)index & PC_CHUNK_MASK];
 }
 
-static int pc_add_edge(pc_state* s, int from, int to, double cap, int pair)
+static pc_arc_index pc_add_edge(pc_state* s, int from, int to, double cap, int pair)
 {
-  int handle;
+  pc_arc_index handle;
   pc_arc *a, *b;
-  if (pair && s->pair_count >= s->o.max_edges) {
+  if (pair && s->o.max_edges && s->pair_count >= s->o.max_edges) {
     s->error = PC_ERR_EDGE_LIMIT;
     return -1;
   }
-  if (s->arc_count > (size_t)INT_MAX - 2) {
+  if ((uintmax_t)s->arc_count > (uintmax_t)INT64_MAX - 2 || s->arc_count > SIZE_MAX - 2) {
     s->error = PC_ERR_EDGE_LIMIT;
     return -1;
   }
   if ((s->arc_count >> PC_CHUNK_SHIFT) == s->chunk_count) {
     if (s->chunk_count == s->chunk_capacity) {
-      s->error = PC_ERR_EDGE_LIMIT;
+      /* The directory is bounded by the memory budget, independently of any
+       * optional edge-count cap. Exhaustion here is a memory limit. */
+      s->error = PC_ERR_MEMORY_LIMIT;
       return -1;
     }
     s->chunks[s->chunk_count] = pc_memory(s, PC_CHUNK_SIZE, sizeof(pc_arc));
@@ -129,7 +139,7 @@ static int pc_add_edge(pc_state* s, int from, int to, double cap, int pair)
       return -1;
     s->chunk_count++;
   }
-  handle = (int)s->arc_count;
+  handle = (pc_arc_index)s->arc_count;
   a = pc_get_arc(s, handle);
   b = pc_get_arc(s, handle ^ 1);
   a->to = to;
@@ -148,7 +158,8 @@ static int pc_add_edge(pc_state* s, int from, int to, double cap, int pair)
 
 static int pc_bfs(pc_state* s)
 {
-  int begin = 0, end = 0, u, e;
+  int begin = 0, end = 0, u;
+  pc_arc_index e;
   for (u = 0; u < s->nv; u++)
     s->level[u] = -1;
   s->queue[end++] = 0;
@@ -173,7 +184,8 @@ static double pc_augment(pc_state* s)
   s->path_node[0] = 0;
   s->path_min[0] = (double)s->photons;
   for (;;) {
-    int u = s->path_node[depth], e;
+    int u = s->path_node[depth];
+    pc_arc_index e;
     if (u == 1) {
       double amount = s->path_min[depth];
       int k;
@@ -386,9 +398,9 @@ static size_t pc_geometry_batch_size(const pc_state* s)
 
 /* Commit responses in exactly the serial target/traversal order. Geometry
  * queries cannot mutate the flow network, so batching changes no decision. */
-static int pc_geometry_commit(pc_state* s, size_t count, size_t limit, int audit)
+static int64_t pc_geometry_commit(pc_state* s, size_t count, size_t limit, int audit)
 {
-  int added = 0;
+  int64_t added = 0;
   if (!s->geometry->query(s->geometry->user, s->queries, count, s->query_counts, s->query_neighbours)) {
     s->error = PC_ERR_MEMORY_LIMIT;
     return -1;
@@ -416,9 +428,10 @@ static int pc_geometry_commit(pc_state* s, size_t count, size_t limit, int audit
   return added;
 }
 
-static int pc_insert_geometry(pc_state* s, int initial)
+static int64_t pc_insert_geometry(pc_state* s, int initial)
 {
-  int i, j, count_sources = 0, added = 0, parallel;
+  int i, j, count_sources = 0, parallel;
+  int64_t added = 0;
   size_t targets = 0, batch = 0;
   size_t limit = initial ? s->o.seed_neighbors : s->o.cut_neighbors;
   if (limit > (size_t)s->ns)
@@ -445,7 +458,7 @@ static int pc_insert_geometry(pc_state* s, int initial)
         s->queries[batch] = query;
         s->query_targets[batch++] = j;
         if (batch == pc_geometry_batch_size(s)) {
-          int next = pc_geometry_commit(s, batch, limit, 0);
+          int64_t next = pc_geometry_commit(s, batch, limit, 0);
           if (next < 0)
             goto parallel_fail;
           added += next;
@@ -462,7 +475,7 @@ static int pc_insert_geometry(pc_state* s, int initial)
     }
   if (parallel) {
     if (batch) {
-      int next = pc_geometry_commit(s, batch, limit, 0);
+      int64_t next = pc_geometry_commit(s, batch, limit, 0);
       if (next < 0)
         goto parallel_fail;
       added += next;
@@ -477,7 +490,7 @@ parallel_fail:
 
 static int pc_complete_stage(pc_state* s)
 {
-  int added;
+  int64_t added;
   s->final_cut_complete = 0;
   do {
     pc_maxflow(s);
@@ -548,7 +561,7 @@ static int pc_close(double a, double b, const pc_options* o)
 
 static int pc_initialize(pc_state* s)
 {
-  size_t max_arcs, table_bytes, chunk_count, i;
+  size_t table_bytes, chunk_count, i;
   int ns = 0, nt = 0;
   for (i = 0; i < s->p->ncell; i++) {
     if (s->p->source[i] > 0)
@@ -556,8 +569,10 @@ static int pc_initialize(pc_state* s)
     if (s->p->upper[i] > 0)
       nt++;
   }
-  if ((size_t)ns + nt > (size_t)INT_MAX / 2 || s->o.max_edges > (size_t)INT_MAX / 2 - (size_t)ns - nt) {
-    s->error = PC_ERR_EDGE_LIMIT;
+  /* There are ns+nt+2 flow nodes and at most 2*ns-1 KD nodes. These node
+   * indices remain int-sized even though arc indices are now 64-bit. */
+  if ((size_t)ns + (size_t)nt > (size_t)INT_MAX - 2 || (size_t)ns > ((size_t)INT_MAX + 1) / 2) {
+    s->error = PC_ERR_INVALID;
     return 0;
   }
   s->ns = ns;
@@ -565,10 +580,23 @@ static int pc_initialize(pc_state* s)
   s->source_offset = 2;
   s->target_offset = 2 + ns;
   s->nv = 2 + ns + nt;
-  max_arcs = 2 * ((size_t)ns + nt + s->o.max_edges);
-  chunk_count = (max_arcs + PC_CHUNK_SIZE - 1) / PC_CHUNK_SIZE;
+  /* No solve can retain more chunks than its byte budget permits. Allocate
+   * only their directory/records up front; arc chunks themselves remain lazy.
+   * A very large optional count cap therefore cannot force a huge allocation
+   * or overflow this bookkeeping. Both tables are charged to max_bytes. */
+  chunk_count = s->o.max_bytes / (PC_CHUNK_SIZE * sizeof(pc_arc));
+  if (s->o.max_edges && s->o.max_edges <= SIZE_MAX / 2 - (size_t)ns - (size_t)nt) {
+    const size_t max_arcs = 2 * ((size_t)ns + (size_t)nt + s->o.max_edges);
+    const size_t capped_chunks = max_arcs / PC_CHUNK_SIZE + (max_arcs % PC_CHUNK_SIZE != 0);
+    if (capped_chunks < chunk_count)
+      chunk_count = capped_chunks;
+  }
   s->chunk_capacity = chunk_count;
-  s->allocation_capacity = chunk_count + 24;
+  if (chunk_count > SIZE_MAX - PC_FIXED_ALLOCATIONS) {
+    s->error = PC_ERR_MEMORY_LIMIT;
+    return 0;
+  }
+  s->allocation_capacity = chunk_count + PC_FIXED_ALLOCATIONS;
   if (!pc_size_product(s->allocation_capacity, sizeof(pc_allocation), &table_bytes) || table_bytes > s->o.max_bytes) {
     s->error = PC_ERR_MEMORY_LIMIT;
     return 0;
@@ -586,12 +614,12 @@ static int pc_initialize(pc_state* s)
       return 0;                                                                                                        \
   } while (0)
   PC_ALLOC(chunks, chunk_count, pc_arc*);
-  PC_ALLOC(head, s->nv, int);
+  PC_ALLOC(head, s->nv, pc_arc_index);
   PC_ALLOC(level, s->nv, int);
-  PC_ALLOC(current, s->nv, int);
+  PC_ALLOC(current, s->nv, pc_arc_index);
   PC_ALLOC(queue, s->nv, int);
   PC_ALLOC(path_node, s->nv, int);
-  PC_ALLOC(path_arc, s->nv, int);
+  PC_ALLOC(path_arc, s->nv, pc_arc_index);
   PC_ALLOC(path_min, s->nv, double);
   PC_ALLOC(sources, ns, pc_cell);
   PC_ALLOC(targets, nt, pc_cell);
@@ -649,7 +677,7 @@ static int pc_audit(pc_state* s)
     double spent = pc_get_arc(s, c->handle ^ 1)->cap;
     double unused = pc_get_arc(s, c->handle)->cap;
     long double row = 0;
-    int e;
+    pc_arc_index e;
     s->r->source_residual[c->cell] = unused;
     if (s->r->source_spent)
       s->r->source_spent[c->cell] = spent;
@@ -788,7 +816,7 @@ void pc_default_options(pc_options* o)
 {
   if (!o)
     return;
-  o->max_edges = 4000000;
+  o->max_edges = 0;
   o->max_bytes = (size_t)512 * 1024 * 1024;
   o->seed_neighbors = 4;
   o->cut_neighbors = 8;
@@ -955,7 +983,7 @@ audit:
   if ((status == PC_OK || status == PC_PARTIAL) && r->visit_edge) {
     int i;
     for (i = 0; i < s.ns; i++) {
-      int e;
+      pc_arc_index e;
       for (e = s.head[s.source_offset + i]; e >= 0; e = pc_get_arc(&s, e)->next) {
         pc_arc* a = pc_get_arc(&s, e);
         if (a->to >= s.target_offset && a->to < s.nv) {

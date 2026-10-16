@@ -299,8 +299,9 @@ static void allocation_regression(pc_geometry_executor* executor)
   int priority[48];
   pc_problem p = { { 6, 4, 2 }, 48, source, capacity, baseline, lower, capacity, radius, priority };
   pc_options options;
-  saved_result result;
+  saved_result result, unlimited;
   pc_default_options(&options);
+  CHECK(options.max_edges == 0);
   for (size_t i = 0; i < 48; ++i) {
     source[i] = i % 7 == 0 ? .6 : 0.;
     capacity[i] = .7 + (i % 5) * .13;
@@ -310,6 +311,14 @@ static void allocation_regression(pc_geometry_executor* executor)
     priority[i] = (int)(i % 3);
   }
   CHECK(compare_allocation(&p, &options, executor, &result) == PC_OK);
+  initialize_result(&unlimited);
+  CHECK(pc_allocate_with_geometry(&p, &options, &unlimited.result, executor) == PC_OK);
+  options.max_edges = 48 * 48;
+  CHECK(compare_allocation(&p, &options, executor, &result) == PC_OK);
+  compare_results(&unlimited, &result, p.ncell);
+  options.max_edges = SIZE_MAX;
+  CHECK(compare_allocation(&p, &options, executor, &result) == PC_OK);
+  compare_results(&unlimited, &result, p.ncell);
   options.max_edges = 1;
   CHECK(compare_allocation(&p, &options, executor, &result) == PC_ERR_EDGE_LIMIT);
   pc_default_options(&options);

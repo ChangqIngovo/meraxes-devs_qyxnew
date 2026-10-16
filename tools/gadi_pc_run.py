@@ -58,7 +58,7 @@ def main():
                         help="PC solver guard in MiB; not a whole-job RSS limit")
     parser.add_argument("--debug", type=int, choices=(0, 1, 2), default=1)
     parser.add_argument("--max-edges", type=int,
-                        help="Optional stored-edge resource limit; omit to preserve the input/default")
+                        help="Stored source-target edge cap (0 disables it); omit to preserve the input/default")
     parser.add_argument("--label", default="run")
     args = parser.parse_args()
     if "PBS_JOBID" not in os.environ or "PBS_NCPUS" not in os.environ:
@@ -67,8 +67,8 @@ def main():
         parser.error("--ranks must fit PBS_NCPUS")
     if not 1 <= args.memory_mb <= 2147483647:
         parser.error("--memory-mb must fit a positive C int")
-    if args.max_edges is not None and not 1 <= args.max_edges <= 2147483647:
-        parser.error("--max-edges must fit a positive C int")
+    if args.max_edges is not None and not 0 <= args.max_edges <= 2147483647:
+        parser.error("--max-edges must fit a nonnegative C int (0 disables the edge cap)")
     for path in (args.input, args.binary, args.manifest):
         if not path.is_file():
             parser.error(f"Missing file: {path}")

@@ -37,7 +37,7 @@ extern "C"
 
   typedef struct
   {
-    size_t max_edges; /* Source-target links; excludes terminal arcs. */
+    size_t max_edges; /* Source-target links; excludes terminal arcs. Zero (default) means no count cap. */
     size_t max_bytes; /* All live internal allocations, not caller arrays. */
     size_t seed_neighbors, cut_neighbors;
     double absolute_tolerance, relative_tolerance;
