@@ -288,7 +288,9 @@ void photon_conservation_finish(photon_conservation_context* c)
       es.visit_attempt = attempt_csv;
       es.attempt_user = attempts;
     }
+    const double completion_started = MPI_Wtime();
     pc_status status = pc_es_complete(&problem, &options, &es);
+    const double completion_seconds = MPI_Wtime() - completion_started;
     if (attempts && fclose(attempts) != 0)
       pc_fail("cannot close completion diagnostic");
     if (status != PC_OK && status != PC_PARTIAL)
@@ -325,6 +327,7 @@ void photon_conservation_finish(photon_conservation_context* c)
       final.visitor_user = edges;
     }
     pc_shape_metrics shape = { 0 };
+    const double refinement_started = MPI_Wtime();
     if (run_globals.params.PhotonConservationShape) {
       pc_shape_options shape_options;
       pc_shape_default_options(&shape_options);
@@ -365,6 +368,7 @@ void photon_conservation_finish(photon_conservation_context* c)
       if (status != PC_OK && status != PC_PARTIAL)
         pc_fail("final fixed-marginal certificate failed");
     }
+    const double refinement_seconds = MPI_Wtime() - refinement_started;
     if (edges) {
       if (fclose(edges) != 0)
         pc_fail("cannot close edge certificate");
@@ -412,7 +416,7 @@ void photon_conservation_finish(photon_conservation_context* c)
         (double)roundoff_bound + options.absolute_tolerance + 64 * DBL_EPSILON * final.metrics.photons)
       pc_fail("float xH writeback exceeds its calculated rounding bound");
     mlog("PC snapshot=%d status=%s S=%.17g absorbed=%.17g residual=%.17g ledger=%.3g "
-         "float_error=%.3g band=%d promotion=%zu L1=%.9g time=%.3fs",
+         "float_error=%.3g band=%d promotion=%zu L1=%.9g time=%.3fs completion=%.3fs refinement=%.3fs",
          MLOG_MESG,
          c->snapshot,
          pc_status_string(final.status),
@@ -424,7 +428,9 @@ void photon_conservation_finish(photon_conservation_context* c)
          es.metrics.band_width,
          es.metrics.promotion,
          (double)final_l1,
-         MPI_Wtime() - c->started);
+         MPI_Wtime() - c->started,
+         completion_seconds,
+         refinement_seconds);
     if (debug) {
       char final_path[STRLEN + 128];
       snprintf(
@@ -482,6 +488,8 @@ void photon_conservation_finish(photon_conservation_context* c)
       ATTR("tolerance", options.relative_tolerance);
       ATTR("absolute_tolerance", options.absolute_tolerance);
       ATTR("elapsed_seconds", MPI_Wtime() - c->started);
+      ATTR("completion_seconds", completion_seconds);
+      ATTR("refinement_seconds", refinement_seconds);
       ATTR("shape_status", shape.status);
       ATTR("shape_iterations", shape.master_sweeps);
       ATTR("shape_evaluations", shape.master_evaluations);

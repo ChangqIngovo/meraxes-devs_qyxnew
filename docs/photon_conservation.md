@@ -185,7 +185,7 @@ stores scalar attributes at the file root. The main groups of attributes are:
 | Float output | `float_grid_ledger_error`, `float_grid_roundoff_bound`, `reference_projection_l1`, `normalization_particles_per_cell` |
 | Quadratic solve | `shape_status`, `shape_iterations`, `shape_evaluations`, `shape_oracle_calls`, `shape_cuts`, `shape_gap`, `shape_objective`, `shape_equality_error`, `shape_priority_error` |
 | Final numerical adjustment | `shape_oracle_target_l1_error`, `shape_max_final_correction`, `shape_final_correction_l1` |
-| Cost and tolerances | `elapsed_seconds`, `tolerance`, `absolute_tolerance`, `optimization_tolerance`, `max_evaluations` |
+| Cost and tolerances | `elapsed_seconds`, `completion_seconds`, `refinement_seconds`, `tolerance`, `absolute_tolerance`, `optimization_tolerance`, `max_evaluations` |
 
 `solver_status=0` means that every source meets the configured relative
 full-absorption tolerance; any remaining numerical residual is still written
@@ -245,6 +245,20 @@ two limits for a diagnostic comparison. The JSON report distinguishes the ES
 completion, quadratic refinement and independent positive-edge accounting
 checks. Replay does not run Meraxes feedback or independently optimize the
 quadratic objective, and its JSON is not a complete simulation certificate.
+
+To compare a replay with an existing snapshot certificate and save the audited
+target map for analysis:
+
+```sh
+python3 tools/replay_photon_conservation.py output/photon_inputs_054.hdf5 \
+  --compare-certificate output/photon_conservation_054.hdf5 \
+  --save-allocation replay_054.npz --output replay_054.json
+```
+
+The comparison requires identical source, capacity, baseline and ES hierarchy
+inputs. It reports the objective and cellwise allocation differences, including
+`allocation/capacity`; different valid source-edge assignments are allowed.
+The default tolerances and evaluation limits still come from the checkpoint.
 
 Debug level two also stores flattened arrays in global real-cell order,
 `index=((x*grid_dim)+y)*grid_dim+z`:
@@ -399,6 +413,47 @@ The small-graph optimization tests and summary regressions do not establish
 cosmological accuracy or large-grid performance.
 
 ## Scope and computational limits
+
+The shape solver first identifies connected components of the **full allowed
+geometric graph**, including legal edges not yet materialized by the flow
+solver. Components cannot exchange photons. Their maximum absorption and
+lexicographic retained-overlap objectives therefore separate in exact
+arithmetic. Independent component solves avoid repeatedly discovering these
+budgets through global Hall cuts; components with a single target have a fixed
+target count and skip the iterative shape solve.
+
+Floating-point priority quotas need additional care. The implementation does
+not accept the sum of local dual bounds as a certificate for the original
+global problem. It translates local source-subset cuts to global unused-budget
+constraints, uses shared nonnegative priority multipliers, and evaluates a
+dual lower bound for the original global quadratic problem. The assembled map
+must pass the original global gap, total, capacity and priority checks, followed
+by a full-graph flow certificate. If the lifted bound is too loose, the original
+global solver runs with the remaining evaluation and cut budgets. Component
+tolerances share the original error budget; neither the objective nor its
+acceptance tolerance is relaxed. The execution remains serial.
+
+On the uploaded snapshot-54 input (32 cubed cells), the full graph contains
+167 components and 9,174 eligible links. The recorded global solver used
+478,733 evaluations, 491 cuts and 1,476 flow calls. Component refinement uses
+16,737 evaluations, 186 cuts and 687 flow calls at the same `1e-9` relative
+tolerance. The global primal-dual gap is `1.026e-6`, below `1.352e-6`; the
+maximum change in `allocation/capacity` relative to the supplied output is
+`6.42e-7`. The independent positive-edge audit passes with zero residual.
+
+Development-host replay takes 18.8 seconds including compilation and ES
+completion, with 17.0 seconds in shape refinement. The final code passes 17
+native shape cases, 40 independent small explicit-graph QP comparisons, and
+AddressSanitizer/UndefinedBehaviorSanitizer checks (leak detection unavailable
+in the execution sandbox). The unchanged baseline was still refining the shape after
+582 seconds on the same host and was subsequently interrupted, so its complete
+runtime was not measured. The separately supplied Gadi certificate records
+3,263 seconds; it is not a same-machine timing comparison. These measurements
+apply to this snapshot. Large, connected ionization regions may benefit less.
+
+The production log and certificate now separate `completion_seconds` from
+`refinement_seconds` to locate later bottlenecks without inferring their source
+from the total time alone.
 
 The correction gathers the global problem onto rank zero and scatters the
 corrected neutral fraction back to the original slabs. MPI input ordering is

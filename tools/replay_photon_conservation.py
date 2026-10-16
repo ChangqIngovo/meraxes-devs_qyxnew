@@ -11,6 +11,9 @@ Reproduce the recorded budget, from the repository root:
   python3 tools/replay_photon_conservation.py photon_inputs_052.hdf5 --output replay_052.json
 
 For an explicitly larger diagnostic budget, add --max-evaluations 5000000.
+Use --compare-certificate photon_conservation_052.hdf5 to report numerical
+differences from an existing allocation with identical problem inputs, or
+--save-allocation replay_052.npz to save the audited final arrays.
 
 The independent audit checks transport feasibility and photon inventories.
 It does not independently prove the native solver's quadratic optimality.
@@ -253,6 +256,79 @@ def read_checkpoint(path):
     return attrs, dim, data
 
 
+def read_comparison(path, dim, data):
+    """Verify problem identity before using a certificate as a map reference."""
+    with h5py.File(path, 'r') as handle:
+        if 'grid_dim' not in handle.attrs:
+            raise ValueError('comparison certificate lacks grid_dim')
+        grid_dim = np.asarray(handle.attrs['grid_dim'])
+        if grid_dim.size != 1 or integer(grid_dim.reshape(-1)[0], 'certificate grid_dim') != dim:
+            raise ValueError('comparison certificate has a different grid')
+        for name in ('source', 'capacity', 'baseline', 'radii_cells', 'first_crossing'):
+            if name not in handle or not np.array_equal(handle[name][:], data[name]):
+                raise ValueError(f'comparison certificate has missing or different {name}')
+        if 'allocation' not in handle:
+            raise ValueError('comparison certificate lacks the final allocation')
+        allocation = np.asarray(handle['allocation'][:], dtype=np.float64)
+        if allocation.shape != data['source'].shape or not np.all(np.isfinite(allocation)):
+            raise ValueError('comparison certificate has an invalid allocation')
+        attrs = {}
+        for name in ('snapshot', 'shape_enabled', 'shape_objective', 'shape_gap',
+                     'optimization_tolerance', 'elapsed_seconds', 'shape_evaluations',
+                     'shape_iterations', 'shape_cuts', 'shape_oracle_calls'):
+            if name in handle.attrs:
+                item = np.asarray(handle.attrs[name])
+                if item.size != 1:
+                    raise ValueError(f'comparison attribute {name} is not scalar')
+                attrs[name] = item.reshape(-1)[0].item()
+        constraints = {name: handle[name][:] for name in ('lower', 'upper', 'radius_cells', 'priority')
+                       if name in handle}
+    return allocation, attrs, constraints
+
+
+def compare_allocation(path, comparison, data, allocation, lower, upper, radius, priority):
+    """Report differences without imposing a bitwise or arbitrary map threshold."""
+    reference, attrs, constraints = comparison
+    a, b = allocation.astype(np.longdouble), reference.astype(np.longdouble)
+    capacity = data['capacity'].astype(np.longdouble)
+    baseline = data['baseline'].astype(np.longdouble)
+    active = capacity > 0
+    delta = a - b
+    fraction_delta = np.divide(delta, capacity, out=np.zeros_like(delta), where=active)
+
+    def objective(y):
+        return float(np.sum(.5 * (y[active] - baseline[active]) ** 2 / capacity[active],
+                            dtype=np.longdouble))
+
+    actual_objective, reference_objective = objective(a), objective(b)
+    total_capacity = np.sum(capacity, dtype=np.longdouble)
+    return {
+        'certificate': str(path.resolve()), 'certificate_sha256': file_sha256(path),
+        'identical_problem_inputs': True,
+        'scope': 'Numerical comparison of audited replay to the stored map; no bitwise '
+                 'identity or map-accuracy threshold is required. Allocation/capacity '
+                 'is the fraction of the recorded photon capacity filled.',
+        'reference_attributes': attrs,
+        'identical_constraints': {name: bool(np.array_equal(constraints[name], values))
+                                 if name in constraints else None
+                                 for name, values in (('lower', lower), ('upper', upper),
+                                                      ('radius_cells', radius), ('priority', priority))},
+        'allocation_max_abs_difference': float(np.max(np.abs(delta), initial=0)),
+        'allocation_l1_difference': float(np.sum(np.abs(delta), dtype=np.longdouble)),
+        'allocation_total_difference': float(np.sum(delta, dtype=np.longdouble)),
+        'capacity_fraction_max_abs_difference': float(np.max(np.abs(fraction_delta), initial=0)),
+        'capacity_fraction_rms_difference': float(np.sqrt(np.mean(fraction_delta[active] ** 2)))
+                                              if np.any(active) else 0.,
+        'capacity_fraction_capacity_weighted_l1_difference':
+            float(np.sum(np.abs(delta), dtype=np.longdouble) / total_capacity)
+            if total_capacity > 0 else 0.,
+        'positive_capacity_cells': int(np.count_nonzero(active)),
+        'replay_objective_recomputed': actual_objective,
+        'reference_objective_recomputed': reference_objective,
+        'objective_difference': actual_objective - reference_objective,
+    }
+
+
 def make_result(n, groups, visitor=None):
     arrays = [np.zeros(n) for _ in range(3)]
     masks = [np.zeros(n, dtype=np.uint8) for _ in range(2)]
@@ -409,6 +485,7 @@ class EdgeAudit:
 
 def replay(args, report):
     attrs, dim, data = read_checkpoint(args.checkpoint)
+    comparison = read_comparison(args.compare_certificate, dim, data) if args.compare_certificate else None
     n = dim ** 3
     report['checkpoint_attributes'] = attrs
     report['checkpoint_sha256'] = file_sha256(args.checkpoint)
@@ -461,6 +538,7 @@ def replay(args, report):
         reference, reference_keep = make_result(n, len(radii) + 1)
         es = ESResult(reference, ptr(lower), ptr(upper), ptr(radius), ptr(priority, PI))
         started = time.monotonic()
+        print('ES: starting completion', file=sys.stderr, flush=True)
         status = lib.pc_es_complete(ct.byref(ep), ct.byref(fo), ct.byref(es))
         report['es'] = {'status': status, 'status_text': lib.pc_status_string(status).decode(),
                         'seconds': time.monotonic() - started, 'completion': struct_dict(es.metrics),
@@ -473,6 +551,7 @@ def replay(args, report):
         started = time.monotonic()
         if shape_enabled:
             metrics = ShapeMetrics()
+            print('Shape: starting refinement', file=sys.stderr, flush=True)
             status = lib.pc_shape_refine(ct.byref(p), ct.byref(fo), ct.byref(es.allocation), None,
                                          ct.byref(so), ct.byref(final), ct.byref(metrics))
             report['shape'] = {'status': status, 'status_text': lib.pc_shape_status_string(status).decode(),
@@ -497,6 +576,16 @@ def replay(args, report):
         del reference_keep
         if not report['edge_audit']['passed']:
             raise RuntimeError('independent edge audit failed: ' + '; '.join(report['edge_audit']['failures']))
+        if comparison is not None:
+            report['certificate_comparison'] = compare_allocation(
+                args.compare_certificate, comparison, data, final_keep[0][0],
+                lower, upper, radius, priority)
+        if args.save_allocation:
+            np.savez_compressed(args.save_allocation, grid_dim=dim,
+                                allocation=final_keep[0][0], source_residual=final_keep[0][1],
+                                source_spent=final_keep[0][2], lower=lower, upper=upper,
+                                radius_cells=radius, priority=priority, **data)
+            report['saved_allocation'] = str(args.save_allocation.resolve())
 
 
 def json_safe(value):
@@ -520,9 +609,21 @@ def main():
                         help='default: use the checkpoint shape_enabled flag')
     parser.add_argument('--cc', default=os.environ.get('CC', 'cc'), help='C99 compiler command (default: CC or cc)')
     parser.add_argument('--output', type=Path, help='also write the full JSON report to this file')
+    parser.add_argument('--compare-certificate', type=Path,
+                        help='compare the final map with a photon_conservation_*.hdf5 for identical inputs')
+    parser.add_argument('--save-allocation', type=Path,
+                        help='save audited final arrays and problem inputs to a .npz file')
     args = parser.parse_args()
-    if args.output and args.output.resolve() == args.checkpoint.resolve():
-        parser.error('--output must not overwrite the input checkpoint')
+    inputs = {args.checkpoint.resolve()}
+    if args.compare_certificate:
+        inputs.add(args.compare_certificate.resolve())
+    outputs = [path.resolve() for path in (args.output, args.save_allocation) if path is not None]
+    if any(path in inputs for path in outputs):
+        parser.error('output paths must not overwrite input checkpoint or comparison certificate')
+    if len(outputs) != len(set(outputs)):
+        parser.error('--output and --save-allocation must use different paths')
+    if args.save_allocation and args.save_allocation.suffix != '.npz':
+        parser.error('--save-allocation must end in .npz')
     report = {'checkpoint': str(args.checkpoint.resolve()), 'success': False}
     started = time.monotonic()
     try:

@@ -25,6 +25,7 @@ static void check_case(const char* name,
   pc_shape_metrics m;
   pc_priority_diagnostic rd[N], od[N];
   double ry[N], rr[N], y[N], rem[N], spent[N];
+  double objective = 0.;
   size_t j;
   pc_status st;
   pc_shape_status ss;
@@ -67,7 +68,12 @@ static void check_case(const char* name,
     assert(y[j] >= L[j] - 1e-10 && y[j] <= U[j] + 1e-10);
     assert(spent[j] >= -1e-10 && spent[j] <= S[j] + 1e-10);
     assert(fabs(spent[j] + rem[j] - S[j]) < 1e-10);
+    if (C[j] > 0.) {
+      double displacement = y[j] - (prior ? prior[j] : b[j]);
+      objective += .5 * displacement * displacement / C[j];
+    }
   }
+  assert(fabs(m.objective - objective) < 1e-10 * fmax(1., objective));
   if (m.target_total > 0) {
     so.max_bytes = 1;
     assert(pc_shape_refine(&p, &fo, &ref, prior, &so, &out, &m) == PC_SHAPE_ERR_MEMORY);
@@ -360,6 +366,52 @@ int main(void)
     double S[] = { 1, 0 }, C[] = { 1, 1 }, b[] = { 0, 0 }, L[] = { 0, 0 }, U[] = { 1, 1 }, R[] = { 0, 0 },
            e[] = { 1, 0 }, prior[] = { 0, 1 };
     check_case("zero candidate original neighbor", 2, S, C, b, L, U, R, NULL, e, prior);
+  }
+  {
+    /* Each disconnected component must retain its own photon budget. */
+    double S[] = { .8, 0, 0, 0, 1.2, 0, 0, 0 };
+    double C[] = { 1, 1, 0, 0, 1, 1, 0, 0 }, z[N] = { 0 };
+    double R[] = { 1, 1, 0, 0, 1, 1, 0, 0 }, e[] = { .4, .4, 0, 0, .6, .6, 0, 0 };
+    check_case("disconnected full absorption", N, S, C, z, z, C, R, NULL, e, NULL);
+  }
+  {
+    /* Excess in the saturated component cannot supply the other component. */
+    double S[] = { 3, 0, 0, 0, .8, 0, 0, 0 };
+    double C[] = { 1, 1, 0, 0, 1, 1, 0, 0 }, z[N] = { 0 };
+    double R[] = { 1, 1, 0, 0, 1, 1, 0, 0 }, e[] = { 1, 1, 0, 0, .4, .4, 0, 0 };
+    check_case("disconnected partial absorption", N, S, C, z, z, C, R, NULL, e, NULL);
+  }
+  {
+    /* The same priority labels occur in both components; the prior cannot
+     * trade their independently attainable retained-overlap quotas. */
+    double S[] = { 1, 0, 0, 0, 1.5, 0, 0, 0 }, C[] = { 1, 1, 0, 0, 1, 1, 0, 0 };
+    double b[] = { .8, .8, 0, 0, .2, .6, 0, 0 }, z[N] = { 0 };
+    double R[] = { 1, 1, 0, 0, 1, 1, 0, 0 }, prior[] = { 0, 1, 0, 0, .9, .1, 0, 0 };
+    double e[] = { .8, .2, 0, 0, .9, .6, 0, 0 };
+    int rank[] = { 0, 1, 9, 9, 0, 1, 9, 9 };
+    check_case("disconnected priorities custom prior", N, S, C, b, z, C, R, rank, e, prior);
+  }
+  {
+    /* Cell 4 has no reachable target; cell 6 has no reachable source. Its
+     * nonzero prior still contributes a constant to the global objective. */
+    double S[] = { .8, 0, 0, 0, .3, 0, 0, 0 }, C[] = { 1, 1, 0, 0, 0, 0, 2, 0 };
+    double z[N] = { 0 }, R[] = { 1, 1, 0, 0, 0, 0, 0, 0 };
+    double prior[] = { .2, .4, 0, 0, 0, 0, 1.7, 0 }, e[] = { .3, .5, 0, 0, 0, 0, 0, 0 };
+    check_case("source-only and unreachable prior", N, S, C, z, z, C, R, NULL, e, prior);
+  }
+  {
+    /* Cells 0 and 7 share source 0 across the periodic boundary. */
+    double S[] = { 1, 0, 0, 0, .6, 0, 0, 0 }, C[] = { 1, 0, 0, 0, 1, 1, 0, 1 };
+    double z[N] = { 0 }, R[] = { 1, 0, 0, 0, 1, 1, 0, 1 };
+    double e[] = { .5, 0, 0, 0, .3, .3, 0, .5 };
+    check_case("periodic component connection", N, S, C, z, z, C, R, NULL, e, NULL);
+  }
+  {
+    /* Every nonempty component is a single target; no local dual solve is needed. */
+    double S[] = { .3, 0, .7, 0 }, C[] = { 1, 0, 1, 0 }, z[4] = { 0 };
+    double b[] = { .2, 0, .4, 0 }, prior[] = { .9, 0, .1, 0 }, e[] = { .3, 0, .7, 0 };
+    int rank[] = { 0, 9, 1, 9 };
+    check_case("all singleton components custom prior", 4, S, C, b, z, C, z, rank, e, prior);
   }
   {
     /* A nearly flat priority face produces a huge speculative coupled-Newton

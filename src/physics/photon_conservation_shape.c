@@ -678,13 +678,23 @@ static void copy_allocation(const pc_problem* p, const pc_result* from, const pc
   to->metrics.priority_groups = reference->metrics.priority_groups;
 }
 
-pc_shape_status pc_shape_refine(const pc_problem* p,
-                                const pc_options* flow_options,
-                                const pc_result* reference,
-                                const double* prior,
-                                const pc_shape_options* options,
-                                pc_result* result,
-                                pc_shape_metrics* metrics)
+typedef struct
+{
+  double *coefficient, *nu;
+  long double cut_constant, cut_multiplier, lambda;
+} shape_dual;
+
+static int shape_components(shape_context* c, const pc_options* fo, const pc_result* reference, pc_result* result);
+
+static pc_shape_status pc_shape_refine_core(const pc_problem* p,
+                                            const pc_options* flow_options,
+                                            const pc_result* reference,
+                                            const double* prior,
+                                            const pc_shape_options* options,
+                                            pc_result* result,
+                                            pc_shape_metrics* metrics,
+                                            int split_components,
+                                            shape_dual* dual_export)
 {
   shape_context c;
   pc_shape_metrics local_metrics;
@@ -767,6 +777,8 @@ pc_shape_status pc_shape_refine(const pc_problem* p,
   }
   if (!c.groups || !reference->priority_diagnostics || reference->priority_diagnostics_capacity < c.groups)
     return status;
+  if (split_components && shape_components(&c, &fo, reference, result))
+    return metrics->status;
   c.bitbytes = (c.n + 7) / 8;
 #define SHAPE_ALLOC(member, count, type)                                                                               \
   do {                                                                                                                 \
@@ -987,6 +999,18 @@ pc_shape_status pc_shape_refine(const pc_problem* p,
   c.error = PC_SHAPE_ERR_CUT_LIMIT;
 done:
   status = c.error;
+  if (status == PC_SHAPE_OK && dual_export) {
+    size_t k;
+    dual_export->lambda = c.lambda;
+    dual_export->cut_constant = dual_export->cut_multiplier = 0.;
+    for (j = 0; j < c.n; ++j)
+      dual_export->coefficient[j] = (double)(c.lambda - c.bias[j]);
+    memcpy(dual_export->nu, c.nu, c.groups * sizeof(double));
+    for (k = 0; k < c.cuts; ++k) {
+      dual_export->cut_constant += (long double)c.mu[k] * c.rhs[k];
+      dual_export->cut_multiplier += c.mu[k];
+    }
+  }
   if (c.mask)
     for (j = 0; j < c.cuts; ++j)
       free(c.mask[j]);
@@ -1012,4 +1036,469 @@ done:
   free(c.newton_index);
   metrics->status = status;
   return status;
+}
+
+static size_t component_root(size_t* parent, size_t k)
+{
+  size_t root = k;
+  while (parent[root] != root)
+    root = parent[root];
+  while (parent[k] != k) {
+    size_t next = parent[k];
+    parent[k] = root;
+    k = next;
+  }
+  return root;
+}
+
+static void component_join(size_t* parent, size_t a, size_t b)
+{
+  a = component_root(parent, a);
+  b = component_root(parent, b);
+  if (a != b)
+    parent[b] = a;
+}
+
+static void component_position(const pc_problem* p, size_t cell, size_t pos[3])
+{
+  pos[2] = cell % p->dim[2];
+  cell /= p->dim[2];
+  pos[1] = cell % p->dim[1];
+  pos[0] = cell / p->dim[1];
+}
+
+static double component_distance(const pc_problem* p, const size_t a[3], const size_t b[3])
+{
+  size_t k;
+  double d2 = 0.;
+  for (k = 0; k < 3; ++k) {
+    size_t d = a[k] > b[k] ? a[k] - b[k] : b[k] - a[k];
+    if (d > p->dim[k] - d)
+      d = p->dim[k] - d;
+    d2 += (double)d * d;
+  }
+  return d2;
+}
+
+/* Re-evaluate the actual returned field, including a visitor replay, against
+ * the original global face and the lifted global dual lower bound. */
+static int component_certificate(shape_context* c,
+                                 const pc_result* reference,
+                                 const pc_result* result,
+                                 const double* proposal,
+                                 pc_priority_diagnostic* quota,
+                                 long double dual,
+                                 pc_shape_metrics* m)
+{
+  const pc_problem* p = c->p;
+  size_t j, k;
+  long double objective = 0., total = 0.;
+  m->max_bound_violation = m->max_priority_violation = m->max_priority_equality_error = 0.;
+  m->max_final_target_correction = m->final_target_correction_l1 = 0.;
+  for (k = 0; k < c->groups; ++k)
+    quota[k].baseline_retained_in_group = 0.;
+  for (j = 0; j < c->n; ++j) {
+    long double d = (long double)result->y[j] - c->prior[j];
+    double correction = fabs(result->y[j] - proposal[j]);
+    int rank = p->priority ? p->priority[j] : 0;
+    total += result->y[j];
+    if (p->capacity[j] > 0.)
+      objective += .5L * d * d / p->capacity[j];
+    m->max_bound_violation = fmax(m->max_bound_violation, fmax(p->lower[j] - result->y[j], result->y[j] - p->upper[j]));
+    m->max_final_target_correction = fmax(m->max_final_target_correction, correction);
+    m->final_target_correction_l1 += correction;
+    for (k = 0; k < c->groups && quota[k].priority != rank; ++k) {
+    }
+    if (k < c->groups)
+      quota[k].baseline_retained_in_group += fmin(result->y[j], p->baseline[j]);
+  }
+  for (k = 0; k < c->groups; ++k) {
+    double slack = quota[k].baseline_retained_in_group - reference->priority_diagnostics[k].baseline_retained_in_group;
+    m->max_priority_violation = fmax(m->max_priority_violation, -slack);
+    m->max_priority_equality_error = fmax(m->max_priority_equality_error, fabs(slack));
+  }
+  m->objective = (double)objective;
+  m->evaluated_dual_lower = (double)dual;
+  m->signed_primal_dual_gap = (double)(objective - dual);
+  m->equality_error = (double)fabsl(total - c->target_sum);
+  return isfinite(m->objective) && isfinite(m->evaluated_dual_lower) && isfinite(m->signed_primal_dual_gap) &&
+         m->equality_error <= 64. * DBL_EPSILON * c->total && m->max_hall_violation <= m->tolerance &&
+         m->max_priority_equality_error <= m->tolerance && m->max_bound_violation <= m->tolerance &&
+         fabsl(objective - dual) <= m->tolerance;
+}
+
+/* The full transport graph, rather than the currently materialized flow
+ * edges, determines independent components. A target-centred lattice scan
+ * is used when cheaper than scanning the occupied sources. No adjacency
+ * matrix or source-target edge list is stored. */
+static int shape_components(shape_context* c, const pc_options* fo, const pc_result* reference, pc_result* result)
+{
+  const pc_problem* p = c->p;
+  size_t n = c->n, j, k, q, ns = 0, nc = 0, bytes, peak = 0;
+  size_t *parent = NULL, *sources = NULL, *roots = NULL, *counts = NULL, *single = NULL;
+  double *arrays = NULL, *source, *baseline, *lower, *upper, *prior, *ref_y, *ref_residual, *out_y, *out_residual;
+  double *proposal, *coefficient, *comp_lambda, *comp_budget, *shared_nu = NULL, *local_nu = NULL;
+  pc_priority_diagnostic* quota = NULL;
+  pc_shape_metrics sum;
+  pc_shape_status status = PC_SHAPE_OK;
+  int handled = 0, fallback = 0;
+  long double dual = 0., cut_constant = 0., global_lambda = -LDBL_MAX;
+  if (!p->dim[0] || !p->dim[1] || !p->dim[2] || p->dim[0] > SIZE_MAX / p->dim[1] ||
+      p->dim[0] * p->dim[1] > SIZE_MAX / p->dim[2] || p->dim[0] * p->dim[1] * p->dim[2] != n ||
+      n > SIZE_MAX / (6 * sizeof(size_t) + 13 * sizeof(double)))
+    return 0;
+  bytes = n * (6 * sizeof(size_t) + 13 * sizeof(double));
+  if (c->groups > (SIZE_MAX - bytes) / (sizeof(*quota) + 2 * sizeof(double)))
+    return 0;
+  bytes += c->groups * (sizeof(*quota) + 2 * sizeof(double));
+  /* This optimization is optional; do not consume the whole solver budget
+   * merely to discover that the graph is connected. */
+  if (c->o.max_bytes && bytes > c->o.max_bytes / 2)
+    return 0;
+  parent = malloc(2 * n * sizeof(*parent));
+  sources = malloc(n * sizeof(*sources));
+  roots = malloc(n * sizeof(*roots));
+  counts = calloc(n, sizeof(*counts));
+  single = malloc(n * sizeof(*single));
+  if (!parent || !sources || !roots || !counts || !single)
+    goto cleanup;
+  for (j = 0; j < 2 * n; ++j)
+    parent[j] = j;
+  for (j = 0; j < n; ++j)
+    if (p->source[j] > 0.)
+      sources[ns++] = j;
+  for (j = 0; j < n; ++j) {
+    size_t pos[3], half, widths[3], starts[3], volume = 1;
+    double r2;
+    if (!(p->upper[j] > 0.))
+      continue;
+    if (!isfinite(p->radius[j]) || p->radius[j] < 0.)
+      goto cleanup;
+    component_position(p, j, pos);
+    r2 = p->radius[j] * p->radius[j] + 1e-10;
+    half = p->radius[j] >= (double)n ? n : (size_t)floor(sqrt(r2));
+    for (k = 0; k < 3; ++k) {
+      if (half >= p->dim[k] / 2) {
+        widths[k] = p->dim[k];
+        starts[k] = 0;
+      } else {
+        widths[k] = 2 * half + 1;
+        starts[k] = pos[k] >= half ? pos[k] - half : p->dim[k] - (half - pos[k]);
+      }
+      if (volume > ns / widths[k])
+        volume = ns + 1;
+      else
+        volume *= widths[k];
+    }
+    if (volume < ns) {
+      size_t x, y, z;
+      for (x = 0; x < widths[0]; ++x)
+        for (y = 0; y < widths[1]; ++y)
+          for (z = 0; z < widths[2]; ++z) {
+            size_t sp[3] = { (starts[0] + x) % p->dim[0], (starts[1] + y) % p->dim[1], (starts[2] + z) % p->dim[2] };
+            size_t i = (sp[0] * p->dim[1] + sp[1]) * p->dim[2] + sp[2];
+            if (p->source[i] > 0. && component_distance(p, pos, sp) <= r2)
+              component_join(parent, i, n + j);
+          }
+    } else {
+      for (q = 0; q < ns; ++q) {
+        size_t sp[3], i = sources[q];
+        component_position(p, i, sp);
+        if (component_distance(p, pos, sp) <= r2)
+          component_join(parent, i, n + j);
+      }
+    }
+  }
+  /* Compress all labels before reusing counts as the component lookup. */
+  for (j = 0; j < 2 * n; ++j)
+    parent[j] = component_root(parent, j);
+  for (j = 0; j < n; ++j) {
+    size_t root;
+    if (!(p->upper[j] > 0.))
+      continue;
+    root = parent[n + j];
+    /* A target with no eligible source is fixed at zero and contributes
+     * only a constant to the original quadratic objective. */
+    if (root >= n)
+      continue;
+    if (!counts[root])
+      roots[nc++] = root;
+    ++counts[root];
+    single[root] = j;
+  }
+  if (nc < 2)
+    goto cleanup;
+  arrays = calloc(13 * n, sizeof(double));
+  quota = calloc(c->groups, sizeof(*quota));
+  shared_nu = calloc(c->groups, sizeof(double));
+  local_nu = calloc(c->groups, sizeof(double));
+  if (!arrays || !quota || !shared_nu || !local_nu)
+    goto cleanup;
+  for (k = 0; k < c->groups; ++k)
+    quota[k] = reference->priority_diagnostics[k];
+  source = arrays;
+  baseline = source + n;
+  lower = baseline + n;
+  upper = lower + n;
+  prior = upper + n;
+  ref_y = prior + n;
+  ref_residual = ref_y + n;
+  out_y = ref_residual + n;
+  out_residual = out_y + n;
+  proposal = out_residual + n;
+  coefficient = proposal + n;
+  comp_lambda = coefficient + n;
+  comp_budget = comp_lambda + n;
+  for (j = 0; j < n; ++j)
+    if (p->source[j] > 0.)
+      comp_budget[parent[j]] += p->source[j];
+  memset(&sum, 0, sizeof(sum));
+  sum.source_budget = c->m->source_budget;
+  sum.target_total = c->m->target_total;
+  sum.unused_budget = c->m->unused_budget;
+  sum.tolerance = c->m->tolerance;
+  peak = bytes;
+  handled = 1;
+  for (q = 0; q < nc; ++q) {
+    size_t root = roots[q], targets = counts[root];
+    long double budget = 0., reference_total = 0.;
+    pc_problem sub = *p;
+    pc_result ref = *reference, out;
+    pc_shape_options options = c->o;
+    pc_shape_metrics m;
+    shape_dual local_dual;
+    /* Avoid a full-grid clear or scan for the common isolated pair. */
+    if (targets == 1) {
+      j = single[root];
+      proposal[j] = reference->y[j];
+      continue;
+    }
+    memset(arrays, 0, 9 * n * sizeof(double));
+    for (k = 0; k < c->groups; ++k) {
+      quota[k] = reference->priority_diagnostics[k];
+      quota[k].baseline_retained_in_group = 0.;
+    }
+    for (j = 0; j < n; ++j) {
+      if (p->source[j] > 0. && parent[j] == root) {
+        source[j] = p->source[j];
+        ref_residual[j] = reference->source_residual[j];
+        budget += source[j];
+      }
+      if (p->upper[j] > 0. && parent[n + j] == root) {
+        int rank = p->priority ? p->priority[j] : 0;
+        baseline[j] = p->baseline[j];
+        lower[j] = p->lower[j];
+        upper[j] = p->upper[j];
+        prior[j] = c->prior[j];
+        ref_y[j] = reference->y[j];
+        reference_total += ref_y[j];
+        for (k = 0; k < c->groups && quota[k].priority != rank; ++k) {
+        }
+        if (k == c->groups) {
+          status = PC_SHAPE_ERR_INVALID;
+          goto cleanup;
+        }
+        quota[k].baseline_retained_in_group += fmin(ref_y[j], baseline[j]);
+      }
+    }
+    comp_budget[roots[q]] = (double)budget;
+    /* A numerically empty local maximum has no dual state to export.
+     * Let the global solver handle its exact rounded target-total face. */
+    if (!(reference_total > 0.)) {
+      fallback = 1;
+      goto cleanup;
+    }
+    if (sum.master_evaluations >= options.max_evaluations || sum.hall_cuts > options.max_hall_cuts) {
+      status = sum.master_evaluations >= options.max_evaluations ? PC_SHAPE_ERR_MASTER_LIMIT : PC_SHAPE_ERR_CUT_LIMIT;
+      goto cleanup;
+    }
+    options.max_evaluations -= sum.master_evaluations;
+    options.max_hall_cuts -= sum.hall_cuts;
+    if (options.max_bytes)
+      options.max_bytes -= bytes;
+    /* Allocate the same global error budget across components. In
+     * particular, do not apply max(1,S_component) independently. */
+    options.absolute_tolerance = 0.;
+    options.relative_tolerance = sum.tolerance * (double)(budget / c->source_sum) / fmax(1., (double)budget);
+    sub.source = source;
+    sub.baseline = baseline;
+    sub.lower = lower;
+    sub.upper = upper;
+    ref.y = ref_y;
+    ref.source_residual = ref_residual;
+    ref.priority_diagnostics = quota;
+    ref.priority_diagnostics_capacity = c->groups;
+    memset(&out, 0, sizeof(out));
+    out.y = out_y;
+    out.source_residual = out_residual;
+    local_dual.coefficient = out_residual;
+    local_dual.nu = local_nu;
+    status = pc_shape_refine_core(&sub, fo, &ref, prior, &options, &out, &m, 0, &local_dual);
+    sum.hall_cuts += m.hall_cuts;
+    sum.master_sweeps += m.master_sweeps;
+    sum.master_evaluations += m.master_evaluations;
+    sum.oracle_calls += m.oracle_calls;
+    if (bytes + m.bytes_peak > peak)
+      peak = bytes + m.bytes_peak;
+    sum.max_hall_violation = fmax(sum.max_hall_violation, m.max_hall_violation);
+    sum.max_complementarity = fmax(sum.max_complementarity, m.max_complementarity);
+    sum.max_oracle_target_error = fmax(sum.max_oracle_target_error, m.max_oracle_target_error);
+    sum.oracle_target_l1_error += m.oracle_target_l1_error;
+    if (status != PC_SHAPE_OK) {
+      fallback = 1;
+      goto cleanup;
+    }
+    comp_lambda[roots[q]] = (double)local_dual.lambda;
+    global_lambda = fmaxl(global_lambda, comp_lambda[roots[q]]);
+    {
+      long double local_total = 0.;
+      for (j = 0; j < n; ++j)
+        local_total += ref_y[j];
+      cut_constant += local_dual.cut_constant -
+                      local_dual.cut_multiplier * ((c->source_sum - c->target_sum) - (budget - local_total));
+    }
+    for (k = 0; k < c->groups; ++k)
+      shared_nu[k] = fmax(shared_nu[k], local_nu[k]);
+    for (j = 0; j < n; ++j)
+      if (upper[j] > 0.) {
+        proposal[j] = out_y[j];
+        coefficient[j] = local_dual.coefficient[j];
+      }
+  }
+  /* Lift every local Hall inequality back to the original global
+   * transport polytope. A common priority multiplier is essential: rounded
+   * per-component quotas must not silently define a tighter QP.
+   * With delta=P-F, a local cut S(Q)-(P_c-F_c) becomes S(Q)-delta.
+   * Taking lambda=max(lambda_c) and adding each valid component Hall cut
+   * sum(y_c)>=P_c-delta with multiplier lambda-lambda_c leaves the local
+   * linear coefficients unchanged. The scalar infima below, using common
+   * nonnegative nu_g, therefore give a lower bound for the ORIGINAL QP,
+   * even if rounded local quotas do not factor its feasible priority face. */
+  for (q = 0; q < nc; ++q)
+    if (counts[roots[q]] == 1) {
+      int rank;
+      j = single[roots[q]];
+      rank = p->priority ? p->priority[j] : 0;
+      for (k = 0; k < c->groups && reference->priority_diagnostics[k].priority != rank; ++k) {
+      }
+      if (k == c->groups) {
+        status = PC_SHAPE_ERR_INVALID;
+        goto cleanup;
+      }
+      comp_lambda[roots[q]] =
+        (c->prior[j] - proposal[j]) / p->capacity[j] + (proposal[j] < p->baseline[j] ? shared_nu[k] : 0.);
+      coefficient[j] = comp_lambda[roots[q]];
+      global_lambda = fmaxl(global_lambda, comp_lambda[roots[q]]);
+    }
+  dual = cut_constant - global_lambda * c->target_sum;
+  for (q = 0; q < nc; ++q)
+    dual +=
+      (global_lambda - comp_lambda[roots[q]]) * ((long double)comp_budget[roots[q]] - (c->source_sum - c->target_sum));
+  for (k = 0; k < c->groups; ++k)
+    dual += (long double)shared_nu[k] * reference->priority_diagnostics[k].baseline_retained_in_group;
+  for (j = 0; j < n; ++j) {
+    if (p->capacity[j] > 0.) {
+      int rank = p->priority ? p->priority[j] : 0;
+      long double nu = 0., a, value, low_root, high_root, d;
+      for (k = 0; k < c->groups && reference->priority_diagnostics[k].priority != rank; ++k) {
+      }
+      if (k < c->groups)
+        nu = shared_nu[k];
+      a = p->upper[j] > 0. && parent[n + j] < n ? coefficient[j] : global_lambda;
+      low_root = (long double)c->prior[j] - (long double)p->capacity[j] * a;
+      high_root = low_root + (long double)p->capacity[j] * nu;
+      value = low_root > p->baseline[j] ? low_root : (high_root < p->baseline[j] ? high_root : p->baseline[j]);
+      value = fmaxl(p->lower[j], fminl(p->upper[j], value));
+      d = value - c->prior[j];
+      dual += .5L * d * d / p->capacity[j] + a * value - nu * fminl(value, p->baseline[j]);
+    }
+    lower[j] = clip(proposal[j], p->lower[j], p->upper[j]);
+  }
+  {
+    pc_problem fixed = *p;
+    fixed.lower = lower;
+    ++sum.oracle_calls;
+    {
+      pc_edge_visitor visitor = result->visit_edge;
+      result->visit_edge = NULL;
+      sum.last_oracle_status = pc_allocate(&fixed, fo, result);
+      result->visit_edge = visitor;
+    }
+    if (sum.last_oracle_status < 0 || !result->metrics.lower_feasible || !result->metrics.full_graph_cut_separated ||
+        (reference->metrics.full_source_budget && !result->metrics.full_source_budget)) {
+      status = PC_SHAPE_ERR_ORACLE;
+      goto cleanup;
+    }
+    if (!component_certificate(c, reference, result, proposal, quota, dual, &sum)) {
+      /* The lifted dual can be loose when independent components prefer
+       * very different priority multipliers. Retain the original global
+       * solve as the exact fallback, using only the remaining work budget. */
+      fallback = 1;
+      goto cleanup;
+    }
+    if (result->visit_edge) {
+      ++sum.oracle_calls;
+      sum.last_oracle_status = pc_allocate(&fixed, fo, result);
+      if (sum.last_oracle_status < 0 || !result->metrics.lower_feasible || !result->metrics.full_graph_cut_separated ||
+          (reference->metrics.full_source_budget && !result->metrics.full_source_budget) ||
+          !component_certificate(c, reference, result, proposal, quota, dual, &sum)) {
+        status = PC_SHAPE_ERR_ORACLE;
+        goto cleanup;
+      }
+    }
+    sum.full_graph_certificate = 1;
+    if (result->priority_diagnostics) {
+      size_t count =
+        c->groups < result->priority_diagnostics_capacity ? c->groups : result->priority_diagnostics_capacity;
+      memcpy(result->priority_diagnostics, reference->priority_diagnostics, count * sizeof(*quota));
+    }
+    result->metrics.priority_groups = c->groups;
+  }
+cleanup:
+  free(parent);
+  free(sources);
+  free(roots);
+  free(counts);
+  free(single);
+  free(arrays);
+  free(quota);
+  free(shared_nu);
+  free(local_nu);
+  if (fallback) {
+    pc_shape_options options = c->o;
+    pc_shape_metrics m;
+    if (sum.master_evaluations >= options.max_evaluations) {
+      status = PC_SHAPE_ERR_MASTER_LIMIT;
+    } else if (sum.hall_cuts > options.max_hall_cuts) {
+      status = PC_SHAPE_ERR_CUT_LIMIT;
+    } else {
+      options.max_evaluations -= sum.master_evaluations;
+      options.max_hall_cuts -= sum.hall_cuts;
+      status = pc_shape_refine_core(p, fo, reference, c->prior, &options, result, &m, 0, NULL);
+      m.master_evaluations += sum.master_evaluations;
+      m.master_sweeps += sum.master_sweeps;
+      m.hall_cuts += sum.hall_cuts;
+      m.oracle_calls += sum.oracle_calls;
+      m.bytes_peak = m.bytes_peak > peak ? m.bytes_peak : peak;
+      *c->m = m;
+      return 1;
+    }
+  }
+  if (handled) {
+    sum.bytes_peak = peak;
+    sum.status = status;
+    *c->m = sum;
+  }
+  return handled;
+}
+
+pc_shape_status pc_shape_refine(const pc_problem* p,
+                                const pc_options* flow_options,
+                                const pc_result* reference,
+                                const double* prior,
+                                const pc_shape_options* options,
+                                pc_result* result,
+                                pc_shape_metrics* metrics)
+{
+  return pc_shape_refine_core(p, flow_options, reference, prior, options, result, metrics, 1, NULL);
 }
