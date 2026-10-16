@@ -155,7 +155,7 @@ simulation input file. Start with a small grid and debug level two.
 | `PhotonConservationMemoryMB` | 2048 | Memory guard for the gathered problem and solver workspace. |
 | `PhotonConservationMaxIterations` | 10000 | Maximum sweeps per master solve; the limit resets when a new cut/refinement starts another master solve. |
 | `PhotonConservationMaxEvaluations` | 1000000 | Global maximum scalar objective/waterfill map evaluations for one quadratic refinement. |
-| `PhotonConservationMaxCuts` | 512 | Maximum stored source-capacity cuts in the quadratic refinement. |
+| `PhotonConservationMaxCuts` | 512 | Total generated source-capacity cut budget across component refinement and any global fallback. |
 | `PhotonConservationTolerance` | 1e-9 | Relative solver tolerance, required in `(0,1e-5]`; the adapter uses an absolute count tolerance of `1e-12`. |
 
 With `RequireFull=0`, status one is a valid maximum under finite support with
@@ -348,13 +348,21 @@ The checks completed for this implementation are:
 |---|---|---|
 | Default and `USE_MINI_HALOS=ON` builds | Both build successfully | Compilation of the adapter and optional Pop. III source path. |
 | Five native/feedback CTest entries | 5/5 pass | Allocator, ES completion, quadratic refinement, and feedback reconstruction with one and two MPI ranks. |
-| Native shape hand cases | 11/11 pass | Symmetry, partial absorption, priority retention, faint inventories, Hall-cut repair, promoted-priority regression and recovery from an unresolvable Newton trial. |
+| Native shape hand cases | 19/19 pass, including AddressSanitizer/UndefinedBehaviorSanitizer | Symmetry, partial absorption, priority retention, disconnected components, faint inventories, Hall-cut repair and strengthened-certificate regressions. Leak detection is unavailable in the execution sandbox. |
 | Independent explicit-edge LP comparisons | 40/40 seeded cases pass; maximum absorption discrepancy about `7.1e-15` | Small `4^3`-cell graphs: lower feasibility, maximum absorption, priority retention, edge ledgers and complete cut geometry. |
 | Independent explicit-graph QP comparisons | 40/40 seeded cases pass; objective differences about `1e-13` | Small three-to-five-cell graphs, including nonzero lower bounds and alternate quadratic priors. The reference optimizer is also numerical. |
 | Saved real-input replays | 45/45 pass with 512 cuts and 1,000,000 evaluations available | Completion and quadratic refinement on captured simulation inputs; these replays do not constitute a complete evolution. |
 | Uploaded Gadi snapshot 52 after the coordinate-search fix | Pass at the original 1,000,000-evaluation limit, using 48,237 evaluations and 224 cuts | Absorbed inventory `1074.309407529475`, zero residual, and independent positive-edge accounting/geometry checks pass. The final gap `6.93e-7` is below the unchanged `1.07431e-6` optimization tolerance. |
+| Uploaded Gadi snapshot 62 after the certificate/headroom fix | Pass with 386 cuts, 66,707 evaluations and 904 flow calls | Zero residual and an independent edge audit; the global gap `1.54034e-6` is below the unchanged `2.77153e-6` tolerance. |
 | `Flag_PhotonConservation=0` regression summaries | Default, IGM and X-ray configurations all agree in strict comparison mode | The tested original output summaries are unchanged with the option disabled. |
-| Full enabled L10_N512 evolution | Local run not completed | The remaining end-to-end validation matrix is to be run on the target server; no complete local evolution or full-matrix pass is claimed. |
+| Full enabled L10_N512 evolution, default configuration, 32 MPI ranks | Snapshots 0--75 complete with exit code zero; 76/76 certificates pass 6,308 independent checks | Original tolerance and work limits, zero source residual throughout, and no missing snapshots. This covers one configuration/rank combination, not the full validation matrix. |
+
+The full-run certificate audit independently checks the explicit source/target
+ledgers, allowed edge geometry, selected-geometry maximum absorption and
+recorded priority quotas. It does not independently prove priority/L1
+optimality, minimum band/promotion, or quadratic uniqueness; the separate
+small-graph QP comparisons and native primal-dual acceptance checks address
+different parts of the validation.
 
 From the repository root, with the normal Meraxes build dependencies installed
 (see `BUILD.md`), build and run only the new tests:
@@ -367,9 +375,11 @@ ctest --test-dir build-pc --output-on-failure -R '^test_photon_conservation'
 
 The three allocation tests do not require Criterion, external simulation data
 or an MPI launch. The two feedback entries use the MPI launcher discovered by
-CMake. The native shape driver contains eleven hand cases, including faint-source,
-partial-absorption, Hall-cut, promoted-priority and flat-priority Newton-trial
-regressions. A second build
+CMake. The 19 native shape cases include faint-source, partial-absorption,
+Hall-cut, component and flat-priority Newton-trial regressions. Two analytic
+certificate cases must pass with zero generated Hall cuts; they cover full
+and partial absorption and fail if the strengthened certificate is disabled.
+A second build
 directory configured with `-DUSE_MINI_HALOS=ON` checks
 that compile-time source variant. `RelWithDebInfo` is also the recommended
 configuration for the integration harness: the legacy one-rank Debug galaxy
@@ -424,6 +434,25 @@ cosmological accuracy or large-grid performance.
 
 ## Scope and computational limits
 
+If the assembled feasible map narrowly fails the global optimality check,
+the certificate can use two pointwise bounds implied by the original
+transport and retained-priority constraints. A target cannot absorb
+more than the total inventory of sources within its permitted radius:
+`U'_j = min(U_j, sum_{i -> j} S_i)`. For priority group `g`, retaining its
+quota `Q_g` also requires
+`L'_j = max(L_j, Q_g - sum_{k in g, k != j} min(U'_k, b_k))`.
+Every feasible field satisfies these necessary conditions, so minimizing
+the same Lagrangian over their tighter scalar intervals remains a valid
+global dual lower bound. Supply sums are enclosed upward and lower bounds
+downward, with conservative widening for rounded references. This changes
+only the certificate: the local/master iterations, transported map, graph,
+inventories, objective and priority quotas retain their original definitions.
+Idle component work arrays are reused, and one additional scalar-map
+evaluation is charged to the existing limit. Both full and partial
+absorption are supported; final feasibility and optimality checks remain
+mandatory. The original master domain is retained to preserve its numerical
+conditioning.
+
 The shape solver first identifies connected components of the **full allowed
 geometric graph**, including legal edges not yet materialized by the flow
 solver. Components cannot exchange photons. Their maximum absorption and
@@ -440,30 +469,80 @@ dual lower bound for the original global quadratic problem. The assembled map
 must pass the original global gap, total, capacity and priority checks, followed
 by a full-graph flow certificate. If the lifted bound is too loose, the original
 global solver runs with the remaining evaluation and cut budgets. Component
-tolerances share the original error budget; neither the objective nor its
-acceptance tolerance is relaxed. The execution remains serial.
+tolerances share half the original global error budget, leaving headroom for
+the lifted certificate and final transport accumulation. This asks the local
+solves for greater accuracy; neither the objective nor the global acceptance
+tolerance is relaxed. The execution remains serial.
 
-On the uploaded snapshot-54 input (32 cubed cells), the full graph contains
+On the historical uploaded snapshot-54 input (32 cubed cells, normalized
+source inventory `1352.0677771`), the full graph contains
 167 components and 9,174 eligible links. The recorded global solver used
 478,733 evaluations, 491 cuts and 1,476 flow calls. Component refinement uses
-16,737 evaluations, 186 cuts and 687 flow calls at the same `1e-9` relative
-tolerance. The global primal-dual gap is `1.026e-6`, below `1.352e-6`; the
-maximum change in `allocation/capacity` relative to the supplied output is
-`6.42e-7`. The independent positive-edge audit passes with zero residual.
+16,469 evaluations, 194 cuts and 516 flow calls at the same `1e-9` relative
+tolerance, including the caching and local-headroom changes. The global
+primal-dual gap is `4.449e-7`, below `1.352e-6`. The independent positive-edge
+audit passes with zero residual.
+This captured input predates the VELOCIraptor initialization fix; it is
+distinct from snapshot 54 of the fresh evolution with that fix.
 
-Development-host replay takes 18.8 seconds including compilation and ES
-completion, with 17.0 seconds in shape refinement. The final code passes 17
+Development-host replay takes 17.4 seconds in shape refinement under
+concurrent load. The final code passes 19
 native shape cases, 40 independent small explicit-graph QP comparisons, and
 AddressSanitizer/UndefinedBehaviorSanitizer checks (leak detection unavailable
 in the execution sandbox). The unchanged baseline was still refining the shape after
 582 seconds on the same host and was subsequently interrupted, so its complete
 runtime was not measured. The separately supplied Gadi certificate records
-3,263 seconds; it is not a same-machine timing comparison. These measurements
+3,263 seconds of total PC elapsed time, without a separate refinement time;
+it is not a same-machine or same-metric timing comparison. These measurements
 apply to this snapshot. Large, connected ionization regions may benefit less.
 
 The production log and certificate now separate `completion_seconds` from
 `refinement_seconds` to locate later bottlenecks without inferring their source
 from the total time alone.
+
+When a proposed marginal fails the final repair checks, refinement reuses the
+cut already separated for that identical marginal. It no longer repeats the
+same fixed-marginal transport solve merely to recover the cut masks. This
+requires two additional byte arrays, charged to the existing memory budget.
+For this caching change alone, a sequential snapshot-54 comparison reduced
+flow calls from 687 to 500 and
+shape time from 18.19 to 13.87 seconds. The allocation arrays, objective,
+gap, cuts and master evaluations were bit-identical; both independent edge
+audits passed. These are development-host measurements, not a Gadi speed claim.
+
+For fresh-evolution snapshots 54, 55 and 56 after the VELOCIraptor reader fix,
+the input source, capacity, baseline, radius and priority arrays match the
+previous implementation bit for bit. With all three changes enabled, flow
+calls fall from 450 to 348, 466 to 376 and 516 to 398, respectively (19–23%).
+All three global gaps are smaller. These comparisons include the tighter
+local tolerances, so they do not imply bit-identical output fields or a
+controlled wall-time speedup.
+
+The uploaded snapshot-62 input reproduced a subtler failure: all local solves
+completed using 378 cuts and 67,471 master evaluations, but the lifted global
+gap was `2.8416902e-6`, above the required `2.7715323e-6`. The global fallback
+then restarted with only 134 cuts remaining and exhausted that budget. Its
+reported large final gap describes the restarted iterate, not the preceding
+component result. Reserving local accuracy headroom avoids that restart:
+the final replay passes with 386 cuts, 66,707 evaluations, 904 flow calls,
+zero residual and a global gap of `1.5403356e-6`, below the unchanged
+`2.7715323e-6` tolerance. Snapshot 43 also passes in 0.47 seconds in an
+isolated replay, guarding against an earlier master-conditioning regression.
+An independent explicit-edge quadratic solve, followed by native transport
+and an independently evaluated global dual bound, gives objective
+`102.15797348785863` and gap `4.66e-8`. The final native snapshot-62 objective
+is `102.1579746822792`, higher by `1.19442e-6` and within its certified gap;
+the largest target-count difference is `1.25304e-6`. Its 287-second shape
+time was measured concurrently with a 32-rank evolution and is not a
+controlled speed comparison.
+
+The fresh default-configuration evolution completes all snapshots 0--75 with
+32 MPI ranks and the original limits. Snapshot 75 uses 242 cuts, 33,850
+evaluations and 500 flow calls; its gap `3.88662e-6` is below `9.01239e-6`.
+The native run takes 3,420.82 seconds, including 844.79 seconds in the final
+snapshot's PC correction. These timings come from an oversubscribed local
+container and are not a controlled Gadi comparison. Late snapshots remain
+expensive despite the reduction in redundant flow work.
 
 The correction gathers the global problem onto rank zero and scatters the
 corrected neutral fraction back to the original slabs. MPI input ordering is
@@ -487,7 +566,8 @@ numerically unresolvable speculative coupled-Newton step is backtracked;
 resource exhaustion and a failed restored state still abort. Neither the
 feasible set nor the final acceptance gates change.
 
-The final snapshot-52 replay used 48,237 evaluations, 3,793 master sweeps and
+The historical snapshot-52 replay of the coordinate-search fix used
+48,237 evaluations, 3,793 master sweeps and
 675 flow-oracle calls, with a measured shape time of about 61 seconds on the
 development machine. The original enlarged-budget comparison took about
 122 seconds under different concurrent load; these are diagnostic timings,

@@ -6,7 +6,7 @@
 #include <string.h>
 
 #define N 8
-static void check_case(const char* name,
+static void check_case_with_cuts(const char* name,
                        size_t n,
                        const double* S,
                        const double* C,
@@ -16,7 +16,8 @@ static void check_case(const char* name,
                        const double* R,
                        const int* rank,
                        const double* expected,
-                       const double* prior)
+                       const double* prior,
+                       size_t max_hall_cuts)
 {
   pc_problem p = { { n, 1, 1 }, n, S, C, b, L, U, R, rank };
   pc_options fo;
@@ -46,7 +47,7 @@ static void check_case(const char* name,
   pc_shape_default_options(&so);
   so.absolute_tolerance = 1e-12;
   so.relative_tolerance = 1e-11;
-  so.max_hall_cuts = 128;
+  so.max_hall_cuts = max_hall_cuts;
   st = pc_allocate(&p, &fo, &ref);
   assert(st == PC_OK || st == PC_PARTIAL);
   ss = pc_shape_refine(&p, &fo, &ref, prior, &so, &out, &m);
@@ -80,6 +81,21 @@ static void check_case(const char* name,
   }
   printf("PASS %s\n", name);
 }
+static void check_case(const char* name,
+                       size_t n,
+                       const double* S,
+                       const double* C,
+                       const double* b,
+                       const double* L,
+                       const double* U,
+                       const double* R,
+                       const int* rank,
+                       const double* expected,
+                       const double* prior)
+{
+  check_case_with_cuts(name, n, S, C, b, L, U, R, rank, expected, prior, 128);
+}
+
 /* Sparse deterministic replay of the first promoted-sphere regression.
  * All unlisted cells have zero source and zero target bounds. This retains
  * the 32^3 geometry in a compact fixture without committing simulation data. */
@@ -428,6 +444,31 @@ int main(void)
     double e[] = { 0., 0.55512583519519054, 0.8642363899582437, 0.34297451246931865, 0.14407799580428779 };
     int rank[] = { 2, 0, 1, 0, 1 };
     check_case("flat priority Newton trial recovery", 5, S, C, b, L, C, R, rank, e, NULL);
+  }
+  {
+    /* The two components have very different local priority multipliers.
+     * Their common retained quota forces both local source inventories into
+     * baseline targets. Valid geometric supply bounds must certify the lifted
+     * global dual without falling back to rediscover component Hall cuts. */
+    double S[N] = { .2, 0, 0, 0, .7, 0, 0, 0 };
+    double C[N] = { 1, 1, 0, 0, 1, 1, 0, 0 }, z[N] = { 0 };
+    double b[N] = { 1, 0, 0, 0, 1, 0, 0, 0 };
+    double R[N] = { 1, 1, 0, 0, 1, 1, 0, 0 };
+    double prior[N] = { 0, 1, 0, 0, 0, 10, 0, 0 };
+    double e[N] = { .2, 0, 0, 0, .7, 0, 0, 0 };
+    check_case_with_cuts("implied bounds certify coupled component priorities", N, S, C, b, z, C, R, NULL, e, prior, 0);
+  }
+  {
+    /* The first component also contains excess source inventory that only
+     * reaches a .1-capacity target. The lifted certificate must retain the
+     * global unused-photon allowance while applying the same valid bounds. */
+    double S[N] = { .2, 0, 1, 0, .7, 0, 0, 0 };
+    double C[N] = { 1, .1, 0, 0, 1, 1, 0, 0 }, z[N] = { 0 };
+    double b[N] = { 1, 0, 0, 0, 1, 0, 0, 0 };
+    double R[N] = { 1, 1, 0, 0, 1, 1, 0, 0 };
+    double prior[N] = { 0, 1, 0, 0, 0, 10, 0, 0 };
+    double e[N] = { .2, .1, 0, 0, .7, 0, 0, 0 };
+    check_case_with_cuts("implied component certificate with unused supply", N, S, C, b, z, C, R, NULL, e, prior, 0);
   }
   check_promoted_priority_regression();
   puts("All native unique-shape cases passed.");

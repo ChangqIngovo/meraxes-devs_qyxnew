@@ -23,7 +23,7 @@ typedef struct
   double *y, *bias, *flow_y, *remainder, *spent, *master_upper, *desired;
   double *quota, *nu, *rhs, *mu;
   int* group;
-  unsigned char *cut_source, *cut_target;
+  unsigned char *cut_source, *cut_target, *initial_cut_source, *initial_cut_target;
   unsigned char** mask;
   pc_shape_status error;
 } shape_context;
@@ -685,6 +685,7 @@ typedef struct
 } shape_dual;
 
 static int shape_components(shape_context* c, const pc_options* fo, const pc_result* reference, pc_result* result);
+static int shape_implied_bounds(const pc_problem* p, const pc_result* reference, double* lower, double* upper, size_t* sources);
 
 static pc_shape_status pc_shape_refine_core(const pc_problem* p,
                                             const pc_options* flow_options,
@@ -810,6 +811,8 @@ static pc_shape_status pc_shape_refine_core(const pc_problem* p,
   SHAPE_ALLOC(group, c.n, int);
   SHAPE_ALLOC(cut_source, c.n, unsigned char);
   SHAPE_ALLOC(cut_target, c.n, unsigned char);
+  SHAPE_ALLOC(initial_cut_source, c.n, unsigned char);
+  SHAPE_ALLOC(initial_cut_target, c.n, unsigned char);
   SHAPE_ALLOC(quota, c.groups, double);
   SHAPE_ALLOC(nu, c.groups, double);
   SHAPE_ALLOC(rhs, c.o.max_hall_cuts, double);
@@ -859,7 +862,7 @@ static pc_shape_status pc_shape_refine_core(const pc_problem* p,
   fixed.lower = c.y;
   fixed.upper = c.y;
   for (;;) {
-    pc_status oracle_status;
+    pc_status oracle_status, initial_oracle_status;
     double max_target_error = 0.;
     if (!solve_master(&c))
       goto done;
@@ -877,6 +880,9 @@ static pc_shape_status pc_shape_refine_core(const pc_problem* p,
       metrics->oracle_target_l1_error += error;
     }
     metrics->max_oracle_target_error = max_target_error;
+    initial_oracle_status = oracle_status;
+    memcpy(c.initial_cut_source, c.cut_source, c.n);
+    memcpy(c.initial_cut_target, c.cut_target, c.n);
     {
       /* Every valid fixed-flow field supplies a candidate floor for a primal
        * repair. Its discrepancy is diagnostic, never an acceptance gate. */
@@ -912,13 +918,11 @@ static pc_shape_status pc_shape_refine_core(const pc_problem* p,
          * requested tolerance. Reject that repair and continue separation. */
         memcpy(c.y, c.desired, c.n * sizeof(double));
         fixed.upper = c.y;
-        ++metrics->oracle_calls;
-        oracle_status = pc_allocate(&fixed, &fo, &allocation);
-        metrics->last_oracle_status = oracle_status;
-        if (oracle_status < 0 || !allocation.metrics.full_graph_cut_separated) {
-          c.error = PC_SHAPE_ERR_ORACLE;
-          goto done;
-        }
+        /* The original fixed-marginal oracle already separated this exact
+         * restored candidate. Reuse its cut instead of repeating the solve. */
+        memcpy(c.cut_source, c.initial_cut_source, c.n);
+        memcpy(c.cut_target, c.initial_cut_target, c.n);
+        metrics->last_oracle_status = initial_oracle_status;
         goto separate_cut;
       }
       /* A caller's edge visitor sees only the final checked allocation. */
@@ -1025,6 +1029,8 @@ done:
   free(c.group);
   free(c.cut_source);
   free(c.cut_target);
+  free(c.initial_cut_source);
+  free(c.initial_cut_target);
   free(c.quota);
   free(c.nu);
   free(c.rhs);
@@ -1078,6 +1084,105 @@ static double component_distance(const pc_problem* p, const size_t a[3], const s
     d2 += (double)d * d;
   }
   return d2;
+}
+
+/* Every photon absorbed by j must come from an eligible source. These
+ * implied bounds tighten the global dual domain without changing any
+ * local/master iterate or transported field. */
+static int shape_implied_bounds(const pc_problem* p, const pc_result* reference, double* lower, double* upper, size_t* sources)
+{
+  size_t j, k, ns = 0, changed = 0, n = p->ncell;
+  if (!p->dim[0] || !p->dim[1] || !p->dim[2] || p->dim[0] > SIZE_MAX / p->dim[1] ||
+      p->dim[0] * p->dim[1] > SIZE_MAX / p->dim[2] || p->dim[0] * p->dim[1] * p->dim[2] != n)
+    return 0;
+  for (j = 0; j < n; ++j) {
+    if (!isfinite(p->radius[j]) || p->radius[j] < 0.)
+      return 0;
+    if (p->source[j] > 0.)
+      sources[ns++] = j;
+  }
+  for (j = 0; j < n; ++j) {
+    size_t pos[3], half, widths[3], starts[3], volume = 1;
+    long double supply = 0.;
+    double r2, bound;
+    upper[j] = p->upper[j];
+    lower[j] = p->lower[j];
+    if (!(upper[j] > 0.))
+      continue;
+    component_position(p, j, pos);
+    r2 = p->radius[j] * p->radius[j] + 1e-10;
+    half = p->radius[j] >= (double)n ? n : (size_t)floor(sqrt(r2));
+    for (k = 0; k < 3; ++k) {
+      if (half >= p->dim[k] / 2) {
+        widths[k] = p->dim[k];
+        starts[k] = 0;
+      } else {
+        widths[k] = 2 * half + 1;
+        starts[k] = pos[k] >= half ? pos[k] - half : p->dim[k] - (half - pos[k]);
+      }
+      volume = volume > ns / widths[k] ? ns + 1 : volume * widths[k];
+    }
+    if (volume < ns) {
+      size_t x, y, z;
+      for (x = 0; x < widths[0] && supply < upper[j]; ++x)
+        for (y = 0; y < widths[1] && supply < upper[j]; ++y)
+          for (z = 0; z < widths[2] && supply < upper[j]; ++z) {
+            size_t sp[3] = { (starts[0] + x) % p->dim[0], (starts[1] + y) % p->dim[1],
+                             (starts[2] + z) % p->dim[2] };
+            size_t i = (sp[0] * p->dim[1] + sp[1]) * p->dim[2] + sp[2];
+            if (p->source[i] > 0. && component_distance(p, pos, sp) <= r2)
+              supply += p->source[i];
+          }
+    } else {
+      size_t a;
+      for (a = 0; a < ns && supply < upper[j]; ++a) {
+        size_t sp[3], i = sources[a];
+        component_position(p, i, sp);
+        if (component_distance(p, pos, sp) <= r2)
+          supply += p->source[i];
+      }
+    }
+    /* Positive long-double summation is enclosed before conversion so a
+     * downward accumulation error cannot remove a physically feasible y. */
+    if ((long double)ns * LDBL_EPSILON >= .5L)
+      continue;
+    supply /= 1.L - (long double)ns * LDBL_EPSILON;
+    bound = (double)supply;
+    if ((long double)bound < supply)
+      bound = nextafter(bound, INFINITY);
+    /* A rounded staged accumulation may exceed the exact source sum by
+     * a few ulps. Widening this implied upper bound retains that reference. */
+    bound = fmax(bound, fmax(reference->y[j], p->lower[j]));
+    if (bound < upper[j]) {
+      upper[j] = bound;
+      ++changed;
+    }
+  }
+  /* The global retained-priority quota also gives implied pointwise
+   * lower bounds: min(y_j,b_j) >= Q_g - sum_{k!=j} min(U_k,b_k).
+   * Accumulate other-cell maxima upward and round each lower bound down;
+   * these remain valid for the original rounded global quotas. */
+  for (k = 0; k < reference->metrics.priority_groups; ++k) {
+    int rank = reference->priority_diagnostics[k].priority;
+    long double maximum = 0.;
+    for (j = 0; j < n; ++j)
+      if ((p->priority ? p->priority[j] : 0) == rank)
+        maximum = nextafterl(maximum + fmin(upper[j], p->baseline[j]), INFINITY);
+    for (j = 0; j < n; ++j)
+      if ((p->priority ? p->priority[j] : 0) == rank) {
+        long double others = nextafterl(maximum - fmin(upper[j], p->baseline[j]), INFINITY);
+        long double needed = nextafterl((long double)reference->priority_diagnostics[k].baseline_retained_in_group - others, -INFINITY);
+        double bound = (double)needed;
+        if ((long double)bound > needed)
+          bound = nextafter(bound, -INFINITY);
+        bound = fmin(bound, fmin(reference->y[j], upper[j]));
+        if (bound > lower[j]) {
+          lower[j] = bound;
+          ++changed;
+        }
+      }
+  }
+  return changed != 0;
 }
 
 /* Re-evaluate the actual returned field, including a visitor replay, against
@@ -1142,7 +1247,7 @@ static int shape_components(shape_context* c, const pc_options* fo, const pc_res
   pc_shape_metrics sum;
   pc_shape_status status = PC_SHAPE_OK;
   int handled = 0, fallback = 0;
-  long double dual = 0., cut_constant = 0., global_lambda = -LDBL_MAX;
+  long double dual = 0., dual_constant = 0., cut_constant = 0., global_lambda = -LDBL_MAX;
   if (!p->dim[0] || !p->dim[1] || !p->dim[2] || p->dim[0] > SIZE_MAX / p->dim[1] ||
       p->dim[0] * p->dim[1] > SIZE_MAX / p->dim[2] || p->dim[0] * p->dim[1] * p->dim[2] != n ||
       n > SIZE_MAX / (6 * sizeof(size_t) + 13 * sizeof(double)))
@@ -1316,10 +1421,11 @@ static int shape_components(shape_context* c, const pc_options* fo, const pc_res
     options.max_hall_cuts -= sum.hall_cuts;
     if (options.max_bytes)
       options.max_bytes -= bytes;
-    /* Allocate the same global error budget across components. In
-     * particular, do not apply max(1,S_component) independently. */
+    /* Reserve half the global error budget for the lifted certificate and
+     * final transport accumulation. Local tolerances share the remaining
+     * half; do not apply max(1,S_component) independently. */
     options.absolute_tolerance = 0.;
-    options.relative_tolerance = sum.tolerance * (double)(budget / c->source_sum) / fmax(1., (double)budget);
+    options.relative_tolerance = .5 * sum.tolerance * (double)(budget / c->source_sum) / fmax(1., (double)budget);
     sub.source = source;
     sub.baseline = baseline;
     sub.lower = lower;
@@ -1396,6 +1502,7 @@ static int shape_components(shape_context* c, const pc_options* fo, const pc_res
       (global_lambda - comp_lambda[roots[q]]) * ((long double)comp_budget[roots[q]] - (c->source_sum - c->target_sum));
   for (k = 0; k < c->groups; ++k)
     dual += (long double)shared_nu[k] * reference->priority_diagnostics[k].baseline_retained_in_group;
+  dual_constant = dual;
   for (j = 0; j < n; ++j) {
     if (p->capacity[j] > 0.) {
       int rank = p->priority ? p->priority[j] : 0;
@@ -1429,12 +1536,46 @@ static int shape_components(shape_context* c, const pc_options* fo, const pc_res
       status = PC_SHAPE_ERR_ORACLE;
       goto cleanup;
     }
-    if (!component_certificate(c, reference, result, proposal, quota, dual, &sum)) {
-      /* The lifted dual can be loose when independent components prefer
-       * very different priority multipliers. Retain the original global
-       * solve as the exact fallback, using only the remaining work budget. */
-      fallback = 1;
-      goto cleanup;
+    {
+      int certified = component_certificate(c, reference, result, proposal, quota, dual, &sum);
+      if (!certified && isfinite(sum.signed_primal_dual_gap) && sum.signed_primal_dual_gap > sum.tolerance &&
+          sum.equality_error <= 64. * DBL_EPSILON * c->total && sum.max_hall_violation <= sum.tolerance &&
+          sum.max_priority_equality_error <= sum.tolerance && sum.max_bound_violation <= sum.tolerance &&
+          sum.master_evaluations < c->o.max_evaluations &&
+          shape_implied_bounds(p, reference, source, baseline, sources)) {
+        long double improved = dual_constant;
+        /* Reuse idle subproblem arrays as a valid tighter dual domain.
+         * All local/master iterates and the certified transported field
+         * retain their original bounds. This extra scalar-map evaluation
+         * is charged against the same public work limit. */
+        ++sum.master_evaluations;
+        for (j = 0; j < n; ++j)
+          if (p->capacity[j] > 0.) {
+            int rank = p->priority ? p->priority[j] : 0;
+            long double nu = 0., a, value, low_root, high_root, d;
+            for (k = 0; k < c->groups && reference->priority_diagnostics[k].priority != rank; ++k) {
+            }
+            if (k < c->groups)
+              nu = shared_nu[k];
+            a = p->upper[j] > 0. && parent[n + j] < n ? coefficient[j] : global_lambda;
+            low_root = (long double)c->prior[j] - (long double)p->capacity[j] * a;
+            high_root = low_root + (long double)p->capacity[j] * nu;
+            value = low_root > p->baseline[j] ? low_root : (high_root < p->baseline[j] ? high_root : p->baseline[j]);
+            value = fmaxl(source[j], fminl(baseline[j], value));
+            d = value - c->prior[j];
+            improved += .5L * d * d / p->capacity[j] + a * value - nu * fminl(value, p->baseline[j]);
+          }
+        if (isfinite((double)improved) && improved > dual)
+          dual = improved;
+        certified = component_certificate(c, reference, result, proposal, quota, dual, &sum);
+      }
+      if (!certified) {
+        /* The lifted dual can be loose when independent components prefer
+         * very different priority multipliers. Retain the original global
+         * solve as the exact fallback, using only the remaining work budget. */
+        fallback = 1;
+        goto cleanup;
+      }
     }
     if (result->visit_edge) {
       ++sum.oracle_calls;
