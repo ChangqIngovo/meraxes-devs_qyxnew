@@ -361,6 +361,22 @@ int main(void)
            e[] = { 1, 0 }, prior[] = { 0, 1 };
     check_case("zero candidate original neighbor", 2, S, C, b, L, U, R, NULL, e, prior);
   }
+  {
+    /* A nearly flat priority face produces a huge speculative coupled-Newton
+     * direction. Failed scalar resolution must reject the trial, not the solve.
+     * The expected map is fixed by source support and the retained priority quotas. */
+    double S[] = { 0.067234735257632794, 0, 0.8642363899582437, 0, 0.9749436082111641 };
+    double C[] = {
+      0.54978391056380371, 1.084486678831754, 1.2745111251432757, 0.60862453190418164, 1.1422663198967187
+    };
+    double b[] = {
+      0.15723460784600832, 0.55512583519519054, 1.0677828191619989, 0.34297451246931865, 0.14694631282212553
+    };
+    double L[] = { 0, 0, 0, 0, 0 }, R[] = { 0, 3, 1, 1, 1 };
+    double e[] = { 0., 0.55512583519519054, 0.8642363899582437, 0.34297451246931865, 0.14407799580428779 };
+    int rank[] = { 2, 0, 1, 0, 1 };
+    check_case("flat priority Newton trial recovery", 5, S, C, b, L, C, R, rank, e, NULL);
+  }
   check_promoted_priority_regression();
   puts("All native unique-shape cases passed.");
   return 0;

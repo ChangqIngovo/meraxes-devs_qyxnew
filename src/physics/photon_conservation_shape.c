@@ -231,54 +231,86 @@ static double constraint_slack(const shape_context* c, size_t k)
   return (double)value;
 }
 
-/* Exact one-coordinate convex minimization. Both Hall and retention slacks
- * are monotone in their own nonnegative multiplier after total elimination. */
+/* Reduced one-coordinate curvature after eliminating the total multiplier.
+ * Accumulate the two binary-feature classes separately to avoid cancellation
+ * for a Hall mask covering almost all of the free target capacity. */
+static double coordinate_curvature(const shape_context* c, size_t k)
+{
+  size_t a;
+  long double w0 = 0., w1 = 0.;
+  for (a = 0; a < c->nactive; ++a) {
+    size_t j = c->active[a];
+    double y = c->y[j];
+    int feature;
+    if (!(y > c->p->lower[j] && y < c->master_upper[j]) || (y == c->p->baseline[j] && c->nu[c->group[j]] > 0.))
+      continue;
+    feature = k < c->cuts ? bit_get(c->mask[k], j) : ((size_t)c->group[j] == k - c->cuts && y < c->p->baseline[j]);
+    if (feature)
+      w1 += c->p->capacity[j];
+    else
+      w0 += c->p->capacity[j];
+  }
+  return w0 > 0. && w1 > 0. ? (double)(w0 * (w1 / (w0 + w1))) : 0.;
+}
+
+/* Warm-start the monotone coordinate solve. Newton and secant steps are
+ * proposals only: actual waterfilled slacks maintain the sign bracket. */
 static int optimize_coordinate(shape_context* c, size_t k)
 {
-  double old = multiplier(c, k), lo = 0., hi, slack;
+  double theta = multiplier(c, k), slack = constraint_slack(c, k);
+  double lo = 0., hi = c->o.maximum_multiplier, slo = 0., shi = 0.;
+  int have_lo = 0, have_hi = 0;
   size_t it;
-  set_multiplier(c, k, 0.);
-  if (!waterfill(c))
-    return 0;
-  slack = constraint_slack(c, k);
-  if (slack >= -c->tolerance * .1)
-    return 1;
-  hi = fmax(1., old);
-  for (;;) {
-    if (hi > c->o.maximum_multiplier) {
-      c->error = PC_SHAPE_ERR_MASTER_LIMIT;
-      return 0;
-    }
-    set_multiplier(c, k, hi);
-    if (!waterfill(c))
-      return 0;
-    slack = constraint_slack(c, k);
-    if (fabs(slack) <= c->tolerance * .05)
-      return 1;
-    if (slack > 0.)
-      break;
-    lo = hi;
-    hi *= 2.;
-  }
   for (it = 0; it < c->o.max_coordinate_iterations; ++it) {
-    double mid = lo + .5 * (hi - lo);
-    set_multiplier(c, k, mid);
-    if (!waterfill(c))
-      return 0;
-    slack = constraint_slack(c, k);
-    if (fabs(slack) <= c->tolerance * .1)
+    double slope, next;
+    if (fabs(slack) <= c->tolerance * .1 || (theta == 0. && slack >= -c->tolerance * .1))
       return 1;
-    if (slack < 0.)
-      lo = mid;
-    else
-      hi = mid;
-    if (hi - lo <= 16. * DBL_EPSILON * fmax(1., fabs(mid))) {
+    if (slack < 0.) {
+      lo = theta;
+      slo = slack;
+      have_lo = 1;
+      if (theta == c->o.maximum_multiplier) {
+        c->error = PC_SHAPE_ERR_MASTER_LIMIT;
+        return 0;
+      }
+    } else {
+      hi = theta;
+      shi = slack;
+      have_hi = 1;
+    }
+    slope = coordinate_curvature(c, k);
+    next = slope > 0. ? theta - slack / slope : NAN;
+    if (have_lo && have_hi) {
+      double margin = .01 * (hi - lo);
+      if (!(next > lo + margin && next < hi - margin))
+        next = lo - slo * (hi - lo) / (shi - slo);
+      /* Interleave bisection so a flat slack cannot stall false position. */
+      if ((it & 1) || !(next > lo + margin && next < hi - margin))
+        next = lo + .5 * (hi - lo);
+    } else if (slack > 0.) {
+      if (!(next >= 0. && next < theta))
+        next = 0.;
+    } else {
+      if (!(next > theta) || !isfinite(next))
+        next = fmax(1., 2. * theta);
+      /* Before a bracket exists, avoid a speculative huge Newton jump
+       * across a nearly flat segment: retain bounded directional growth. */
+      next = fmin(c->o.maximum_multiplier, fmin(fmax(1., 2. * theta), next));
+    }
+    if (next == theta) {
       if (fabs(slack) <= c->tolerance)
         return 1;
       c->error = PC_SHAPE_ERR_NUMERICAL;
       return 0;
     }
+    set_multiplier(c, k, next);
+    if (!waterfill(c))
+      return 0;
+    theta = next;
+    slack = constraint_slack(c, k);
   }
+  if (fabs(slack) <= c->tolerance * .1 || (theta == 0. && slack >= -c->tolerance * .1))
+    return 1;
   c->error = PC_SHAPE_ERR_MASTER_LIMIT;
   return 0;
 }
@@ -489,7 +521,15 @@ static int try_newton(shape_context* c)
     int converged;
     for (k = 0; k < count; ++k)
       set_multiplier(c, c->newton_index[k], fmin(c->o.maximum_multiplier, fmax(0., old[k] + alpha * step[k])));
+    c->lambda = old_lambda;
     converged = master_certificate(c);
+    if (c->error == PC_SHAPE_ERR_NUMERICAL) {
+      /* A speculative Newton step may lose scalar resolution far from the
+       * current iterate. Reject that trial; retain the previous valid state. */
+      c->error = PC_SHAPE_OK;
+      alpha *= .5;
+      continue;
+    }
     if (c->error)
       return -1;
     for (k = 0; k < c->cuts + c->groups; ++k) {
@@ -527,6 +567,7 @@ static int try_newton(shape_context* c)
   }
   for (k = 0; k < count; ++k)
     set_multiplier(c, c->newton_index[k], old[k]);
+  c->lambda = old_lambda;
   (void)master_certificate(c);
   return c->error ? -1 : 0;
 }

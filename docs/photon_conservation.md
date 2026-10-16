@@ -208,6 +208,9 @@ oracle's total target mismatch and the maximum and summed target changes from
 the quadratic candidate to the final transported map. The final map is
 rechecked for source accounting, bounds, retained quotas and objective gap.
 These adjustment norms are diagnostics, not additional permitted photon loss.
+On failure, master residuals and the most recent oracle/correction diagnostics
+can belong to different attempted stages. They are not a single final-map
+certificate; only a successful refinement proceeds to the complete output.
 
 Before solving, the adapter writes a separate input checkpoint,
 `OutputDir/photon_inputs_NNN.hdf5`, with `certificate_complete=0`. Debug level
@@ -224,6 +227,24 @@ can support reproduction but is not a completed certificate. Passing it
 directly to the checker produces an explicit incomplete-certificate failure.
 The positive-edge sidecar likewise writes to `.edges.csv.tmp`, closes and
 renames it before publishing the complete HDF5 certificate.
+
+To replay a debug-level-two input checkpoint without rerunning earlier
+snapshots or building the full Meraxes executable:
+
+```sh
+python3 tools/replay_photon_conservation.py output/photon_inputs_052.hdf5 \
+  --output replay_052.json
+```
+
+This requires Python 3, NumPy, h5py and a C compiler. The script builds the
+three standalone allocation sources in a temporary directory; it does not
+require MPI, FFTW, the simulation data or SciPy. By default it uses the
+checkpoint's tolerances and resource limits, including the adapter's memory
+reservation. `--max-evaluations` and `--max-cuts` explicitly override those
+two limits for a diagnostic comparison. The JSON report distinguishes the ES
+completion, quadratic refinement and independent positive-edge accounting
+checks. Replay does not run Meraxes feedback or independently optimize the
+quadratic objective, and its JSON is not a complete simulation certificate.
 
 Debug level two also stores flattened arrays in global real-cell order,
 `index=((x*grid_dim)+y)*grid_dim+z`:
@@ -303,10 +324,11 @@ The checks completed for this implementation are:
 |---|---|---|
 | Default and `USE_MINI_HALOS=ON` builds | Both build successfully | Compilation of the adapter and optional Pop. III source path. |
 | Five native/feedback CTest entries | 5/5 pass | Allocator, ES completion, quadratic refinement, and feedback reconstruction with one and two MPI ranks. |
-| Native shape hand cases | 10/10 pass | Symmetry, partial absorption, priority retention, faint inventories, Hall-cut repair and promoted-priority regression. |
+| Native shape hand cases | 11/11 pass | Symmetry, partial absorption, priority retention, faint inventories, Hall-cut repair, promoted-priority regression and recovery from an unresolvable Newton trial. |
 | Independent explicit-edge LP comparisons | 40/40 seeded cases pass; maximum absorption discrepancy about `7.1e-15` | Small `4^3`-cell graphs: lower feasibility, maximum absorption, priority retention, edge ledgers and complete cut geometry. |
 | Independent explicit-graph QP comparisons | 40/40 seeded cases pass; objective differences about `1e-13` | Small three-to-five-cell graphs, including nonzero lower bounds and alternate quadratic priors. The reference optimizer is also numerical. |
 | Saved real-input replays | 45/45 pass with 512 cuts and 1,000,000 evaluations available | Completion and quadratic refinement on captured simulation inputs; these replays do not constitute a complete evolution. |
+| Uploaded Gadi snapshot 52 after the coordinate-search fix | Pass at the original 1,000,000-evaluation limit, using 48,237 evaluations and 224 cuts | Absorbed inventory `1074.309407529475`, zero residual, and independent positive-edge accounting/geometry checks pass. The final gap `6.93e-7` is below the unchanged `1.07431e-6` optimization tolerance. |
 | `Flag_PhotonConservation=0` regression summaries | Default, IGM and X-ray configurations all agree in strict comparison mode | The tested original output summaries are unchanged with the option disabled. |
 | Full enabled L10_N512 evolution | Local run not completed | The remaining end-to-end validation matrix is to be run on the target server; no complete local evolution or full-matrix pass is claimed. |
 
@@ -321,12 +343,34 @@ ctest --test-dir build-pc --output-on-failure -R '^test_photon_conservation'
 
 The three allocation tests do not require Criterion, external simulation data
 or an MPI launch. The two feedback entries use the MPI launcher discovered by
-CMake. The native shape driver contains ten hand cases, including faint-source,
-partial-absorption, Hall-cut and promoted-priority regressions. A second build
+CMake. The native shape driver contains eleven hand cases, including faint-source,
+partial-absorption, Hall-cut, promoted-priority and flat-priority Newton-trial
+regressions. A second build
 directory configured with `-DUSE_MINI_HALOS=ON` checks
 that compile-time source variant. `RelWithDebInfo` is also the recommended
 configuration for the integration harness: the legacy one-rank Debug galaxy
 pointer assertion can stop a run independently of this allocator.
+
+For the tested Gadi environment (GCC 12.2.0 and OpenMPI 4.1.4), the
+single-precision FFTW MPI library is in the `ompi3` subdirectory. Passing only
+`FFTW_ROOT` does not locate that variant with the current finder. Configure
+with the verified paths after loading the usual dependencies:
+
+```sh
+cmake -S . -B build-pc \
+  -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_C_COMPILER=mpicc \
+  -DHDF5_ROOT=/apps/hdf5/1.12.2p -DHDF5_PREFER_PARALLEL=ON \
+  -DFFTW_INCLUDE_DIR=/apps/fftw3/3.3.10-nci1/include \
+  -DFFTW_LIBRARY=/apps/fftw3/3.3.10-nci1/lib/libfftw3f.so \
+  -DFFTW_MPI_LIBRARY=/apps/fftw3/3.3.10-nci1/lib/ompi3/libfftw3f_mpi.so \
+  -DBUILD_TESTS=OFF -DUSE_CUDA=OFF
+cmake --build build-pc --parallel 2
+```
+
+Do not substitute the `ompi5`, Intel MPI or double-precision libraries for
+this build. A configured `build-pc` already caches these explicit paths;
+subsequent source updates need only the build command in the same dependency
+environment.
 
 The independent optimizers require Python 3, NumPy, SciPy and a C compiler.
 They compile temporary shared libraries directly from the native sources:
@@ -368,9 +412,31 @@ and 84 cuts, taking about 15.3 seconds in the shape solve on the test machine.
 This distinguishes a finite evaluation budget from stagnation; it does not
 establish the cost of a full evolution or a production-size grid.
 
+The original coordinate search reproduced the Gadi snapshot-52 failure at
+1,000,001 attempted evaluations. With a diagnostic five-million limit it
+converged after 2,208,080 evaluations; 98.2% of those evaluations belonged to
+coordinate searches that repeatedly discarded their previous multiplier.
+The updated search starts from that multiplier, uses safeguarded scalar
+Newton/secant steps, and interleaves bisection across flat segments. A
+numerically unresolvable speculative coupled-Newton step is backtracked;
+resource exhaustion and a failed restored state still abort. Neither the
+feasible set nor the final acceptance gates change.
+
+The final snapshot-52 replay used 48,237 evaluations, 3,793 master sweeps and
+675 flow-oracle calls, with a measured shape time of about 61 seconds on the
+development machine. The original enlarged-budget comparison took about
+122 seconds under different concurrent load; these are diagnostic timings,
+not a controlled speed benchmark. Reducing scalar evaluations does not remove
+the costs of the coupled solve and flow oracles. This single replay does not
+establish completion of later snapshots or large-grid scalability.
+
 Count conservation and optimality relative to the chosen ES reference do not
 establish the physical accuracy of bubble connectivity, size distributions or
 the 21-cm power spectrum. Those require cosmological convergence and reference
 simulation comparisons. The finite radius cap, partial-front completion and
 quadratic map selection are declared model choices whose effects should be
 measured in those comparisons.
+The minimum band, promotion and reference-retention ordering are also choices
+among conserving maps, not consequences of photon counting. A large L1 change
+from the original ES map is therefore an allocation-change diagnostic, not
+by itself a measure of physical morphology error.
