@@ -106,19 +106,21 @@ int main(int argc, char** argv)
     fftwf_free(real);
   }
 #define ASSIGN(x, f)                                                                                                   \
-  g->x##_unfiltered = input[f];                                                                                        \
-  g->x##_filtered = output[f];                                                                                         \
-  g->x##_filtered_reverse_plan = inverse[f];
-  ASSIGN(stars, 0)
-  ASSIGN(weighted_sfr, 1)
-  ASSIGN(effective_bhm, 2)
-  ASSIGN(effective_bhar, 3)
+  do {                                                                                                                 \
+    g->x##_unfiltered = input[f];                                                                                      \
+    g->x##_filtered = output[f];                                                                                       \
+    g->x##_filtered_reverse_plan = inverse[f];                                                                         \
+  } while (0)
+  ASSIGN(stars, 0);
+  ASSIGN(weighted_sfr, 1);
+  ASSIGN(effective_bhm, 2);
+  ASSIGN(effective_bhar, 3);
 #if USE_MINI_HALOS
-    ASSIGN(starsIII, 4) ASSIGN(weighted_sfrIII, 5)
+  ASSIGN(starsIII, 4);
+  ASSIGN(weighted_sfrIII, 5);
 #endif
 #undef ASSIGN
-      double zz[1] = { 7.0 },
-             radii[2] = { 3, 0 };
+  double zz[1] = { 7.0 }, radii[2] = { 3, 0 };
   run_globals.ZZ = zz;
   run_globals.units.UnitLength_in_cm = run_globals.units.UnitMass_in_g = run_globals.units.UnitTime_in_s = 1;
   run_globals.params.ReionGridDim = dim;
