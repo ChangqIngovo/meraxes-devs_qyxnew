@@ -24,10 +24,7 @@ typedef struct
   size_t cell;
   int pos[3], handle, priority;
 } pc_cell;
-typedef struct
-{
-  int lo[3], hi[3], left, right, leaf;
-} pc_kd_node;
+typedef pc_geometry_node pc_kd_node;
 typedef struct
 {
   void* ptr;
@@ -54,6 +51,10 @@ typedef struct
   double* sink_caps;
   long double photons;
   int final_cut_complete;
+  const pc_geometry_executor* geometry;
+  pc_geometry_query* queries;
+  int *query_targets, *query_counts, *query_neighbours;
+  size_t query_capacity, query_stride;
 } pc_state;
 
 static int pc_size_product(size_t a, size_t b, size_t* out)
@@ -302,40 +303,24 @@ static int pc_build_kd(pc_state* s, int begin, int end)
 static double pc_kd_bound(const pc_state* s, const pc_kd_node* node, const int pos[3])
 {
   double total = 0;
-  int q, shift;
+  int q;
   for (q = 0; q < 3; q++) {
-    double best = DBL_MAX;
-    for (shift = -1; shift <= 1; shift++) {
-      double p = pos[q] + shift * (double)s->p->dim[q];
-      double d = fmax(fmax(node->lo[q] - p, p - node->hi[q]), 0.);
-      if (d < best)
-        best = d;
+    double best = 0.;
+    /* Integer grid coordinates are in [0,dim). The periodic distance to an
+     * interval is the smaller of its direct and opposite-face distances.
+     * This exactly replaces the minimum over three translated intervals. */
+    if (pos[q] < node->lo[q]) {
+      int direct = node->lo[q] - pos[q];
+      int wrapped = (int)s->p->dim[q] - (node->hi[q] - pos[q]);
+      best = direct < wrapped ? direct : wrapped;
+    } else if (pos[q] > node->hi[q]) {
+      int direct = pos[q] - node->hi[q];
+      int wrapped = (int)s->p->dim[q] - (pos[q] - node->lo[q]);
+      best = direct < wrapped ? direct : wrapped;
     }
     total += best * best;
   }
   return total;
-}
-
-static void pc_collect(pc_state* s, int node_index, int target, int limit, int* count)
-{
-  pc_kd_node* node = &s->kd[node_index];
-  pc_cell* t = &s->targets[target];
-  double radius = s->p->radius[t->cell];
-  if (*count == limit || pc_kd_bound(s, node, t->pos) > radius * radius + PC_GEOMETRY_EPS)
-    return;
-  if (node->leaf >= 0)
-    s->found[(*count)++] = node->leaf;
-  else {
-    double a = pc_kd_bound(s, &s->kd[node->left], t->pos);
-    double b = pc_kd_bound(s, &s->kd[node->right], t->pos);
-    if (a <= b) {
-      pc_collect(s, node->left, target, limit, count);
-      pc_collect(s, node->right, target, limit, count);
-    } else {
-      pc_collect(s, node->right, target, limit, count);
-      pc_collect(s, node->left, target, limit, count);
-    }
-  }
 }
 
 static int pc_has_neighbor(const pc_state* s, int node_index, const int pos[3], double radius)
@@ -348,9 +333,94 @@ static int pc_has_neighbor(const pc_state* s, int node_index, const int pos[3], 
   return pc_has_neighbor(s, node->left, pos, radius) || pc_has_neighbor(s, node->right, pos, radius);
 }
 
+/* An accepted executor sees one immutable KD tree per residual cut. Buffer
+ * storage is charged to the ordinary solver memory limit and reused across
+ * all cut rounds. Worker storage has a separate explicit backend budget. */
+static int pc_geometry_begin(pc_state* s, size_t targets, size_t limit)
+{
+  int accepted;
+  size_t count, entries;
+  if (!s->geometry || !targets)
+    return 0;
+  accepted = s->geometry->begin(s->geometry->user, s->p->dim, s->kd,
+                              (size_t)s->kd_count, limit, targets);
+  if (accepted <= 0) {
+    if (accepted < 0)
+      s->error = PC_ERR_MEMORY_LIMIT;
+    return accepted;
+  }
+  if (!s->geometry->batch_targets) {
+    s->error = PC_ERR_INVALID;
+    goto fail;
+  }
+  if (s->query_capacity)
+    return 1;
+  count = s->geometry->batch_targets;
+  if (count > s->p->ncell)
+    count = s->p->ncell;
+  if (count > 65536)
+    count = 65536;
+  s->query_stride = s->o.seed_neighbors > s->o.cut_neighbors ? s->o.seed_neighbors : s->o.cut_neighbors;
+  if (s->query_stride > (size_t)s->ns)
+    s->query_stride = (size_t)s->ns;
+  if (!count || !pc_size_product(count, s->query_stride, &entries)) {
+    s->error = PC_ERR_MEMORY_LIMIT;
+    goto fail;
+  }
+  s->queries = pc_memory(s, count, sizeof(*s->queries));
+  s->query_targets = pc_memory(s, count, sizeof(int));
+  s->query_counts = pc_memory(s, count, sizeof(int));
+  s->query_neighbours = pc_memory(s, entries, sizeof(int));
+  if (!s->queries || !s->query_targets || !s->query_counts || !s->query_neighbours)
+    goto fail;
+  s->query_capacity = count;
+  return 1;
+fail:
+  s->geometry->end(s->geometry->user);
+  return -1;
+}
+
+static size_t pc_geometry_batch_size(const pc_state* s)
+{
+  return s->query_capacity < s->geometry->batch_targets ? s->query_capacity : s->geometry->batch_targets;
+}
+
+/* Commit responses in exactly the serial target/traversal order. Geometry
+ * queries cannot mutate the flow network, so batching changes no decision. */
+static int pc_geometry_commit(pc_state* s, size_t count, size_t limit, int audit)
+{
+  int added = 0;
+  if (!s->geometry->query(s->geometry->user, s->queries, count, s->query_counts, s->query_neighbours)) {
+    s->error = PC_ERR_MEMORY_LIMIT;
+    return -1;
+  }
+  for (size_t a = 0; a < count; ++a) {
+    int j = s->query_targets[a], found = s->query_counts[a];
+    if (found < 0 || (size_t)found > limit) {
+      s->error = PC_ERR_NUMERICAL;
+      return -1;
+    }
+    for (int k = 0; k < found; ++k) {
+      int source = s->query_neighbours[a * limit + (size_t)k];
+      if (source < 0 || source >= s->ns) {
+        s->error = PC_ERR_NUMERICAL;
+        return -1;
+      }
+      if (!audit && pc_add_edge(s, s->source_offset + source, s->target_offset + j,
+                               (double)(2 * s->photons + 1), 1) < 0)
+        return -1;
+      ++added;
+    }
+    if (audit && found)
+      s->r->cut_target[j] = 1;
+  }
+  return added;
+}
+
 static int pc_insert_geometry(pc_state* s, int initial)
 {
-  int i, j, count_sources = 0, added = 0;
+  int i, j, count_sources = 0, added = 0, parallel;
+  size_t targets = 0, batch = 0;
   size_t limit = initial ? s->o.seed_neighbors : s->o.cut_neighbors;
   if (limit > (size_t)s->ns)
     limit = (size_t)s->ns;
@@ -361,17 +431,49 @@ static int pc_insert_geometry(pc_state* s, int initial)
     return 0;
   s->kd_count = 0;
   pc_build_kd(s, 0, count_sources);
+  for (j = 0; j < s->nt; ++j)
+    targets += initial || s->level[s->target_offset + j] < 0;
+  parallel = pc_geometry_begin(s, targets, limit);
+  if (parallel < 0)
+    return -1;
   for (j = 0; j < s->nt; j++)
     if (initial || s->level[s->target_offset + j] < 0) {
       int count = 0, k;
-      pc_collect(s, 0, j, (int)limit, &count);
+      pc_geometry_query query;
+      memcpy(query.pos, s->targets[j].pos, sizeof(query.pos));
+      query.radius = s->p->radius[s->targets[j].cell];
+      if (parallel) {
+        s->queries[batch] = query;
+        s->query_targets[batch++] = j;
+        if (batch == pc_geometry_batch_size(s)) {
+          int next = pc_geometry_commit(s, batch, limit, 0);
+          if (next < 0)
+            goto parallel_fail;
+          added += next;
+          batch = 0;
+        }
+        continue;
+      }
+      pc_geometry_collect(s->p->dim, s->kd, &query, (int)limit, s->found, &count);
       for (k = 0; k < count; k++) {
         if (pc_add_edge(s, s->source_offset + s->found[k], s->target_offset + j, (double)(2 * s->photons + 1), 1) < 0)
           return -1;
         added++;
       }
     }
+  if (parallel) {
+    if (batch) {
+      int next = pc_geometry_commit(s, batch, limit, 0);
+      if (next < 0)
+        goto parallel_fail;
+      added += next;
+    }
+    s->geometry->end(s->geometry->user);
+  }
   return added;
+parallel_fail:
+  s->geometry->end(s->geometry->user);
+  return -1;
 }
 
 static int pc_complete_stage(pc_state* s)
@@ -398,10 +500,13 @@ static long double pc_flow_total(pc_state* s)
   return total;
 }
 
-static void pc_unlock(pc_state* s, int j, double cap)
+static int pc_unlock(pc_state* s, int j, double cap)
 {
+  if (cap == s->sink_caps[j])
+    return 0;
   pc_get_arc(s, s->targets[j].handle)->cap += cap - s->sink_caps[j];
   s->sink_caps[j] = cap;
+  return 1;
 }
 
 static double pc_middle(const pc_state* s, size_t cell)
@@ -617,15 +722,39 @@ static int pc_audit(pc_state* s)
       if (s->level[s->source_offset + i] >= 0)
         s->kd_order[count++] = i;
     if (count) {
+      int parallel;
+      size_t batch = 0;
       s->kd_count = 0;
       pc_build_kd(s, 0, count);
+      parallel = pc_geometry_begin(s, p->ncell - (size_t)s->nt, 1);
+      if (parallel < 0)
+        return 0;
       for (i = 0; (size_t)i < p->ncell; i++)
         if (p->upper[i] == 0) {
           int pos[3];
           pc_coordinates(p, (size_t)i, pos);
+          if (parallel) {
+            memcpy(s->queries[batch].pos, pos, sizeof(pos));
+            s->queries[batch].radius = p->radius[i];
+            s->query_targets[batch++] = i;
+            if (batch == pc_geometry_batch_size(s)) {
+              if (pc_geometry_commit(s, batch, 1, 1) < 0) {
+                s->geometry->end(s->geometry->user);
+                return 0;
+              }
+              batch = 0;
+            }
+            continue;
+          }
           if (pc_has_neighbor(s, 0, pos, p->radius[i]))
             s->r->cut_target[i] = 1;
         }
+      if (parallel) {
+        int ok = !batch || pc_geometry_commit(s, batch, 1, 1) >= 0;
+        s->geometry->end(s->geometry->user);
+        if (!ok)
+          return 0;
+      }
     }
   }
   for (i = 0; (size_t)i < p->ncell; i++) {
@@ -689,7 +818,8 @@ const char* pc_status_string(pc_status status)
   }
 }
 
-pc_status pc_allocate(const pc_problem* p, const pc_options* options, pc_result* r)
+pc_status pc_allocate_with_geometry(const pc_problem* p, const pc_options* options, pc_result* r,
+                                    const pc_geometry_executor* geometry)
 {
   pc_state s;
   pc_options defaults;
@@ -726,6 +856,9 @@ pc_status pc_allocate(const pc_problem* p, const pc_options* options, pc_result*
   memset(&s, 0, sizeof(s));
   s.p = p;
   s.r = r;
+  s.geometry = geometry;
+  if (geometry && (!geometry->begin || !geometry->query || !geometry->end || !geometry->batch_targets))
+    return PC_ERR_INVALID;
   s.o = options ? *options : defaults;
   if (!s.o.max_bytes || !s.o.seed_neighbors || !s.o.cut_neighbors || s.o.seed_neighbors > INT_MAX ||
       s.o.cut_neighbors > INT_MAX || !isfinite(s.o.absolute_tolerance) || !isfinite(s.o.relative_tolerance) ||
@@ -774,14 +907,16 @@ pc_status pc_allocate(const pc_problem* p, const pc_options* options, pc_result*
     goto audit;
   }
   for (j = 0; j < s.nt;) {
-    int begin = j, rank = s.targets[s.target_order[j]].priority;
+    int begin = j, rank = s.targets[s.target_order[j]].priority, changed = 0;
     long double retained = 0, baseline_retained = 0;
     size_t group;
     while (j < s.nt && s.targets[s.target_order[j]].priority == rank) {
       int target = s.target_order[j++];
-      pc_unlock(&s, target, pc_middle(&s, s.targets[target].cell));
+      changed |= pc_unlock(&s, target, pc_middle(&s, s.targets[target].cell));
     }
-    if (!pc_complete_stage(&s)) {
+    /* Unchanged capacities preserve the residual graph and its separated
+     * cut. Fixed-marginal oracles otherwise repeat these identical solves. */
+    if (changed && !pc_complete_stage(&s)) {
       status = s.error;
       goto audit;
     }
@@ -800,11 +935,14 @@ pc_status pc_allocate(const pc_problem* p, const pc_options* options, pc_result*
     }
   }
   r->metrics.retention_stage_flow = (double)pc_flow_total(&s);
-  for (j = 0; j < s.nt; j++)
-    pc_unlock(&s, j, p->upper[s.targets[j].cell]);
-  if (!pc_complete_stage(&s)) {
-    status = s.error;
-    goto audit;
+  {
+    int changed = 0;
+    for (j = 0; j < s.nt; j++)
+      changed |= pc_unlock(&s, j, p->upper[s.targets[j].cell]);
+    if (changed && !pc_complete_stage(&s)) {
+      status = s.error;
+      goto audit;
+    }
   }
   r->metrics.final_stage_flow = (double)pc_flow_total(&s);
   status = PC_OK;
@@ -836,4 +974,9 @@ cleanup:
   free(s.allocations);
   r->status = status;
   return status;
+}
+
+pc_status pc_allocate(const pc_problem* p, const pc_options* options, pc_result* r)
+{
+  return pc_allocate_with_geometry(p, options, r, NULL);
 }

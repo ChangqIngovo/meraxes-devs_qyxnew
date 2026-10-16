@@ -3,11 +3,13 @@
 #include "meraxes.h"
 #include "misc_tools.h"
 #include "photon_conservation_feedback.h"
+#include "photon_conservation_mpi.h"
 #include "physics/photon_conservation_es.h"
 #include "physics/photon_conservation_shape.h"
 #include "reionization.h"
 
 #include <float.h>
+#include <errno.h>
 #include <hdf5_hl.h>
 #include <limits.h>
 #include <math.h>
@@ -57,6 +59,22 @@ static void* pc_calloc(size_t n, size_t size)
   if (!p)
     pc_fail("allocation failed");
   return p;
+}
+
+static unsigned long long pc_environment_integer(const char* name, unsigned long long fallback)
+{
+  const char* text = getenv(name);
+  char* end;
+  unsigned long long value;
+  if (!text)
+    return fallback;
+  if (!*text || *text < '0' || *text > '9')
+    pc_fail("PC_MPI_* settings must be nonnegative integers");
+  errno = 0;
+  value = strtoull(text, &end, 10);
+  if (errno || *end)
+    pc_fail("invalid or overflowing PC_MPI_* setting");
+  return value;
 }
 
 photon_conservation_context* photon_conservation_begin(int snapshot)
@@ -248,6 +266,30 @@ void photon_conservation_finish(photon_conservation_context* c)
 
   float* corrected = NULL;
   int* feedback_slot = NULL;
+  unsigned long long mpi_settings[3] = { 0, 0, 0 };
+  if (rank == 0) {
+    mpi_settings[0] = pc_environment_integer("PC_MPI_GEOMETRY", 1);
+    mpi_settings[1] = pc_environment_integer("PC_MPI_MIN_TARGETS", 16384);
+    mpi_settings[2] = pc_environment_integer("PC_MPI_WORKER_MB", 1024);
+    if (mpi_settings[0] > 1 || mpi_settings[1] > SIZE_MAX || !mpi_settings[2] ||
+        mpi_settings[2] > SIZE_MAX / (1024 * 1024))
+      pc_fail("invalid PC MPI settings or worker memory limit");
+  }
+  MPI_Bcast(mpi_settings, 3, MPI_UNSIGNED_LONG_LONG, 0, run_globals.mpi_comm);
+  pc_mpi_context* parallel = NULL;
+  const pc_geometry_executor* geometry = NULL;
+  pc_mpi_stats mpi_stats = { 0 };
+  if (mpi_settings[0] && nranks > 1) {
+    parallel = pc_mpi_create(run_globals.mpi_comm, (size_t)mpi_settings[2] * 1024 * 1024,
+                             (size_t)mpi_settings[1]);
+    int ok = parallel != NULL, all_ok;
+    MPI_Allreduce(&ok, &all_ok, 1, MPI_INT, MPI_MIN, run_globals.mpi_comm);
+    if (!all_ok)
+      pc_fail("cannot initialize MPI geometry service");
+    geometry = pc_mpi_executor(parallel);
+    if (rank != 0)
+      pc_mpi_worker(parallel);
+  }
   if (rank == 0) {
     double* radii = pc_calloc((size_t)c->nradii, sizeof(double));
     for (int k = 0; k < c->nradii; k++)
@@ -289,7 +331,7 @@ void photon_conservation_finish(photon_conservation_context* c)
       es.attempt_user = attempts;
     }
     const double completion_started = MPI_Wtime();
-    pc_status status = pc_es_complete(&problem, &options, &es);
+    pc_status status = pc_es_complete_with_geometry(&problem, &options, &es, geometry);
     const double completion_seconds = MPI_Wtime() - completion_started;
     if (attempts && fclose(attempts) != 0)
       pc_fail("cannot close completion diagnostic");
@@ -338,7 +380,8 @@ void photon_conservation_finish(photon_conservation_context* c)
       shape_options.absolute_tolerance = 1e-12;
       shape_options.relative_tolerance = run_globals.params.PhotonConservationTolerance;
       pc_shape_status shape_status =
-        pc_shape_refine(&selected, &options, &es.allocation, NULL, &shape_options, &final, &shape);
+        pc_shape_refine_with_geometry(&selected, &options, &es.allocation, NULL, &shape_options, &final, &shape,
+                                      geometry);
       if (shape_status != PC_SHAPE_OK) {
         fprintf(stderr,
                 "PC shape failure: %s, sweeps=%zu cuts=%zu evaluations=%zu gap=%.17g equality=%.17g "
@@ -364,11 +407,21 @@ void photon_conservation_finish(photon_conservation_context* c)
     } else {
       pc_problem fixed = selected;
       fixed.lower = fixed.upper = es.allocation.y;
-      status = pc_allocate(&fixed, &options, &final);
+      status = pc_allocate_with_geometry(&fixed, &options, &final, geometry);
       if (status != PC_OK && status != PC_PARTIAL)
         pc_fail("final fixed-marginal certificate failed");
     }
     const double refinement_seconds = MPI_Wtime() - refinement_started;
+    if (parallel) {
+      pc_mpi_stop(parallel);
+      pc_mpi_get_stats(parallel, &mpi_stats);
+    }
+    mlog("PC MPI snapshot=%d ranks=%d accepted=%zu declined=%zu batches=%zu targets=%zu "
+         "setup=%.6fs query=%.6fs worker_peak=%zu worker_limit_mb=%llu min_targets=%llu",
+         MLOG_MESG, c->snapshot, parallel ? nranks : 1, mpi_stats.accepted_begins,
+         mpi_stats.declined_begins, mpi_stats.query_calls, mpi_stats.targets,
+         mpi_stats.begin_seconds, mpi_stats.query_seconds, mpi_stats.bytes_peak,
+         mpi_settings[2], mpi_settings[1]);
     if (edges) {
       if (fclose(edges) != 0)
         pc_fail("cannot close edge certificate");
@@ -445,6 +498,14 @@ void photon_conservation_finish(photon_conservation_context* c)
       ATTR("snapshot", c->snapshot);
       ATTR("grid_dim", dim);
       ATTR("mpi_ranks", nranks);
+      ATTR("geometry_mpi_enabled", parallel != NULL);
+      ATTR("geometry_mpi_query_calls", mpi_stats.query_calls);
+      ATTR("geometry_mpi_targets", mpi_stats.targets);
+      ATTR("geometry_mpi_setup_seconds", mpi_stats.begin_seconds);
+      ATTR("geometry_mpi_query_seconds", mpi_stats.query_seconds);
+      ATTR("geometry_mpi_worker_bytes_peak", mpi_stats.bytes_peak);
+      ATTR("geometry_mpi_worker_memory_mb", mpi_settings[2]);
+      ATTR("geometry_mpi_min_targets", mpi_settings[1]);
       ATTR("solver_status", final.status);
       ATTR("shape_enabled", run_globals.params.PhotonConservationShape);
       ATTR("source_total", final.metrics.photons);
@@ -566,6 +627,7 @@ void photon_conservation_finish(photon_conservation_context* c)
     free(xh_double);
     free(xh_float);
   }
+  pc_mpi_destroy(parallel);
   MPI_Scatterv(
     corrected, counts, offsets, MPI_FLOAT, run_globals.reion_grids.xH, c->nlocal, MPI_FLOAT, 0, run_globals.mpi_comm);
   MPI_Scatterv(feedback_slot, counts, offsets, MPI_INT, local_slot, c->nlocal, MPI_INT, 0, run_globals.mpi_comm);

@@ -63,6 +63,7 @@ typedef struct
   const pc_es_problem* input;
   pc_es_result* output;
   pc_options options;
+  const pc_geometry_executor* geometry;
   int* distance;
   size_t* queue;
   unsigned char *cut_source, *cut_target;
@@ -238,7 +239,7 @@ static pc_status solve(es_context* ctx, int rank, size_t promotion, int final, p
     trial.priority_diagnostics = NULL;
     trial.priority_diagnostics_capacity = 0;
   }
-  pc_status status = pc_allocate(&problem, &ctx->options, &trial);
+  pc_status status = pc_allocate_with_geometry(&problem, &ctx->options, &trial, ctx->geometry);
   /* A resource or numerical failure must not become a false infeasible
    * predicate in either monotone search. Every nonnegative allocator status
    * must include its complete-geometry cut audit. */
@@ -291,7 +292,8 @@ static int attains_maximum(const es_context* ctx, pc_status status, const pc_met
   return fabs(metrics->absorbed - ctx->maximum_absorption) <= tolerance ? 1 : -1;
 }
 
-pc_status pc_es_complete(const pc_es_problem* input, const pc_options* options, pc_es_result* output)
+pc_status pc_es_complete_with_geometry(const pc_es_problem* input, const pc_options* options,
+                                      pc_es_result* output, const pc_geometry_executor* geometry)
 {
   es_context ctx;
   pc_metrics metrics;
@@ -307,6 +309,7 @@ pc_status pc_es_complete(const pc_es_problem* input, const pc_options* options, 
   output->allocation.status = PC_ERR_INVALID;
   ctx.input = input;
   ctx.output = output;
+  ctx.geometry = geometry;
   if (options)
     ctx.options = *options;
   else
@@ -407,4 +410,9 @@ done:
   free(ctx.cut_source);
   free(ctx.cut_target);
   return status;
+}
+
+pc_status pc_es_complete(const pc_es_problem* input, const pc_options* options, pc_es_result* output)
+{
+  return pc_es_complete_with_geometry(input, options, output, NULL);
 }

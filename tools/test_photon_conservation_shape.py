@@ -122,7 +122,7 @@ def main():
     root=pathlib.Path(__file__).resolve().parents[1]
     with tempfile.TemporaryDirectory() as td:
         libpath=pathlib.Path(td)/'shape.so'
-        subprocess.run(['cc','-O2','-std=c99','-Wall','-Wextra','-Werror','-shared','-fPIC',str(root/'src/physics/photon_conservation.c'),str(root/'src/physics/photon_conservation_shape.c'),'-lm','-o',str(libpath)],check=True)
+        subprocess.run(['cc','-O2','-std=c99','-Wall','-Wextra','-Werror','-shared','-fPIC',str(root/'src/physics/photon_conservation.c'),str(root/'src/physics/photon_conservation_geometry.c'),str(root/'src/physics/photon_conservation_shape.c'),'-lm','-o',str(libpath)],check=True)
         lib=load_library(libpath);rng=np.random.default_rng(87214);records=[]
         for k in range(a.cases):
             n=3+k%3;C=rng.uniform(.4,1.3,n);S=rng.uniform(0,1.2,n);S[rng.random(n)<.35]=0

@@ -152,7 +152,7 @@ def file_sha256(path):
 def build_library(directory, compiler, report):
     physics = Path(__file__).resolve().parents[1] / 'src' / 'physics'
     sources = [physics / (name + '.c') for name in
-               ('photon_conservation', 'photon_conservation_es', 'photon_conservation_shape')]
+               ('photon_conservation', 'photon_conservation_geometry', 'photon_conservation_es', 'photon_conservation_shape')]
     # Refuse stale ctypes layouts rather than silently corrupting memory.
     expressions, expected = [], []
     for name, binding in ABI_TYPES.items():

@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+#PBS -P qp00
+#PBS -q hugemem
+#PBS -N meraxes_pc_scale
+#PBS -l ncpus=48
+#PBS -l mem=1000GB
+#PBS -l walltime=20:00:00
+#PBS -l jobfs=4GB
+#PBS -l storage=gdata/qp00+gdata/cm25
+#PBS -j oe
+
+# Default: compare PC geometry off/on at the same Meraxes rank count.
+set -euo pipefail
+: "${PC_INPUT:?Set PC_INPUT to a small, complete pilot input.par}"
+repo=${PC_REPO:-/g/data/qp00/sz4640/meraxes_photon_conservation}
+build=${PC_BUILD_DIR:-$repo/build-pc-mpi}
+set +u
+source "${PC_ENV_FILE:-$repo/pc_env.sh}"
+set -u
+export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
+export NUMEXPR_NUM_THREADS=1
+pc_default_memory=$((700000 / ((PBS_NCPUS + 47) / 48)))
+for test_ranks in 1 2 4; do
+    ctest --test-dir "$build" --output-on-failure --no-tests=error \
+        -R "^test_photon_conservation_mpi${test_ranks}$"
+done
+pc_resource_args=()
+if [[ -n ${PC_MAX_EDGES:-} ]]; then
+    pc_resource_args+=(--max-edges "$PC_MAX_EDGES")
+fi
+pc_scaling_mode=${PC_SCALING_MODE:-paired}
+if [[ $pc_scaling_mode != paired && $pc_scaling_mode != ranks ]]; then
+    echo 'PC_SCALING_MODE must be paired or ranks.' >&2
+    exit 2
+fi
+[[ ${PC_REPEATS:-2} =~ ^[1-9][0-9]*$ ]] || {
+    echo 'PC_REPEATS must be a positive integer.' >&2; exit 2;
+}
+
+for repeat in $(seq 1 "${PC_REPEATS:-2}"); do
+    if [[ $pc_scaling_mode == paired ]]; then
+        pc_rank_list=${PC_RANKS:-$PBS_NCPUS}
+        # Reverse pair order every repetition to expose warm-cache/order effects.
+        if ((repeat % 2)); then pc_geometry_modes='0 1'; else pc_geometry_modes='1 0'; fi
+    else
+        pc_rank_list=${PC_RANK_LIST:-1 2 4 8 16 32 48}
+        pc_geometry_modes=${PC_MPI_GEOMETRY:-1}
+    fi
+    for ranks in $pc_rank_list; do
+      for geometry in $pc_geometry_modes; do
+        PC_MPI_GEOMETRY=$geometry python3 "$repo/tools/gadi_pc_run.py" \
+            --input "$PC_INPUT" --input-cwd "${PC_INPUT_CWD:-$(dirname -- "$PC_INPUT")}" \
+            --binary "$build/bin/meraxes" --manifest "$build/pc_build_manifest.json" \
+            --run-root "${PC_RUN_ROOT:-/g/data/qp00/sz4640/pc_runs/scaling}" \
+            --ranks "$ranks" --memory-mb "${PC_MEMORY_MB:-$pc_default_memory}" \
+            --debug "${PC_DEBUG:-1}" \
+            --label "${PBS_JOBID:?}_repeat${repeat}_geometry${geometry}" "${pc_resource_args[@]}"
+      done
+    done
+done

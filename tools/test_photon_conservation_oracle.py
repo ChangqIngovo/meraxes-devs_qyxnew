@@ -25,7 +25,7 @@ def load_library(path=None):
         candidates=[here.parents[1]/'meraxes_pc/src/physics',here.parents[1]/'src/physics']
         source=next(p for p in candidates if (p/'photon_conservation.c').exists())
         path=Path(tempfile.mkdtemp(prefix='pc_oracle_'))/'libpc.so'
-        subprocess.run(['cc','-std=c99','-O2','-Wall','-Wextra','-Werror','-pedantic','-fPIC','-shared',str(source/'photon_conservation.c'),'-lm','-o',str(path)],check=True)
+        subprocess.run(['cc','-std=c99','-O2','-Wall','-Wextra','-Werror','-pedantic','-fPIC','-shared',str(source/'photon_conservation.c'),str(source/'photon_conservation_geometry.c'),'-lm','-o',str(path)],check=True)
     lib=ct.CDLL(str(path));lib.pc_default_options.argtypes=[ct.POINTER(Options)];lib.pc_allocate.argtypes=[ct.POINTER(Problem),ct.POINTER(Options),ct.POINTER(Result)];lib.pc_allocate.restype=ct.c_int
     return lib
 

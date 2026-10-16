@@ -76,6 +76,14 @@ extern "C"
                                   pc_result* result,
                                   pc_shape_metrics* metrics);
 
+  /* Same optimization and certificates, with optional read-only geometry
+   * acceleration in every transport oracle, including component fallbacks. */
+  pc_shape_status pc_shape_refine_with_geometry(const pc_problem* problem,
+                                  const pc_options* flow_options,
+                                  const pc_result* reference, const double* prior,
+                                  const pc_shape_options* options, pc_result* result,
+                                  pc_shape_metrics* metrics, const pc_geometry_executor* geometry);
+
 #ifdef __cplusplus
 }
 #endif

@@ -9,9 +9,9 @@ updates and global summaries are finalized.
 
 The default `Flag_PhotonConservation=0` keeps the legacy path. The enabled mode
 requires `Flag_PatchyReion=1`, `ReionFilterType=0`, `ReionRtoMFilterType=0` and
-`ReionDeltaRFactor>1`. It is a serial reference solver on MPI rank zero, with
-explicit memory, edge and iteration limits. It is not a solver with a cost
-comparable to a few FFTs.
+`ReionDeltaRFactor>1`. The global flow solver runs on MPI rank zero; optional
+MPI workers accelerate its read-only spatial queries. Memory, edge and
+iteration limits remain explicit. Its cost is not comparable to a few FFTs.
 
 ## Snapshot inventories
 
@@ -472,7 +472,8 @@ global solver runs with the remaining evaluation and cut budgets. Component
 tolerances share half the original global error budget, leaving headroom for
 the lifted certificate and final transport accumulation. This asks the local
 solves for greater accuracy; neither the objective nor the global acceptance
-tolerance is relaxed. The execution remains serial.
+tolerance is relaxed. Component decisions remain serial; their transport
+queries may use the optional MPI geometry executor described below.
 
 On the historical uploaded snapshot-54 input (32 cubed cells, normalized
 source inventory `1352.0677771`), the full graph contains
@@ -546,7 +547,8 @@ expensive despite the reduction in redundant flow work.
 
 The correction gathers the global problem onto rank zero and scatters the
 corrected neutral fraction back to the original slabs. MPI input ordering is
-explicit, but the allocation itself is serial. The number of stored edges,
+explicit. The global residual-network updates remain serial, while geometric
+queries can run across MPI ranks. The number of stored edges,
 cut separations and quadratic iterations depends on source clustering and
 overlap geometry; there is no near-FFT complexity guarantee. Debug-level-two
 files can be large because the positive-edge certificate is explicit.
@@ -585,3 +587,10 @@ The minimum band, promotion and reference-retention ordering are also choices
 among conserving maps, not consequences of photon counting. A large L1 change
 from the original ES map is therefore an allocation-change diagnostic, not
 by itself a measure of physical morphology error.
+
+## Parallel execution
+
+See [MPI execution and Gadi measurements](photon_conservation_mpi.md) for the
+optional distributed geometry search, unchanged global conservation checks,
+resource limits, regression tests and reproducible performance comparisons.
+

@@ -67,6 +67,8 @@ extern "C"
    * geometry maximum with an explicit residual. A negative status is unresolved
    * and never an infeasibility or maximum-flow certificate. */
   pc_status pc_es_complete(const pc_es_problem* problem, const pc_options* options, pc_es_result* result);
+  pc_status pc_es_complete_with_geometry(const pc_es_problem* problem, const pc_options* options,
+                                        pc_es_result* result, const pc_geometry_executor* geometry);
 
 #ifdef __cplusplus
 }

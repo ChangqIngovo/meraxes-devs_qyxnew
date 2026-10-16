@@ -9,6 +9,7 @@
 typedef struct
 {
   const pc_problem* p;
+  const pc_geometry_executor* geometry;
   const double* prior;
   pc_shape_options o;
   pc_shape_metrics* m;
@@ -695,7 +696,8 @@ static pc_shape_status pc_shape_refine_core(const pc_problem* p,
                                             pc_result* result,
                                             pc_shape_metrics* metrics,
                                             int split_components,
-                                            shape_dual* dual_export)
+                                            shape_dual* dual_export,
+                                            const pc_geometry_executor* geometry)
 {
   shape_context c;
   pc_shape_metrics local_metrics;
@@ -716,6 +718,7 @@ static pc_shape_status pc_shape_refine_core(const pc_problem* p,
       !p->capacity || !p->baseline || !p->lower || !p->upper || !p->radius)
     return status;
   c.p = p;
+  c.geometry = geometry;
   c.prior = prior ? prior : p->baseline;
   c.n = p->ncell;
   c.m = metrics;
@@ -867,7 +870,7 @@ static pc_shape_status pc_shape_refine_core(const pc_problem* p,
     if (!solve_master(&c))
       goto done;
     ++metrics->oracle_calls;
-    oracle_status = pc_allocate(&fixed, &fo, &allocation);
+    oracle_status = pc_allocate_with_geometry(&fixed, &fo, &allocation, c.geometry);
     metrics->last_oracle_status = oracle_status;
     if (oracle_status < 0 || !allocation.metrics.full_graph_cut_separated) {
       c.error = PC_SHAPE_ERR_ORACLE;
@@ -905,7 +908,7 @@ static pc_shape_status pc_shape_refine_core(const pc_problem* p,
         c.y[j] = clip(c.flow_y[j], p->lower[j], p->upper[j]);
       fixed.upper = p->upper;
       ++metrics->oracle_calls;
-      oracle_status = pc_allocate(&fixed, &fo, &allocation);
+      oracle_status = pc_allocate_with_geometry(&fixed, &fo, &allocation, c.geometry);
       metrics->last_oracle_status = oracle_status;
       if (oracle_status < 0 || !allocation.metrics.full_graph_cut_separated) {
         c.error = PC_SHAPE_ERR_ORACLE;
@@ -934,7 +937,7 @@ static pc_shape_status pc_shape_refine_core(const pc_problem* p,
         allocation.visit_edge = result->visit_edge;
         allocation.visitor_user = result->visitor_user;
         ++metrics->oracle_calls;
-        oracle_status = pc_allocate(&fixed, &fo, &allocation);
+        oracle_status = pc_allocate_with_geometry(&fixed, &fo, &allocation, c.geometry);
         if (oracle_status < 0 || !allocation.metrics.lower_feasible || !allocation.metrics.full_graph_cut_separated ||
             (reference->metrics.full_source_budget && !allocation.metrics.full_source_budget) ||
             !returned_certificate(&c)) {
@@ -1439,7 +1442,7 @@ static int shape_components(shape_context* c, const pc_options* fo, const pc_res
     out.source_residual = out_residual;
     local_dual.coefficient = out_residual;
     local_dual.nu = local_nu;
-    status = pc_shape_refine_core(&sub, fo, &ref, prior, &options, &out, &m, 0, &local_dual);
+    status = pc_shape_refine_core(&sub, fo, &ref, prior, &options, &out, &m, 0, &local_dual, c->geometry);
     sum.hall_cuts += m.hall_cuts;
     sum.master_sweeps += m.master_sweeps;
     sum.master_evaluations += m.master_evaluations;
@@ -1528,7 +1531,7 @@ static int shape_components(shape_context* c, const pc_options* fo, const pc_res
     {
       pc_edge_visitor visitor = result->visit_edge;
       result->visit_edge = NULL;
-      sum.last_oracle_status = pc_allocate(&fixed, fo, result);
+      sum.last_oracle_status = pc_allocate_with_geometry(&fixed, fo, result, c->geometry);
       result->visit_edge = visitor;
     }
     if (sum.last_oracle_status < 0 || !result->metrics.lower_feasible || !result->metrics.full_graph_cut_separated ||
@@ -1579,7 +1582,7 @@ static int shape_components(shape_context* c, const pc_options* fo, const pc_res
     }
     if (result->visit_edge) {
       ++sum.oracle_calls;
-      sum.last_oracle_status = pc_allocate(&fixed, fo, result);
+      sum.last_oracle_status = pc_allocate_with_geometry(&fixed, fo, result, c->geometry);
       if (sum.last_oracle_status < 0 || !result->metrics.lower_feasible || !result->metrics.full_graph_cut_separated ||
           (reference->metrics.full_source_budget && !result->metrics.full_source_budget) ||
           !component_certificate(c, reference, result, proposal, quota, dual, &sum)) {
@@ -1615,7 +1618,7 @@ cleanup:
     } else {
       options.max_evaluations -= sum.master_evaluations;
       options.max_hall_cuts -= sum.hall_cuts;
-      status = pc_shape_refine_core(p, fo, reference, c->prior, &options, result, &m, 0, NULL);
+      status = pc_shape_refine_core(p, fo, reference, c->prior, &options, result, &m, 0, NULL, c->geometry);
       m.master_evaluations += sum.master_evaluations;
       m.master_sweeps += sum.master_sweeps;
       m.hall_cuts += sum.hall_cuts;
@@ -1641,5 +1644,14 @@ pc_shape_status pc_shape_refine(const pc_problem* p,
                                 pc_result* result,
                                 pc_shape_metrics* metrics)
 {
-  return pc_shape_refine_core(p, flow_options, reference, prior, options, result, metrics, 1, NULL);
+  return pc_shape_refine_core(p, flow_options, reference, prior, options, result, metrics, 1, NULL, NULL);
+}
+
+pc_shape_status pc_shape_refine_with_geometry(const pc_problem* p,
+                                const pc_options* flow_options, const pc_result* reference,
+                                const double* prior, const pc_shape_options* options,
+                                pc_result* result, pc_shape_metrics* metrics,
+                                const pc_geometry_executor* geometry)
+{
+  return pc_shape_refine_core(p, flow_options, reference, prior, options, result, metrics, 1, NULL, geometry);
 }

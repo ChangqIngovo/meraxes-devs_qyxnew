@@ -54,6 +54,7 @@ foreach(pc_test photon_conservation photon_conservation_es photon_conservation_s
     add_executable(test_${pc_test}
         test_${pc_test}.c
         ${CMAKE_SOURCE_DIR}/src/physics/photon_conservation.c
+        ${CMAKE_SOURCE_DIR}/src/physics/photon_conservation_geometry.c
         ${CMAKE_SOURCE_DIR}/src/physics/photon_conservation_es.c
         ${CMAKE_SOURCE_DIR}/src/physics/photon_conservation_shape.c)
     set_property(TARGET test_${pc_test} PROPERTY C_STANDARD 99)
@@ -66,6 +67,31 @@ foreach(pc_test photon_conservation photon_conservation_es photon_conservation_s
     target_compile_options(test_${pc_test} PRIVATE ${SANITIZE_FLAGS})
     target_link_options(test_${pc_test} PRIVATE ${SANITIZE_FLAGS})
     add_test(NAME test_${pc_test} COMMAND test_${pc_test})
+endforeach()
+
+# MPI changes only read-only spatial queries; compare the full allocation and
+# shape certificates with the serial implementation, including failure paths.
+add_executable(test_photon_conservation_mpi
+    test_photon_conservation_mpi.c
+    ${CMAKE_SOURCE_DIR}/src/core/photon_conservation_mpi.c
+    ${CMAKE_SOURCE_DIR}/src/physics/photon_conservation_geometry.c
+    ${CMAKE_SOURCE_DIR}/src/physics/photon_conservation.c
+    ${CMAKE_SOURCE_DIR}/src/physics/photon_conservation_es.c
+    ${CMAKE_SOURCE_DIR}/src/physics/photon_conservation_shape.c)
+set_property(TARGET test_photon_conservation_mpi PROPERTY C_STANDARD 99)
+target_include_directories(test_photon_conservation_mpi PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(test_photon_conservation_mpi PRIVATE MPI::MPI_C m)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(test_photon_conservation_mpi PRIVATE -UNDEBUG)
+endif()
+target_compile_options(test_photon_conservation_mpi PRIVATE ${SANITIZE_FLAGS})
+target_link_options(test_photon_conservation_mpi PRIVATE ${SANITIZE_FLAGS})
+foreach(pc_ranks 1 2 4)
+    add_test(NAME test_photon_conservation_mpi${pc_ranks}
+        COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${pc_ranks} ${MPIEXEC_PREFLAGS}
+            $<TARGET_FILE:test_photon_conservation_mpi> ${MPIEXEC_POSTFLAGS})
+    set_tests_properties(test_photon_conservation_mpi${pc_ranks} PROPERTIES
+        PROCESSORS ${pc_ranks} TIMEOUT 120 ENVIRONMENT "OMPI_MCA_rmaps_base_oversubscribe=1")
 endforeach()
 
 add_executable(test_photon_conservation_feedback test_photon_conservation_feedback.c)
