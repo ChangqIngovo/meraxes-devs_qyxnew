@@ -34,7 +34,7 @@ class Scripts(unittest.TestCase):
         self.template = self.base/'template.par'
         self.template.write_text(f'DefaultsFile : {self.base}/defaults.par\nOutputSnapshots : 60:120\nSimulationDir : /stale/l210\nBoxSize : 210\nReionGridDim : 512\nSfEfficiency : 0.1476\nReionNionPhotPerBary : 6000\nTargetSnaps : 48,58,75,119\n')
         binary=self.build/'bin/meraxes'
-        binary.write_text('#!/bin/sh\nexit 0\n')
+        binary.write_text('#!/bin/sh\necho "Fixture binary must not execute; expected mock mpirun" >&2\nexit 97\n')
         binary.chmod(0o755)
         (self.build/'CMakeCache.txt').write_text('CALC_MAGS:BOOL=OFF\nUSE_MINI_HALOS:BOOL=OFF\n')
         (self.build/'pc_build_manifest.json').write_text(json.dumps({'commit':HEAD,'binary_sha256':hashlib.sha256(binary.read_bytes()).hexdigest()}))
@@ -48,8 +48,17 @@ class Scripts(unittest.TestCase):
         self.env={**os.environ,'PC_REPO':str(self.repo),'PC_BUILD_DIR':str(self.build),'L10_INPUT':str(self.template),'L10_SIMULATION_DIR':str(self.sim),'L10_TABLES':str(self.tables),'ES_PYTHON':sys.executable,'RUN_DIR':str(self.run),'PATH':str(self.base/'commands')+os.pathsep+os.environ['PATH']}
         for name in ['ES_SPECTRUM','ES_RADIUS_RATIO','ES_MAX_STEP_MYR']:
             self.env.pop(name,None)
+    def shell_environment(self, **updates):
+        # Noninteractive bash still reads BASH_ENV, and imported functions take
+        # precedence over our PATH mocks. Isolate only the fixture subprocesses;
+        # keep the caller's Python and shared-library environment intact.
+        env = {**self.env, **updates}
+        for name in list(env):
+            if name in {'BASH_ENV', 'ENV', 'SHELLOPTS', 'BASHOPTS'} or name.startswith('BASH_FUNC_'):
+                del env[name]
+        return env
     def prepare(self,ok=True):
-        result=subprocess.run(['bash',str(SOURCE/'tools/gadi_es_l10.sh'),'prepare'],env=self.env,text=True,capture_output=True)
+        result=subprocess.run(['bash','--noprofile','--norc',str(SOURCE/'tools/gadi_es_l10.sh'),'prepare'],env=self.shell_environment(),text=True,capture_output=True)
         self.assertEqual(result.returncode==0,ok,result.stdout+result.stderr)
         return result
     def test_prepare_preserves_calibration_all_snapshots(self):
@@ -90,18 +99,38 @@ class Scripts(unittest.TestCase):
         self.prepare()
         self.assertEqual((self.run/'provenance/source_spectrum.txt').read_bytes(),spectrum.read_bytes())
     def pbs(self):
-        env={**self.env,'PBS_NCPUS':'32','PBS_JOBID':'fixture.gadi-pbs'}
-        return subprocess.run(['bash','-c','module() { :; }; export -f module; bash "$RUN_DIR/submit.pbs"'],env=env,text=True,capture_output=True)
-    def test_pbs_preflight_and_launch(self):
-        self.prepare()
+        env=self.shell_environment(PBS_NCPUS='32',PBS_JOBID='fixture.gadi-pbs')
+        return subprocess.run(['bash','--noprofile','--norc','-c','module() { :; }; export -f module; bash --noprofile --norc "$RUN_DIR/submit.pbs"'],env=env,text=True,capture_output=True)
+    def assert_pbs_launch(self):
         result=self.pbs()
         log=(self.run/'run_fixture.gadi-pbs.log').read_text()
         self.assertEqual(result.returncode,0,result.stdout+result.stderr+log)
-        command=json.loads((self.run/'invocation.json').read_text())
+        invocation=self.run/'invocation.json'
+        self.assertTrue(invocation.is_file(), 'Mock mpirun did not record a launch.\n'+result.stdout+result.stderr+log)
+        command=json.loads(invocation.read_text())
         self.assertEqual(command[1:3],['-np','32'])
         self.assertEqual(command[-2:],[str(self.run/'meraxes'),str(self.run/'input.par')])
         self.assertTrue((self.run/'output').is_dir())
+    def test_pbs_preflight_and_launch(self):
+        self.prepare()
+        self.assert_pbs_launch()
         self.assertNotEqual(self.pbs().returncode,0)
+    def test_shell_startup_file_cannot_override_mocks(self):
+        startup=self.base/'startup.bash'
+        marker=self.base/'startup-ran'
+        startup.write_text('printf startup > "$STARTUP_MARKER"\nmpirun() { :; }; export -f mpirun\n')
+        self.env.update(BASH_ENV=str(startup), ENV=str(startup), STARTUP_MARKER=str(marker))
+        self.prepare()
+        self.assert_pbs_launch()
+        self.assertFalse(marker.exists())
+        self.assertEqual(self.env['BASH_ENV'],str(startup))
+    def test_exported_functions_cannot_override_mocks(self):
+        self.env['BASH_FUNC_mpirun%%']='() {  :\n}'
+        self.env['BASH_FUNC_module%%']='() {  exit 96\n}'
+        self.env['BASH_FUNC_git%%']='() {  exit 95\n}'
+        self.prepare()
+        self.assert_pbs_launch()
+        self.assertIn('BASH_FUNC_mpirun%%',self.env)
     def test_pbs_detects_mutation(self):
         self.prepare()
         with (self.run/'input.par').open('a') as f:f.write('# changed\n')
