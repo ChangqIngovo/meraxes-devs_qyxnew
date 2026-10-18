@@ -80,6 +80,16 @@ class Scripts(unittest.TestCase):
         (self.tables/'cooling_functions').rmdir()
         self.prepare(False)
         self.assertFalse(self.run.exists())
+    def test_missing_legacy_recombination_tables_allowed(self):
+        legacy_tables=self.tables/'recombination_tables'
+        legacy_tables.rmdir()
+        self.prepare()
+        config=(self.run/'input.par').read_text()
+        self.assertIn('Flag_PhotonConservation : 3',config)
+        self.assertIn('Flag_IncludeRecombinations : 1',config)
+        self.assertIn(f'RecombinationDir : {legacy_tables}',config)
+        self.assert_pbs_launch()
+        self.assertFalse(legacy_tables.exists())
     def test_binary_mismatch_no_partial_run(self):
         (self.build/'bin/meraxes').write_text('wrong binary')
         self.prepare(False)

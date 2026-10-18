@@ -167,8 +167,11 @@ overrides.update({
     'TablesForXHeatingDir': tables / '21cmFAST-tables',
     'RecombinationDir': tables / 'recombination_tables',
 })
+# Mode 3 evolves H/He recombination in the ES solver. init.c skips init_MHR()
+# for this mode, so the legacy RecombinationDir is not a runtime dependency.
+# Keep its configured path without requiring or creating the unused directory.
 for key in ('PhotometricTablesDir', 'CoolingFuncsDir', 'StellarFeedbackDir',
-            'TablesForXHeatingDir', 'RecombinationDir'):
+            'TablesForXHeatingDir'):
     if not overrides[key].is_dir():
         raise ValueError(f'Missing existing input table directory {key}: {overrides[key]}')
 effective = original

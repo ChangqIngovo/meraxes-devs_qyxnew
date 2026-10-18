@@ -21,7 +21,10 @@ reuses `/g/data/qp00/sz4640/meraxes-devs/input/` table directories. The old
 Sobacchi reionization feedback, UVB/spin-temperature closure, legacy 21-cm
 brightness-temperature/power-spectrum outputs and black-hole
 ionizing source are disabled in mode 3. H/He recombination is enabled in the
-new solver, without the legacy `Nrec` correction. The temperature is fixed at
+new solver, without the legacy `Nrec` correction. Mode 3 skips the legacy MHR
+table initialization and does not read `RecombinationDir`; this directory need
+not exist. Its input parameter is retained, and H/He recombination remains
+enabled. The temperature is fixed at
 10,000 K. These choices define a controlled ES-HHe test, not an already
 recalibrated galaxy-feedback model.
 
@@ -112,8 +115,9 @@ FFTW 3.3.10, GSL 2.7.1 and HDF5 1.10.10. The online adapter passed synthetic
 consecutive-snapshot tests at 1, 2 and 4 ranks, including empty slabs, physical
 source/time units, H/He recombination, density remapping and photon/electron/
 nucleus accounting. A two-event star-formation regression verifies that mode 3
-adds each event's new SFR once. The worker has nine integration tests; ten
-runner tests cover full-snapshot configuration, provenance and PBS launch.
+adds each event's new SFR once. The worker has nine integration tests; thirteen
+runner tests cover full-snapshot configuration, provenance, PBS launch, shell
+environment isolation and preparation without unused legacy recombination tables.
 These tests do not require or replace a full L10 merger-tree run.
 
 A dilute 32^3 synthetic snapshot with one 18 eV source completed in 0.62 s
