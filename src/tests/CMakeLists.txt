@@ -69,6 +69,63 @@ foreach(pc_test photon_conservation photon_conservation_es photon_conservation_s
     add_test(NAME test_${pc_test} COMMAND test_${pc_test})
 endforeach()
 
+# Native H/He kernels: independent atom, photon, charge and energy budgets.
+foreach(hhe_test photon_hhe photon_hhe_transport)
+    add_executable(test_${hhe_test}
+        test_${hhe_test}.c
+        ${CMAKE_SOURCE_DIR}/src/physics/photon_hhe_chemistry.c
+        ${CMAKE_SOURCE_DIR}/src/physics/photon_hhe_transport.c)
+    set_property(TARGET test_${hhe_test} PROPERTY C_STANDARD 99)
+    target_include_directories(test_${hhe_test} PRIVATE ${CMAKE_SOURCE_DIR}/src/physics)
+    target_link_libraries(test_${hhe_test} PRIVATE m)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(test_${hhe_test} PRIVATE -UNDEBUG -fno-fast-math -ffp-contract=off)
+    endif()
+    target_compile_options(test_${hhe_test} PRIVATE ${SANITIZE_FLAGS})
+    target_link_options(test_${hhe_test} PRIVATE ${SANITIZE_FLAGS})
+    add_test(NAME test_${hhe_test} COMMAND test_${hhe_test})
+endforeach()
+
+# Complete MPI packet phase exchange, including ranks with no mesh slab.
+foreach(hhe_mpi_test photon_hhe_mpi_empty photon_hhe_mpi_coupled)
+    add_executable(test_${hhe_mpi_test}
+        test_${hhe_mpi_test}.c
+        ${CMAKE_SOURCE_DIR}/src/core/photon_hhe_mpi.c
+        ${CMAKE_SOURCE_DIR}/src/physics/photon_hhe_chemistry.c
+        ${CMAKE_SOURCE_DIR}/src/physics/photon_hhe_transport.c)
+    set_property(TARGET test_${hhe_mpi_test} PROPERTY C_STANDARD 99)
+    target_include_directories(test_${hhe_mpi_test} PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    target_link_libraries(test_${hhe_mpi_test} PRIVATE MPI::MPI_C m)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(test_${hhe_mpi_test} PRIVATE -UNDEBUG -fno-fast-math -ffp-contract=off)
+    endif()
+    target_compile_options(test_${hhe_mpi_test} PRIVATE ${SANITIZE_FLAGS})
+    target_link_options(test_${hhe_mpi_test} PRIVATE ${SANITIZE_FLAGS})
+    foreach(hhe_ranks 1 2 4)
+        add_test(NAME test_${hhe_mpi_test}_${hhe_ranks}
+            COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${hhe_ranks} ${MPIEXEC_PREFLAGS}
+                $<TARGET_FILE:test_${hhe_mpi_test}> ${MPIEXEC_POSTFLAGS})
+        set_tests_properties(test_${hhe_mpi_test}_${hhe_ranks} PROPERTIES
+            PROCESSORS ${hhe_ranks} TIMEOUT 120 ENVIRONMENT "OMPI_MCA_rmaps_base_oversubscribe=1")
+    endforeach()
+endforeach()
+
+# Production adapter with prescribed snapshots and independent HDF5 audits.
+add_executable(test_photon_hhe_adapter test_photon_hhe_adapter.c)
+set_property(TARGET test_photon_hhe_adapter PROPERTY C_STANDARD 99)
+target_include_directories(test_photon_hhe_adapter PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_BINARY_DIR})
+target_link_libraries(test_photon_hhe_adapter PRIVATE meraxes_lib)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(test_photon_hhe_adapter PRIVATE -UNDEBUG -fno-fast-math -ffp-contract=off)
+endif()
+foreach(hhe_ranks 1 2 4)
+    add_test(NAME test_photon_hhe_adapter_${hhe_ranks}
+        COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${hhe_ranks} ${MPIEXEC_PREFLAGS}
+            $<TARGET_FILE:test_photon_hhe_adapter> ${MPIEXEC_POSTFLAGS})
+    set_tests_properties(test_photon_hhe_adapter_${hhe_ranks} PROPERTIES
+        PROCESSORS ${hhe_ranks} TIMEOUT 120 ENVIRONMENT "OMPI_MCA_rmaps_base_oversubscribe=1")
+endforeach()
+
 # Exercise arc handles above the 32-bit range without allocating billions of
 # edges. This white-box fixture includes the allocator implementation itself.
 add_executable(test_photon_conservation_index

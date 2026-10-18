@@ -35,6 +35,13 @@ Meraxes, what it outputs, and the physics behind it:
 
 The guide's sources are in [`docs/`](docs/).
 
+The `Photon_conservation` branch also includes an opt-in
+[time-dependent H/He photon transport model](docs/photon_hhe_transport.md)
+(`Flag_PhotonConservation=2`), with explicit recombination radiation, thermal
+chemistry and MPI packet migration. Its parameter fragment and current physical
+scope are described in that document; modes `0` and `1` retain their existing
+ionization calculations.
+
 
 ## **Acknowledging**
 If you use Meraxes or its outputs in your research, please cite the following foundational paper:  

@@ -342,6 +342,16 @@ typedef struct run_params_t
   int PhotonConservationMaxEvaluations;
   int PhotonConservationMaxCuts;
   double PhotonConservationTolerance;
+  /* Mode 2: native, time-dependent warm H/He packet transport. */
+  int HHeStartSnapshot;
+  int HHeEmissionDirections;
+  int HHeMemoryMB;
+  int HHeBoundaryPeriodic;
+  double HHeInitialTemperature;
+  double HHeSourceEnergyEV;
+  double HHeCellCrossingFraction;
+  double HHeMaxStepMyr;
+  char HHeSourceSpectrumFile[STRLEN];
   int Flag_EvolvingReionRBubbleMax;
   int Flag_InstantaneousSFR;
   int Flag_TemperatureDependentRec;

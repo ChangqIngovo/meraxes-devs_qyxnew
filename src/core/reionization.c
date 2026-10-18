@@ -15,6 +15,7 @@
 #include "meraxes.h"
 #include "misc_tools.h"
 #include "read_grids.h"
+#include "photon_hhe_meraxes.h"
 #include "reionization.h"
 #include "virial_properties.h"
 #if USE_STOCHASTICITY
@@ -31,10 +32,10 @@ static inline double tau_e_prefactor_at_z(double z)
   return SPEED_OF_LIGHT * SIGMA_T_CGS * zplus1 * zplus1 / Hz;
 } // cm^3
 
-static inline double tau_e_sim_integrand_at_snapshot(int snapshot, double xHII)
+static inline double tau_e_sim_integrand_at_snapshot(int snapshot, double electron_per_nucleus)
 {
-  // Follow post-processing convention: n_e ~ xHII * (n_H + n_He)
-  return tau_e_prefactor_at_z(run_globals.ZZ[snapshot]) * N_b0 * xHII;
+  // Modes 0/1 approximate this ratio with xHII; mode 2 counts H/He electrons.
+  return tau_e_prefactor_at_z(run_globals.ZZ[snapshot]) * N_b0 * electron_per_nucleus;
 } // unitless
 
 static inline double tau_e_postsim_integrand(double z, void* params)
@@ -74,7 +75,10 @@ static void update_mass_weighted_tau_e(const int snapshot)
   if (grids->tau_e_prev_snapshot == snapshot)
     return;
 
-  double xHII = fmax(0.0, fmin(1.0, 1.0 - grids->mass_weighted_global_xH));
+  double xHII = run_globals.params.Flag_PhotonConservation == 2
+                  ? photon_hhe_mean_electron_per_baryon()
+                  : fmax(0.0, fmin(1.0, 1.0 - grids->mass_weighted_global_xH));
+  // The legacy-named history field holds ne/(nH+nHe) in mode 2, which may exceed one.
 
   if (grids->tau_e_prev_snapshot >= 0) {
     int prev_snapshot = grids->tau_e_prev_snapshot;
@@ -1379,6 +1383,7 @@ void malloc_reionization_grids()
 
 void free_reionization_grids()
 {
+  photon_hhe_meraxes_free();
   mlog("Freeing reionization grids...", MLOG_OPEN);
 
   reion_grids_t* grids = &(run_globals.reion_grids);

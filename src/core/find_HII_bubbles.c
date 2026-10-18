@@ -8,6 +8,7 @@
 #include "meraxes_gpu.h"
 #include "misc_tools.h"
 #include "photon_conservation_meraxes.h"
+#include "photon_hhe_meraxes.h"
 #include "recombinations.h"
 #include "reionization.h"
 #include "utils.h"
@@ -149,7 +150,7 @@ void _find_HII_bubbles(const int snapshot)
     cell_length_factor = 1.0;
 
   photon_conservation_context* photon_context = NULL;
-  if (run_globals.params.Flag_PhotonConservation)
+  if (run_globals.params.Flag_PhotonConservation == 1)
     photon_context = photon_conservation_begin(snapshot);
 
   // Init xH
@@ -747,7 +748,10 @@ void find_HII_bubbles(int snapshot, timer_info* timer_total)
        snapshot,
        redshift);
   timer_start(&timer);
-  _find_HII_bubbles(snapshot);
+  if (run_globals.params.Flag_PhotonConservation == 2)
+    photon_hhe_meraxes(snapshot);
+  else
+    _find_HII_bubbles(snapshot);
 #endif
   timer_stop(&timer);
   timer_stop(timer_total);

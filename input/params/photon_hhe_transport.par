@@ -1,0 +1,33 @@
+# H/He photon transport overrides for a COMPLETE Meraxes input.par.
+# Keep existing simulation, DefaultsFile, input-table and output paths.
+# Warm-gas model: 5000 <= T <= 20000 K. Crossing the domain is an error.
+# Start with a small grid; this mode does not use the maximum-flow solver.
+
+Flag_PhotonConservation       : 2
+Flag_PatchyReion              : 1
+Flag_IncludeRecombinations    : 1
+ReionUVBFlag                  : 0
+Flag_ReionizationModifier     : 0
+Flag_FescCGMSuppression       : 0
+Flag_IncludeSpinTemp          : 0
+EscapeFracBHNorm              : 0
+FlagInteractive              : 0
+FlagMCMC                     : 0
+
+HHeInitialTemperature        : 10000
+HHeSourceEnergyEV            : 18
+HHeStartSnapshot             : 0
+HHeEmissionDirections        : 12
+HHeCellCrossingFraction      : 0.25
+HHeMaxStepMyr                : 0.1
+HHeMemoryMB                  : 2048
+HHeBoundaryPeriodic          : 1
+
+# Optional ASCII columns: energy_eV photon_number_weight (normalized on read).
+# An 18 eV monochromatic source cannot photoionize HeI or HeII.
+# HHeSourceSpectrumFile      : /absolute/path/to/source_spectrum.txt
+
+# USE_MINI_HALOS must be OFF at build time.
+# Flag_BHFeedback may remain enabled; EscapeFracBHNorm must be zero.
+# HHeMemoryMB guards persistent H/He memory per rank, not total job memory.
+# These overrides do not restore a previous run or reconstruct earlier sources.
