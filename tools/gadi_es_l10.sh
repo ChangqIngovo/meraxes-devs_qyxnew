@@ -53,18 +53,18 @@ def digest(path):
             value.update(block)
     return value.hexdigest()
 
-def params(text):
+def params(text, source='<input>'):
     values = {}
-    for line in text.splitlines():
+    for number, line in enumerate(text.splitlines(), 1):
         line = line.split('#', 1)[0].strip()
         if not line:
             continue
         match = re.fullmatch(r'([A-Za-z][A-Za-z0-9_]*)\s*:\s*(.*)', line)
         if not match:
-            raise ValueError(f'Unsupported parameter line: {line!r}')
+            raise ValueError(f"Invalid parameter syntax in '{source}' at line {number}: {line!r}")
         name, value = match.groups()
         if name in values:
-            raise ValueError(f'Duplicate parameter: {name}')
+            raise ValueError(f'Duplicate parameter: {name} in {source} at line {number}')
         values[name] = value.strip()
     return values
 
@@ -108,6 +108,35 @@ if not defaults_value:
 defaults = Path(defaults_value.replace('@INPUT_FILE_DIR@', str(repo / 'input')))
 defaults = defaults if defaults.is_absolute() else template.parent / defaults
 defaults = defaults.resolve(strict=True)
+branch_defaults = (repo / 'input/params/defaults.par').resolve(strict=True)
+legacy_defaults_bytes = defaults.read_bytes()
+legacy_defaults_text = legacy_defaults_bytes.decode('utf-8')
+legacy_defaults_values = params(legacy_defaults_text, defaults)
+branch_defaults_bytes = branch_defaults.read_bytes()
+branch_defaults_text = branch_defaults_bytes.decode('utf-8')
+branch_defaults_values = params(branch_defaults_text, branch_defaults)
+# Preserve inherited galaxy/source values. The checked-out defaults supply only
+# missing values; they must not silently replace a different L210 calibration.
+# This narrowly named foreign option controls legacy X-ray heating, which this
+# mode-3 runner explicitly disables. All other unknown keys reach native checks.
+inactive_foreign_defaults = {
+    'Flag_UseXrayMetallicity': 'Mode 3 disables legacy X-ray heating (Flag_IncludeSpinTemp=0).',
+}
+omitted_defaults = {}
+effective_defaults = branch_defaults_text
+for key, value in legacy_defaults_values.items():
+    if key in inactive_foreign_defaults and key not in branch_defaults_values:
+        omitted_defaults[key] = {'value': value, 'reason': inactive_foreign_defaults[key]}
+    else:
+        effective_defaults = replace(effective_defaults, key, value)
+defaults_record = {
+    'legacy_source': str(defaults), 'branch_source': str(branch_defaults),
+    'preserved_legacy_values': {key: value for key, value in legacy_defaults_values.items()
+                                if key not in omitted_defaults},
+    'added_branch_values': {key: value for key, value in branch_defaults_values.items()
+                            if key not in legacy_defaults_values},
+    'omitted_inactive_values': omitted_defaults,
+}
 worker_source = repo / 'tools/es_hhe'
 if not (worker_source / 'snapshot_worker.py').is_file():
     raise ValueError('Missing tools/es_hhe/snapshot_worker.py; pull the mode-3 implementation first')
@@ -180,25 +209,30 @@ for key, value in overrides.items():
     effective = replace(effective, key, value)
 if run.exists():
     raise ValueError(f'Run directory already exists; choose a new RUN_DIR: {run}')
-# Check the exact generated parameters with the real executable before creating
-# a run or requesting resources. Use the existing sources for the two files
-# that have not yet been copied into provenance; all effective values agree.
+# Check the generated input and merged defaults before creating a run.
+# Only provenance paths differ from the final copies; effective values agree.
 with tempfile.TemporaryDirectory(prefix='meraxes-paramcheck-') as directory:
     checked_input = Path(directory) / 'input.par'
-    checked_text = replace(effective, 'DefaultsFile', defaults)
+    checked_defaults = Path(directory) / 'defaults.par'
+    checked_defaults.write_text(effective_defaults)
+    checked_text = replace(effective, 'DefaultsFile', checked_defaults)
     checked_text = replace(checked_text, 'SimParamsFile', sim_file)
     checked_input.write_text(checked_text)
     check = subprocess.run([str(binary), '--check-params', str(checked_input)],
                            text=True, capture_output=True)
     if check.returncode != 0:
-        raise RuntimeError(f'Native parameter check failed for input generated from {template}:\n'
+        raise RuntimeError(f'Native parameter check failed for input generated from {template}, '
+                           f'with legacy defaults from {defaults}:\n'
                            + check.stdout + check.stderr)
 run.mkdir(parents=True, exist_ok=False)
 (run / 'provenance').mkdir()
 shutil.copy2(binary, run / 'meraxes')
 shutil.copytree(worker_source, run / 'solver', ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
 shutil.copy2(template, run / 'provenance/original_input.par')
-shutil.copy2(defaults, run / 'provenance/defaults.par')
+(run / 'provenance/defaults.par').write_text(effective_defaults)
+(run / 'provenance/original_defaults.par').write_bytes(legacy_defaults_bytes)
+(run / 'provenance/branch_defaults.par').write_bytes(branch_defaults_bytes)
+(run / 'provenance/defaults_compatibility.json').write_text(json.dumps(defaults_record, indent=2) + '\n')
 shutil.copy2(sim_file, run / 'provenance/Genesis_L10_N512.par')
 shutil.copy2(scale_file, run / 'provenance/a_list.txt')
 shutil.copy2(manifest_file, run / 'provenance/pc_build_manifest.json')
@@ -213,6 +247,7 @@ record = {
     'grid': grid, 'snapshot_count': len(scale_factors), 'output_snapshots': snapshots,
     'first_redshift': 1 / scale_factors[0] - 1, 'last_redshift': 1 / scale_factors[-1] - 1,
     'source_spectrum': str(spectrum) if spectrum else 'controlled monochromatic 18 eV test',
+    'defaults_compatibility': defaults_record,
     'max_step_myr': max_step, 'radius_ratio': ratio,
     'python_version': sys.version,
     'python_packages': {'numpy': numpy.__version__, 'scipy': scipy.__version__, 'h5py': h5py.__version__},
@@ -222,6 +257,8 @@ record = {
 (run / 'run_manifest.json').write_text(json.dumps(record, indent=2) + '\n')
 print(f'Prepared: {run}')
 print('Native parameter check: passed')
+for key, item in omitted_defaults.items():
+    print(f'Omitted inactive legacy default {key}={item["value"]}: {item["reason"]}')
 print(f'Grid: {grid}^3; snapshots: 0 through {len(scale_factors)-1}')
 print(f'Outputs: {run / "output"}')
 print(f'Source: {record["source_spectrum"]}')

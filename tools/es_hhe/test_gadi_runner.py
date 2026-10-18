@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -29,6 +30,7 @@ class Scripts(unittest.TestCase):
             (self.tables/directory).mkdir(parents=True)
         (self.sim/'a_list.txt').write_text('0.02\n0.04\n0.08\n')
         shutil.copy2(SOURCE/'input/params/simulations/Genesis_L10_N512.par',self.repo/'input/params/simulations/Genesis_L10_N512.par')
+        shutil.copy2(SOURCE/'input/params/defaults.par',self.repo/'input/params/defaults.par')
         shutil.copy2(SOURCE/'tools/gadi_es_l10.pbs',self.repo/'tools/gadi_es_l10.pbs')
         (self.repo/'tools/es_hhe/snapshot_worker.py').write_text('# fixture\n')
         shutil.copy2(SOURCE/'input/params/defaults.par',self.base/'defaults.par')
@@ -114,6 +116,45 @@ class Scripts(unittest.TestCase):
         self.env['ES_SPECTRUM']=str(spectrum)
         self.prepare()
         self.assertEqual((self.run/'provenance/source_spectrum.txt').read_bytes(),spectrum.read_bytes())
+    def test_foreign_defaults_preserve_calibration_and_fill_missing_values(self):
+        defaults=self.base/'defaults.par'
+        text=defaults.read_text()
+        text=re.sub(r'(?m)^SfEfficiency\s*:.*$', 'SfEfficiency : 0.2222', text)
+        text=re.sub(r'(?m)^SnReheatEff\s*:.*$', 'SnReheatEff : 7.123', text)
+        text=re.sub(r'(?m)^SnMetalRetentionFraction\s*:.*\n', '', text)
+        text+='Flag_UseXrayMetallicity : 1\nFFTW3WisdomDir : /fixture/wisdom\n'
+        original=text.replace('\n','\r\n').encode()
+        defaults.write_bytes(original)
+        result=self.prepare()
+        self.assertIn('Omitted inactive legacy default Flag_UseXrayMetallicity=1',result.stdout)
+        config=(self.run/'input.par').read_text()
+        effective=(self.run/'provenance/defaults.par').read_text()
+        self.assertIn('SfEfficiency : 0.1476',config)
+        self.assertIn('SfEfficiency : 0.2222',effective)
+        self.assertIn('SnReheatEff : 7.123',effective)
+        self.assertIn('FFTW3WisdomDir : /fixture/wisdom',effective)
+        self.assertNotIn('Flag_UseXrayMetallicity',effective)
+        self.assertEqual((self.run/'provenance/original_defaults.par').read_bytes(),original)
+        self.assertEqual(defaults.read_bytes(),original)
+        record=json.loads((self.run/'provenance/defaults_compatibility.json').read_text())
+        self.assertEqual(record['preserved_legacy_values']['SnReheatEff'],'7.123')
+        self.assertEqual(record['added_branch_values']['SnMetalRetentionFraction'],'0.0')
+        self.assertEqual(record['omitted_inactive_values']['Flag_UseXrayMetallicity']['value'],'1')
+        if NATIVE_BINARY:
+            check=subprocess.run([str(self.run/'meraxes'),'--check-params',str(self.run/'input.par')],
+                                 env=self.shell_environment(),text=True,capture_output=True)
+            self.assertEqual(check.returncode,0,check.stdout+check.stderr)
+            for key,value in [('SfEfficiency','0.1476'),('SnReheatEff','7.123'),
+                              ('SnMetalRetentionFraction','0'),('FFTW3WisdomDir','/fixture/wisdom')]:
+                self.assertRegex(check.stdout,rf'\b{key}\s+{re.escape(value)}(?:\s|$)')
+        self.assert_pbs_launch()
+    @unittest.skipUnless(NATIVE_BINARY, 'Needs ES_PARAMCHECK_BINARY (provided by CTest)')
+    def test_foreign_option_in_explicit_input_is_not_silently_removed(self):
+        with self.template.open('a') as stream:
+            stream.write('Flag_UseXrayMetallicity : 1\n')
+        result=self.prepare(False)
+        self.assertIn("Unrecognised parameter 'Flag_UseXrayMetallicity'",result.stderr)
+        self.assertFalse(self.run.exists())
     @unittest.skipUnless(NATIVE_BINARY, 'Needs ES_PARAMCHECK_BINARY (provided by CTest)')
     def test_native_parser_accepts_blank_lines_and_comments(self):
         with self.template.open('a') as stream:
@@ -123,6 +164,9 @@ class Scripts(unittest.TestCase):
                              + b'\r\n   \r\n\t# comment in CRLF file\r\n')
         self.prepare()
         self.assertFalse((self.run/'output').exists())
+        effective_defaults=self.run/'provenance/defaults.par'
+        effective_defaults.write_bytes(effective_defaults.read_bytes().replace(b'\n',b'\r\n')
+                                       + b'\r\n   \r\n\t# native CRLF comment\r\n')
         # The prepared files themselves, with their final provenance paths,
         # must also pass. No simulation data are present in this fixture.
         result=subprocess.run([str(self.run/'meraxes'),'--check-params',str(self.run/'input.par')],
@@ -142,11 +186,12 @@ class Scripts(unittest.TestCase):
     @unittest.skipUnless(NATIVE_BINARY, 'Needs ES_PARAMCHECK_BINARY (provided by CTest)')
     def test_native_parser_reports_unknown_default_parameter(self):
         defaults=self.base/'defaults.par'
-        line=len(defaults.read_text().splitlines())+1
         with defaults.open('a') as stream:
             stream.write('UnknownDefaultFixtureParameter : 1\n')
         result=self.prepare(False)
-        self.assertIn(f"Unrecognised parameter 'UnknownDefaultFixtureParameter' in '{defaults}' at line {line}",result.stderr)
+        self.assertIn("Unrecognised parameter 'UnknownDefaultFixtureParameter'",result.stderr)
+        self.assertIn(f'legacy defaults from {defaults}',result.stderr)
+        self.assertIn('at line ',result.stderr)
         self.assertFalse(self.run.exists())
     @unittest.skipUnless(NATIVE_BINARY, 'Needs ES_PARAMCHECK_BINARY (provided by CTest)')
     def test_native_parser_reports_malformed_default_line(self):

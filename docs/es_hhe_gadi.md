@@ -28,6 +28,14 @@ enabled. The temperature is fixed at
 10,000 K. These choices define a controlled ES-HHe test, not an already
 recalibrated galaxy-feedback model.
 
+The effective defaults preserve values inherited from the L210 template's
+`DefaultsFile` and fill missing entries from this checkout's tracked defaults.
+Explicit input values retain precedence. The compatibility step omits the
+foreign `Flag_UseXrayMetallicity` default because mode 3 disables legacy X-ray
+heating; it does not implement that prescription. Other unknown keys, including
+this option if explicitly requested in the input template, still fail native
+validation. The external defaults and table directories are not modified.
+
 By default the source is monochromatic at 18 eV. This can ionize hydrogen but
 cannot directly ionize helium. Helium chemistry/recombination is implemented;
 an ionizing stellar SED is needed to exercise the helium channels. To use a
@@ -71,6 +79,9 @@ An invalid parameter file stops preparation before `qsub`.
 The prepare step does not submit a job. It copies the built binary, Python
 solver, input/default/simulation files, snapshot list, optional spectrum and
 build manifest into a new run directory, and records their SHA-256 hashes.
+The provenance directory retains `original_defaults.par`, `branch_defaults.par`,
+the merged `defaults.par` and `defaults_compatibility.json`, which records
+preserved, added and omitted values.
 The job checks these files before running. A pre-existing run directory is
 rejected; choose a new `RUN_DIR` for another run. The existing ES runs are
 untouched.
@@ -122,13 +133,16 @@ FFTW 3.3.10, GSL 2.7.1 and HDF5 1.10.10. The online adapter passed synthetic
 consecutive-snapshot tests at 1, 2 and 4 ranks, including empty slabs, physical
 source/time units, H/He recombination, density remapping and photon/electron/
 nucleus accounting. A two-event star-formation regression verifies that mode 3
-adds each event's new SFR once. The worker has nine integration tests; seventeen
+adds each event's new SFR once. The worker has nine integration tests; nineteen
 runner tests cover full-snapshot configuration, provenance, PBS launch, shell
 environment isolation and preparation without unused legacy recombination tables.
 CTest passes the actual Meraxes executable to these runner tests so they also
 exercise native parsing of the generated inputs, whitespace/CRLF handling and
 unknown or malformed parameter diagnostics. Standalone runner tests without
-`ES_PARAMCHECK_BINARY` use a command fixture and skip the four native-parser cases.
+`ES_PARAMCHECK_BINARY` use a command fixture and skip the five native-parser cases.
+The foreign-default regression verifies inherited calibration, explicit-input
+precedence, supported optional parameters, branch-default fallback and the
+recorded omission of the inactive X-ray metallicity option.
 These tests do not require or replace a full L10 merger-tree run.
 
 A dilute 32^3 synthetic snapshot with one 18 eV source completed in 0.62 s
