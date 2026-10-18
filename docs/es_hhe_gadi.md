@@ -61,6 +61,13 @@ bash tools/gadi_es_l10.sh prepare
 qsub -v "RUN_DIR=$RUN_DIR" "$RUN_DIR/submit.pbs"
 ```
 
+Before creating a run directory, `prepare` invokes the built executable with
+`--check-params` on the generated input and its simulation/default parameters.
+This runs the native parser and parameter consistency checks without creating
+output or loading tables, grids or merger trees. Blank/indented-comment and CRLF
+lines are accepted; unknown parameters report their name, file and line on stderr.
+An invalid parameter file stops preparation before `qsub`.
+
 The prepare step does not submit a job. It copies the built binary, Python
 solver, input/default/simulation files, snapshot list, optional spectrum and
 build manifest into a new run directory, and records their SHA-256 hashes.
@@ -115,9 +122,13 @@ FFTW 3.3.10, GSL 2.7.1 and HDF5 1.10.10. The online adapter passed synthetic
 consecutive-snapshot tests at 1, 2 and 4 ranks, including empty slabs, physical
 source/time units, H/He recombination, density remapping and photon/electron/
 nucleus accounting. A two-event star-formation regression verifies that mode 3
-adds each event's new SFR once. The worker has nine integration tests; thirteen
+adds each event's new SFR once. The worker has nine integration tests; seventeen
 runner tests cover full-snapshot configuration, provenance, PBS launch, shell
 environment isolation and preparation without unused legacy recombination tables.
+CTest passes the actual Meraxes executable to these runner tests so they also
+exercise native parsing of the generated inputs, whitespace/CRLF handling and
+unknown or malformed parameter diagnostics. Standalone runner tests without
+`ES_PARAMCHECK_BINARY` use a command fixture and skip the four native-parser cases.
 These tests do not require or replace a full L10 merger-tree run.
 
 A dilute 32^3 synthetic snapshot with one 18 eV source completed in 0.62 s

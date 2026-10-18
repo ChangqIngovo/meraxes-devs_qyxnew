@@ -1,5 +1,6 @@
 #define _MAIN
 #include <fenv.h>
+#include <string.h>
 #include <sys/stat.h>
 
 #include "init.h"
@@ -20,10 +21,12 @@ int main(int argc, char** argv)
   struct stat filestatus;
 
   // deal with any input arguments
-  if (argc != 2) {
-    mlog("\n  usage: %s <parameterfile>\n\n", MLOG_MESG, argv[0]);
+  const bool check_params = (argc == 3 && strcmp(argv[1], "--check-params") == 0);
+  if (!check_params && (argc != 2 || strcmp(argv[1], "--check-params") == 0)) {
+    mlog_error("usage: %s [--check-params] <parameterfile>", argv[0]);
     ABORT(EXIT_FAILURE);
   }
+  char* parameter_file = argv[check_params ? 2 : 1];
 
   // set the rounding mode
   if (!fesetround(1)) // nearest number
@@ -33,7 +36,18 @@ int main(int argc, char** argv)
   }
 
   // read the input parameter file
-  read_parameter_file(argv[1], 0);
+  read_parameter_file(parameter_file, 0);
+
+  // Validate the complete native parameter chain without creating output or
+  // reading simulation grids, trees, or physical tables.
+  if (check_params) {
+    if (run_globals.mpi_rank == 0) {
+      fprintf(stdout, "\nParameter check passed: %s\n", parameter_file);
+      fflush(stdout);
+    }
+    MPI_Finalize();
+    return EXIT_SUCCESS;
+  }
 
   // Check to see if the output directory exists and if not, create it
   if (stat(run_globals.params.OutputDir, &filestatus) != 0)

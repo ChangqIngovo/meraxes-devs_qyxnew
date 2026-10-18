@@ -12,6 +12,7 @@ import unittest
 
 SOURCE = Path(__file__).resolve().parents[2]
 HEAD = subprocess.check_output(['git', '-C', str(SOURCE), 'rev-parse', 'HEAD'], text=True).strip()
+NATIVE_BINARY = os.environ.get('ES_PARAMCHECK_BINARY')
 
 class Scripts(unittest.TestCase):
     def setUp(self):
@@ -30,11 +31,14 @@ class Scripts(unittest.TestCase):
         shutil.copy2(SOURCE/'input/params/simulations/Genesis_L10_N512.par',self.repo/'input/params/simulations/Genesis_L10_N512.par')
         shutil.copy2(SOURCE/'tools/gadi_es_l10.pbs',self.repo/'tools/gadi_es_l10.pbs')
         (self.repo/'tools/es_hhe/snapshot_worker.py').write_text('# fixture\n')
-        (self.base/'defaults.par').write_text('NSteps : 1\n')
+        shutil.copy2(SOURCE/'input/params/defaults.par',self.base/'defaults.par')
         self.template = self.base/'template.par'
         self.template.write_text(f'DefaultsFile : {self.base}/defaults.par\nOutputSnapshots : 60:120\nSimulationDir : /stale/l210\nBoxSize : 210\nReionGridDim : 512\nSfEfficiency : 0.1476\nReionNionPhotPerBary : 6000\nTargetSnaps : 48,58,75,119\n')
         binary=self.build/'bin/meraxes'
-        binary.write_text('#!/bin/sh\necho "Fixture binary must not execute; expected mock mpirun" >&2\nexit 97\n')
+        if NATIVE_BINARY:
+            shutil.copy2(NATIVE_BINARY,binary)
+        else:
+            binary.write_text('#!/bin/sh\nif [ "$#" -eq 2 ] && [ "$1" = "--check-params" ]; then exit 0; fi\necho "Fixture binary must not execute a simulation; expected mock mpirun" >&2\nexit 97\n')
         binary.chmod(0o755)
         (self.build/'CMakeCache.txt').write_text('CALC_MAGS:BOOL=OFF\nUSE_MINI_HALOS:BOOL=OFF\n')
         (self.build/'pc_build_manifest.json').write_text(json.dumps({'commit':HEAD,'binary_sha256':hashlib.sha256(binary.read_bytes()).hexdigest()}))
@@ -62,7 +66,9 @@ class Scripts(unittest.TestCase):
         self.assertEqual(result.returncode==0,ok,result.stdout+result.stderr)
         return result
     def test_prepare_preserves_calibration_all_snapshots(self):
-        self.prepare()
+        result=self.prepare()
+        self.assertIn('Native parameter check: passed',result.stdout)
+        self.assertFalse((self.run/'output').exists())
         config=(self.run/'input.par').read_text()
         for value in ['OutputSnapshots : :','TargetSnaps : :','BoxSize : 10.0','ReionGridDim : 32','SfEfficiency : 0.1476','Flag_PhotonConservation : 3','Flag_IncludeRecombinations : 1','Flag_Compute21cmBrightTemp : 0']:
             self.assertIn(value,config)
@@ -108,6 +114,49 @@ class Scripts(unittest.TestCase):
         self.env['ES_SPECTRUM']=str(spectrum)
         self.prepare()
         self.assertEqual((self.run/'provenance/source_spectrum.txt').read_bytes(),spectrum.read_bytes())
+    @unittest.skipUnless(NATIVE_BINARY, 'Needs ES_PARAMCHECK_BINARY (provided by CTest)')
+    def test_native_parser_accepts_blank_lines_and_comments(self):
+        with self.template.open('a') as stream:
+            stream.write('   \n\t\n  # indented comment\n')
+        defaults=self.base/'defaults.par'
+        defaults.write_bytes(defaults.read_bytes().replace(b'\n',b'\r\n')
+                             + b'\r\n   \r\n\t# comment in CRLF file\r\n')
+        self.prepare()
+        self.assertFalse((self.run/'output').exists())
+        # The prepared files themselves, with their final provenance paths,
+        # must also pass. No simulation data are present in this fixture.
+        result=subprocess.run([str(self.run/'meraxes'),'--check-params',str(self.run/'input.par')],
+                              env=self.shell_environment(),text=True,capture_output=True)
+        self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+        self.assertIn('Parameter check passed:',result.stdout)
+        self.assertFalse((self.run/'output').exists())
+    @unittest.skipUnless(NATIVE_BINARY, 'Needs ES_PARAMCHECK_BINARY (provided by CTest)')
+    def test_native_parser_reports_unknown_template_parameter(self):
+        with self.template.open('a') as stream:
+            stream.write('UnknownESFixtureParameter : 1\n')
+        result=self.prepare(False)
+        self.assertIn("Unrecognised parameter 'UnknownESFixtureParameter'",result.stderr)
+        self.assertIn('input.par',result.stderr)
+        self.assertIn('at line ',result.stderr)
+        self.assertFalse(self.run.exists())
+    @unittest.skipUnless(NATIVE_BINARY, 'Needs ES_PARAMCHECK_BINARY (provided by CTest)')
+    def test_native_parser_reports_unknown_default_parameter(self):
+        defaults=self.base/'defaults.par'
+        line=len(defaults.read_text().splitlines())+1
+        with defaults.open('a') as stream:
+            stream.write('UnknownDefaultFixtureParameter : 1\n')
+        result=self.prepare(False)
+        self.assertIn(f"Unrecognised parameter 'UnknownDefaultFixtureParameter' in '{defaults}' at line {line}",result.stderr)
+        self.assertFalse(self.run.exists())
+    @unittest.skipUnless(NATIVE_BINARY, 'Needs ES_PARAMCHECK_BINARY (provided by CTest)')
+    def test_native_parser_reports_malformed_default_line(self):
+        defaults=self.base/'defaults.par'
+        line=len(defaults.read_text().splitlines())+1
+        with defaults.open('a') as stream:
+            stream.write('missing separator here\n')
+        result=self.prepare(False)
+        self.assertIn(f"Invalid parameter syntax in '{defaults}' at line {line}",result.stderr)
+        self.assertFalse(self.run.exists())
     def pbs(self):
         env=self.shell_environment(PBS_NCPUS='32',PBS_JOBID='fixture.gadi-pbs')
         return subprocess.run(['bash','--noprofile','--norc','-c','module() { :; }; export -f module; bash --noprofile --norc "$RUN_DIR/submit.pbs"'],env=env,text=True,capture_output=True)

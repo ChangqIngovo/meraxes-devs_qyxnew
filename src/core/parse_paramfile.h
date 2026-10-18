@@ -14,6 +14,7 @@ typedef struct entry_t entry_t;
 struct entry_t
 {
   int level;
+  int line;
   char key[64];
   char value[256];
 };

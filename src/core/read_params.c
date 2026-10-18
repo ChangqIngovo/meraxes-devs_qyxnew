@@ -147,7 +147,8 @@ static void check_problem_params(run_params_t* run_params)
   }
 }
 
-static void store_params(entry_t entry[123],
+static void store_params(const char* fname,
+                         entry_t entry[PARAM_MAX_ENTRIES],
                          int n_entries,
                          char** params_tag,
                          int n_param,
@@ -175,7 +176,7 @@ static void store_params(entry_t entry[123],
       }
 
     if (tag_index < 0) {
-      mlog("<WARNING> %s is an unrecognised parameter (prefix='%s').", MLOG_MESG, entry[i_entry].key, prefix);
+      mlog_error("Unrecognised parameter '%s' in '%s' at line %d (prefix='%s').", key, fname, entry[i_entry].line, prefix);
       ABORT(EXIT_FAILURE);
     }
 
@@ -1712,17 +1713,17 @@ void read_parameter_file(char* fname, int mode)
 
     // Parse the user parameter file first
     n_entries = parse_paramfile(fname, entry);
-    store_params(entry, n_entries, params_tag, n_param, used_tag, params_type, params_addr);
+    store_params(fname, entry, n_entries, params_tag, n_param, used_tag, params_type, params_addr);
 
     // Now parse the simulation parameter file
     if (strlen(run_params->SimParamsFile) > 0) {
       n_entries = parse_paramfile(run_params->SimParamsFile, entry);
-      store_params(entry, n_entries, params_tag, n_param, used_tag, params_type, params_addr);
+      store_params(run_params->SimParamsFile, entry, n_entries, params_tag, n_param, used_tag, params_type, params_addr);
     }
 
     // Finally, parse the default parameter file
     n_entries = parse_paramfile(run_params->DefaultsFile, entry);
-    store_params(entry, n_entries, params_tag, n_param, used_tag, params_type, params_addr);
+    store_params(run_params->DefaultsFile, entry, n_entries, params_tag, n_param, used_tag, params_type, params_addr);
 
     // Check to see if we are missing any required parameters
     for (ii = 0; ii < n_param; ii++)

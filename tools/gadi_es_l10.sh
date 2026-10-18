@@ -29,6 +29,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from datetime import datetime, timezone
 
 import h5py
@@ -179,6 +180,19 @@ for key, value in overrides.items():
     effective = replace(effective, key, value)
 if run.exists():
     raise ValueError(f'Run directory already exists; choose a new RUN_DIR: {run}')
+# Check the exact generated parameters with the real executable before creating
+# a run or requesting resources. Use the existing sources for the two files
+# that have not yet been copied into provenance; all effective values agree.
+with tempfile.TemporaryDirectory(prefix='meraxes-paramcheck-') as directory:
+    checked_input = Path(directory) / 'input.par'
+    checked_text = replace(effective, 'DefaultsFile', defaults)
+    checked_text = replace(checked_text, 'SimParamsFile', sim_file)
+    checked_input.write_text(checked_text)
+    check = subprocess.run([str(binary), '--check-params', str(checked_input)],
+                           text=True, capture_output=True)
+    if check.returncode != 0:
+        raise RuntimeError(f'Native parameter check failed for input generated from {template}:\n'
+                           + check.stdout + check.stderr)
 run.mkdir(parents=True, exist_ok=False)
 (run / 'provenance').mkdir()
 shutil.copy2(binary, run / 'meraxes')
@@ -207,6 +221,7 @@ record = {
 }
 (run / 'run_manifest.json').write_text(json.dumps(record, indent=2) + '\n')
 print(f'Prepared: {run}')
+print('Native parameter check: passed')
 print(f'Grid: {grid}^3; snapshots: 0 through {len(scale_factors)-1}')
 print(f'Outputs: {run / "output"}')
 print(f'Source: {record["source_spectrum"]}')

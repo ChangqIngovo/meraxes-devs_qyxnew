@@ -66,6 +66,7 @@ int parse_paramfile(char* fname, entry_t entry[PARAM_MAX_ENTRIES])
   int level_change;
   int last_level;
   int counter;
+  int line = 0;
   regex_t reg;
   const char* regex_text = "[[:space:]]*([^[:space:]^#]+)[[:space:]]*:[[:space:]]*([^#]*)";
 
@@ -82,11 +83,8 @@ int parse_paramfile(char* fname, entry_t entry[PARAM_MAX_ENTRIES])
   level_change = 0;
   last_level = 0;
   while (fgets(buffer, PARAM_MAX_LINE_LEN, fin) != NULL) {
-    entry[counter].key[0] = '\0';
-    entry[counter].value[0] = '\0';
-    entry[counter].level = last_level;
-    entry[counter].level += level_change;
-    last_level = entry[counter].level;
+    line++;
+    last_level += level_change;
 
     level_change = 0;
     for (int ii = 0; buffer[ii]; ii++) {
@@ -98,10 +96,28 @@ int parse_paramfile(char* fname, entry_t entry[PARAM_MAX_ENTRIES])
     buffer[strcspn(buffer, "#")] = '\0';
     buffer[strcspn(buffer, "\n")] = '\0';
 
-    if (buffer[0] != '\0') {
-      match_regex(&reg, buffer, &(entry[counter]));
-      counter++;
+    // Removing an indented comment (or a CRLF newline) can leave whitespace.
+    // Such lines are not parameter entries and must not reach store_params().
+    const char* content = buffer;
+    while (isspace((unsigned char)*content))
+      content++;
+    if (*content == '\0')
+      continue;
+
+    if (counter >= PARAM_MAX_ENTRIES) {
+      mlog_error("Too many parameters in '%s' at line %d (maximum %d).", fname, line, PARAM_MAX_ENTRIES);
+      ABORT(EXIT_FAILURE);
     }
+    entry[counter].key[0] = '\0';
+    entry[counter].value[0] = '\0';
+    entry[counter].level = last_level;
+    entry[counter].line = line;
+    match_regex(&reg, buffer, &(entry[counter]));
+    if (entry[counter].key[0] == '\0') {
+      mlog_error("Invalid parameter syntax in '%s' at line %d: %s", fname, line, content);
+      ABORT(EXIT_FAILURE);
+    }
+    counter++;
   }
 
   regfree(&reg);
