@@ -14,7 +14,7 @@ case "$es_action" in
 esac
 
 export PC_REPO="$es_repo" PC_BUILD_DIR="$es_build"
-export ES_PYTHON=${ES_PYTHON:-/g/data/qp00/sz4640/venvs/meraxes-es/bin/python}
+export ES_PYTHON=${ES_PYTHON:-/g/data/qp00/sz4640/venvs/tauefix/bin/python}
 test -x "$ES_PYTHON" || {
     echo "ES_PYTHON is not executable: $ES_PYTHON (see docs/es_hhe_gadi.md)" >&2; exit 2;
 }
@@ -39,8 +39,8 @@ import scipy
 repo = Path(os.environ['PC_REPO']).resolve()
 build = Path(os.environ['PC_BUILD_DIR']).resolve()
 python = Path(os.path.abspath(os.environ['ES_PYTHON']))  # Keep the venv interpreter path.
-template = Path(os.environ.get('L10_INPUT', '/g/data/qp00/sz4640/Results/Genesis_L210_N4320/Fiducial_0.0propscale/input.par')).resolve()
 sim_file = repo / 'input/params/simulations/Genesis_L10_N512.par'
+defaults = (repo / 'input/params/defaults.par').resolve(strict=True)
 commit = subprocess.check_output(['git', '-C', str(repo), 'rev-parse', 'HEAD'], text=True).strip()
 subprocess.run(['git', '-C', str(repo), 'diff', '--quiet', 'HEAD', '--'], check=True)
 run = Path(os.environ.get('RUN_DIR', f'/g/data/qp00/sz4640/pc_runs/l10_es_hhe_{commit[:8]}')).resolve()
@@ -75,9 +75,8 @@ def replace(text, key, value):
     pattern = r'(?m)^[ \t]*' + re.escape(key) + r'[ \t]*:[^\r\n]*$'
     return re.sub(pattern, lambda _: line, text) if re.search(pattern, text) else text.rstrip() + '\n' + line + '\n'
 
-original = template.read_text()
-given = params(original)
-simulation = params(sim_file.read_text())
+simulation_text = sim_file.read_text()
+simulation = params(simulation_text, sim_file)
 sim_dir = Path(os.environ.get('L10_SIMULATION_DIR', simulation['SimulationDir'])).resolve()
 scale_file = sim_dir / 'a_list.txt'
 scale_factors = [float(value) for value in scale_file.read_text().split()]
@@ -102,41 +101,6 @@ cache = (build / 'CMakeCache.txt').read_text()
 for name in ('CALC_MAGS', 'USE_MINI_HALOS'):
     if re.search(r'(?m)^' + name + r':BOOL=(ON|TRUE|1)$', cache):
         raise ValueError(f'This runner requires {name}=OFF; run the build command first')
-defaults_value = given.get('DefaultsFile', '')
-if not defaults_value:
-    raise ValueError('The input template must identify DefaultsFile')
-defaults = Path(defaults_value.replace('@INPUT_FILE_DIR@', str(repo / 'input')))
-defaults = defaults if defaults.is_absolute() else template.parent / defaults
-defaults = defaults.resolve(strict=True)
-branch_defaults = (repo / 'input/params/defaults.par').resolve(strict=True)
-legacy_defaults_bytes = defaults.read_bytes()
-legacy_defaults_text = legacy_defaults_bytes.decode('utf-8')
-legacy_defaults_values = params(legacy_defaults_text, defaults)
-branch_defaults_bytes = branch_defaults.read_bytes()
-branch_defaults_text = branch_defaults_bytes.decode('utf-8')
-branch_defaults_values = params(branch_defaults_text, branch_defaults)
-# Preserve inherited galaxy/source values. The checked-out defaults supply only
-# missing values; they must not silently replace a different L210 calibration.
-# This narrowly named foreign option controls legacy X-ray heating, which this
-# mode-3 runner explicitly disables. All other unknown keys reach native checks.
-inactive_foreign_defaults = {
-    'Flag_UseXrayMetallicity': 'Mode 3 disables legacy X-ray heating (Flag_IncludeSpinTemp=0).',
-}
-omitted_defaults = {}
-effective_defaults = branch_defaults_text
-for key, value in legacy_defaults_values.items():
-    if key in inactive_foreign_defaults and key not in branch_defaults_values:
-        omitted_defaults[key] = {'value': value, 'reason': inactive_foreign_defaults[key]}
-    else:
-        effective_defaults = replace(effective_defaults, key, value)
-defaults_record = {
-    'legacy_source': str(defaults), 'branch_source': str(branch_defaults),
-    'preserved_legacy_values': {key: value for key, value in legacy_defaults_values.items()
-                                if key not in omitted_defaults},
-    'added_branch_values': {key: value for key, value in branch_defaults_values.items()
-                            if key not in legacy_defaults_values},
-    'omitted_inactive_values': omitted_defaults,
-}
 worker_source = repo / 'tools/es_hhe'
 if not (worker_source / 'snapshot_worker.py').is_file():
     raise ValueError('Missing tools/es_hhe/snapshot_worker.py; pull the mode-3 implementation first')
@@ -154,8 +118,9 @@ if spectrum is not None:
             or (rows[:, 1] < 0).any() or not numpy.any(rows[:, 1] > 0)):
         raise ValueError('ES_SPECTRUM needs finite energy[eV] in [13.6,1000], nonnegative photon weights')
 
-overrides = dict(simulation)  # Remove any stale L210 cosmology, particle/grid size and units.
-overrides.update({
+# The L10 simulation file and this checkout's defaults are the only parameter
+# sources. Runtime mode/output/table settings are applied to a fresh L10 input.
+overrides = {
     'DefaultsFile': run / 'provenance/defaults.par',
     'SimParamsFile': run / 'provenance/Genesis_L10_N512.par',
     'SimulationDir': sim_dir,
@@ -196,7 +161,7 @@ overrides.update({
     'StellarFeedbackDir': tables / 'stellar_feedback_tables/Kroupa',
     'TablesForXHeatingDir': tables / '21cmFAST-tables',
     'RecombinationDir': tables / 'recombination_tables',
-})
+}
 # Mode 3 evolves H/He recombination in the ES solver. init.c skips init_MHR()
 # for this mode, so the legacy RecombinationDir is not a runtime dependency.
 # Keep its configured path without requiring or creating the unused directory.
@@ -204,35 +169,29 @@ for key in ('PhotometricTablesDir', 'CoolingFuncsDir', 'StellarFeedbackDir',
             'TablesForXHeatingDir'):
     if not overrides[key].is_dir():
         raise ValueError(f'Missing existing input table directory {key}: {overrides[key]}')
-effective = original
+effective = simulation_text
 for key, value in overrides.items():
     effective = replace(effective, key, value)
 if run.exists():
     raise ValueError(f'Run directory already exists; choose a new RUN_DIR: {run}')
-# Check the generated input and merged defaults before creating a run.
+# Check the generated L10 input and branch defaults before creating a run.
 # Only provenance paths differ from the final copies; effective values agree.
 with tempfile.TemporaryDirectory(prefix='meraxes-paramcheck-') as directory:
     checked_input = Path(directory) / 'input.par'
-    checked_defaults = Path(directory) / 'defaults.par'
-    checked_defaults.write_text(effective_defaults)
-    checked_text = replace(effective, 'DefaultsFile', checked_defaults)
+    checked_text = replace(effective, 'DefaultsFile', defaults)
     checked_text = replace(checked_text, 'SimParamsFile', sim_file)
     checked_input.write_text(checked_text)
     check = subprocess.run([str(binary), '--check-params', str(checked_input)],
                            text=True, capture_output=True)
     if check.returncode != 0:
-        raise RuntimeError(f'Native parameter check failed for input generated from {template}, '
-                           f'with legacy defaults from {defaults}:\n'
+        raise RuntimeError(f'Native parameter check failed for L10 simulation {sim_file}, '
+                           f'with branch defaults {defaults}:\n'
                            + check.stdout + check.stderr)
 run.mkdir(parents=True, exist_ok=False)
 (run / 'provenance').mkdir()
 shutil.copy2(binary, run / 'meraxes')
 shutil.copytree(worker_source, run / 'solver', ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
-shutil.copy2(template, run / 'provenance/original_input.par')
-(run / 'provenance/defaults.par').write_text(effective_defaults)
-(run / 'provenance/original_defaults.par').write_bytes(legacy_defaults_bytes)
-(run / 'provenance/branch_defaults.par').write_bytes(branch_defaults_bytes)
-(run / 'provenance/defaults_compatibility.json').write_text(json.dumps(defaults_record, indent=2) + '\n')
+shutil.copy2(defaults, run / 'provenance/defaults.par')
 shutil.copy2(sim_file, run / 'provenance/Genesis_L10_N512.par')
 shutil.copy2(scale_file, run / 'provenance/a_list.txt')
 shutil.copy2(manifest_file, run / 'provenance/pc_build_manifest.json')
@@ -247,7 +206,7 @@ record = {
     'grid': grid, 'snapshot_count': len(scale_factors), 'output_snapshots': snapshots,
     'first_redshift': 1 / scale_factors[0] - 1, 'last_redshift': 1 / scale_factors[-1] - 1,
     'source_spectrum': str(spectrum) if spectrum else 'controlled monochromatic 18 eV test',
-    'defaults_compatibility': defaults_record,
+    'simulation_parameter_file': str(sim_file), 'defaults_parameter_file': str(defaults),
     'max_step_myr': max_step, 'radius_ratio': ratio,
     'python_version': sys.version,
     'python_packages': {'numpy': numpy.__version__, 'scipy': scipy.__version__, 'h5py': h5py.__version__},
@@ -257,8 +216,8 @@ record = {
 (run / 'run_manifest.json').write_text(json.dumps(record, indent=2) + '\n')
 print(f'Prepared: {run}')
 print('Native parameter check: passed')
-for key, item in omitted_defaults.items():
-    print(f'Omitted inactive legacy default {key}={item["value"]}: {item["reason"]}')
+print(f'Simulation parameters: {sim_file}')
+print(f'Default parameters: {defaults}')
 print(f'Grid: {grid}^3; snapshots: 0 through {len(scale_factors)-1}')
 print(f'Outputs: {run / "output"}')
 print(f'Source: {record["source_spectrum"]}')

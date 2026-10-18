@@ -33,9 +33,8 @@ class Scripts(unittest.TestCase):
         shutil.copy2(SOURCE/'input/params/defaults.par',self.repo/'input/params/defaults.par')
         shutil.copy2(SOURCE/'tools/gadi_es_l10.pbs',self.repo/'tools/gadi_es_l10.pbs')
         (self.repo/'tools/es_hhe/snapshot_worker.py').write_text('# fixture\n')
-        shutil.copy2(SOURCE/'input/params/defaults.par',self.base/'defaults.par')
-        self.template = self.base/'template.par'
-        self.template.write_text(f'DefaultsFile : {self.base}/defaults.par\nOutputSnapshots : 60:120\nSimulationDir : /stale/l210\nBoxSize : 210\nReionGridDim : 512\nSfEfficiency : 0.1476\nReionNionPhotPerBary : 6000\nTargetSnaps : 48,58,75,119\n')
+        self.sim_params = self.repo/'input/params/simulations/Genesis_L10_N512.par'
+        self.defaults = self.repo/'input/params/defaults.par'
         binary=self.build/'bin/meraxes'
         if NATIVE_BINARY:
             shutil.copy2(NATIVE_BINARY,binary)
@@ -51,8 +50,8 @@ class Scripts(unittest.TestCase):
         mpirun.write_text('#!/usr/bin/env python3\nimport json,os,sys\nfrom pathlib import Path\nPath(os.environ["RUN_DIR"],"invocation.json").write_text(json.dumps(sys.argv))\n')
         mpirun.chmod(0o755)
         self.run=self.base/'run'
-        self.env={**os.environ,'PC_REPO':str(self.repo),'PC_BUILD_DIR':str(self.build),'L10_INPUT':str(self.template),'L10_SIMULATION_DIR':str(self.sim),'L10_TABLES':str(self.tables),'ES_PYTHON':sys.executable,'RUN_DIR':str(self.run),'PATH':str(self.base/'commands')+os.pathsep+os.environ['PATH']}
-        for name in ['ES_SPECTRUM','ES_RADIUS_RATIO','ES_MAX_STEP_MYR']:
+        self.env={**os.environ,'PC_REPO':str(self.repo),'PC_BUILD_DIR':str(self.build),'L10_SIMULATION_DIR':str(self.sim),'L10_TABLES':str(self.tables),'ES_PYTHON':sys.executable,'RUN_DIR':str(self.run),'PATH':str(self.base/'commands')+os.pathsep+os.environ['PATH']}
+        for name in ['L10_INPUT','ES_SPECTRUM','ES_RADIUS_RATIO','ES_MAX_STEP_MYR']:
             self.env.pop(name,None)
     def shell_environment(self, **updates):
         # Noninteractive bash still reads BASH_ENV, and imported functions take
@@ -67,16 +66,44 @@ class Scripts(unittest.TestCase):
         result=subprocess.run(['bash','--noprofile','--norc',str(SOURCE/'tools/gadi_es_l10.sh'),'prepare'],env=self.shell_environment(),text=True,capture_output=True)
         self.assertEqual(result.returncode==0,ok,result.stdout+result.stderr)
         return result
-    def test_prepare_preserves_calibration_all_snapshots(self):
+    def assert_l10_configuration(self):
+        config=(self.run/'input.par').read_text()
+        for key,value in [('OutputSnapshots',':'),('TargetSnaps',':'),('BoxSize','10.0'),
+                          ('ReionGridDim','32'),('Flag_PhotonConservation','3'),
+                          ('Flag_IncludeRecombinations','1'),('Flag_Compute21cmBrightTemp','0')]:
+            self.assertRegex(config,rf'(?m)^\s*{key}\s*:\s*{re.escape(value)}\s*$')
+        self.assertIn(f'DefaultsFile : {self.run}/provenance/defaults.par',config)
+        self.assertIn(f'SimParamsFile : {self.run}/provenance/Genesis_L10_N512.par',config)
+        self.assertIn(f'SimulationDir : {self.sim}',config)
+        # Source/galaxy parameters must come from this branch's defaults, not
+        # an unrelated calibrated L210 input or its foreign defaults file.
+        for key in ['SfEfficiency','ReionNionPhotPerBary','SnReheatEff']:
+            self.assertNotRegex(config,rf'(?m)^\s*{key}\s*:')
+        self.assertNotIn('L210',config)
+        self.assertEqual((self.run/'provenance/defaults.par').read_bytes(),self.defaults.read_bytes())
+        self.assertEqual((self.run/'provenance/Genesis_L10_N512.par').read_bytes(),self.sim_params.read_bytes())
+        if NATIVE_BINARY:
+            check=subprocess.run([str(self.run/'meraxes'),'--check-params',str(self.run/'input.par')],
+                                 env=self.shell_environment(),text=True,capture_output=True)
+            self.assertEqual(check.returncode,0,check.stdout+check.stderr)
+            for key,value in [('SfEfficiency','0.08'),('ReionNionPhotPerBary','4000'),
+                              ('SnReheatEff','10'),('BoxSize','10'),('ReionGridDim','32')]:
+                self.assertRegex(check.stdout,rf'\b{key}\s+{re.escape(value)}(?:\s|$)')
+    def test_prepare_uses_l10_and_branch_defaults_all_snapshots(self):
         result=self.prepare()
         self.assertIn('Native parameter check: passed',result.stdout)
         self.assertFalse((self.run/'output').exists())
-        config=(self.run/'input.par').read_text()
-        for value in ['OutputSnapshots : :','TargetSnaps : :','BoxSize : 10.0','ReionGridDim : 32','SfEfficiency : 0.1476','Flag_PhotonConservation : 3','Flag_IncludeRecombinations : 1','Flag_Compute21cmBrightTemp : 0']:
-            self.assertIn(value,config)
+        self.assert_l10_configuration()
         record=json.loads((self.run/'run_manifest.json').read_text())
         self.assertEqual(record['snapshot_count'],3)
         self.assertEqual(record['commit'],HEAD)
+        self.assertEqual(record['simulation_parameter_file'],str(self.sim_params))
+        self.assertEqual(record['defaults_parameter_file'],str(self.defaults))
+        self.assertNotIn('defaults_compatibility',record)
+        for name in ['original_input.par','original_defaults.par','branch_defaults.par','defaults_compatibility.json']:
+            self.assertFalse((self.run/'provenance'/name).exists())
+        for name in ['provenance/defaults.par','provenance/Genesis_L10_N512.par']:
+            self.assertIn(name,record['files'])
         for name,digest in record['files'].items():
             self.assertEqual(hashlib.sha256((self.run/name).read_bytes()).hexdigest(),digest)
     def test_existing_run_not_rewritten(self):
@@ -106,8 +133,8 @@ class Scripts(unittest.TestCase):
         (self.sim/'a_list.txt').write_text('0.1\n0.05\n')
         self.prepare(False)
         self.assertFalse(self.run.exists())
-    def test_duplicate_template_rejected(self):
-        with self.template.open('a') as f:f.write('BoxSize : 10\n')
+    def test_duplicate_simulation_parameter_rejected(self):
+        with self.sim_params.open('a') as f:f.write('BoxSize : 10\n')
         self.prepare(False)
         self.assertFalse(self.run.exists())
     def test_explicit_sed_copied(self):
@@ -116,56 +143,41 @@ class Scripts(unittest.TestCase):
         self.env['ES_SPECTRUM']=str(spectrum)
         self.prepare()
         self.assertEqual((self.run/'provenance/source_spectrum.txt').read_bytes(),spectrum.read_bytes())
-    def test_foreign_defaults_preserve_calibration_and_fill_missing_values(self):
-        defaults=self.base/'defaults.par'
-        text=defaults.read_text()
-        text=re.sub(r'(?m)^SfEfficiency\s*:.*$', 'SfEfficiency : 0.2222', text)
-        text=re.sub(r'(?m)^SnReheatEff\s*:.*$', 'SnReheatEff : 7.123', text)
-        text=re.sub(r'(?m)^SnMetalRetentionFraction\s*:.*\n', '', text)
-        text+='Flag_UseXrayMetallicity : 1\nFFTW3WisdomDir : /fixture/wisdom\n'
-        original=text.replace('\n','\r\n').encode()
-        defaults.write_bytes(original)
-        result=self.prepare()
-        self.assertIn('Omitted inactive legacy default Flag_UseXrayMetallicity=1',result.stdout)
-        config=(self.run/'input.par').read_text()
-        effective=(self.run/'provenance/defaults.par').read_text()
-        self.assertIn('SfEfficiency : 0.1476',config)
-        self.assertIn('SfEfficiency : 0.2222',effective)
-        self.assertIn('SnReheatEff : 7.123',effective)
-        self.assertIn('FFTW3WisdomDir : /fixture/wisdom',effective)
-        self.assertNotIn('Flag_UseXrayMetallicity',effective)
-        self.assertEqual((self.run/'provenance/original_defaults.par').read_bytes(),original)
-        self.assertEqual(defaults.read_bytes(),original)
-        record=json.loads((self.run/'provenance/defaults_compatibility.json').read_text())
-        self.assertEqual(record['preserved_legacy_values']['SnReheatEff'],'7.123')
-        self.assertEqual(record['added_branch_values']['SnMetalRetentionFraction'],'0.0')
-        self.assertEqual(record['omitted_inactive_values']['Flag_UseXrayMetallicity']['value'],'1')
-        if NATIVE_BINARY:
-            check=subprocess.run([str(self.run/'meraxes'),'--check-params',str(self.run/'input.par')],
-                                 env=self.shell_environment(),text=True,capture_output=True)
-            self.assertEqual(check.returncode,0,check.stdout+check.stderr)
-            for key,value in [('SfEfficiency','0.1476'),('SnReheatEff','7.123'),
-                              ('SnMetalRetentionFraction','0'),('FFTW3WisdomDir','/fixture/wisdom')]:
-                self.assertRegex(check.stdout,rf'\b{key}\s+{re.escape(value)}(?:\s|$)')
+    def test_stale_l10_input_missing_file_is_ignored(self):
+        missing=self.base/'nonexistent_l210_input.par'
+        self.env['L10_INPUT']=str(missing)
+        self.prepare()
+        self.assert_l10_configuration()
+        self.assertFalse(missing.exists())
+    def test_stale_l10_input_cannot_import_foreign_parameters(self):
+        foreign_defaults=self.base/'foreign_defaults.par'
+        foreign_defaults.write_text('SfEfficiency : 0.2222\nXrayLogLNorm : 40\nFlag_UseXrayMetallicity : 1\n')
+        foreign_input=self.base/'foreign_input.par'
+        foreign_input.write_text(f'DefaultsFile : {foreign_defaults}\nSimulationDir : /stale/L210\n'
+                                 'BoxSize : 210\nReionGridDim : 512\nSfEfficiency : 0.1476\n'
+                                 'ReionNionPhotPerBary : 6000\nUnknownForeignInput : 1\n')
+        original={path:path.read_bytes() for path in [foreign_input,foreign_defaults]}
+        self.env['L10_INPUT']=str(foreign_input)
+        self.prepare()
+        self.assert_l10_configuration()
+        for path,data in original.items():
+            self.assertEqual(path.read_bytes(),data)
+        for path in [self.run/'input.par',self.run/'provenance/defaults.par',self.run/'run_manifest.json']:
+            for foreign_name in ['XrayLogLNorm','Flag_UseXrayMetallicity','UnknownForeignInput',str(foreign_input),str(foreign_defaults)]:
+                self.assertNotIn(foreign_name,path.read_text())
         self.assert_pbs_launch()
     @unittest.skipUnless(NATIVE_BINARY, 'Needs ES_PARAMCHECK_BINARY (provided by CTest)')
-    def test_foreign_option_in_explicit_input_is_not_silently_removed(self):
-        with self.template.open('a') as stream:
-            stream.write('Flag_UseXrayMetallicity : 1\n')
-        result=self.prepare(False)
-        self.assertIn("Unrecognised parameter 'Flag_UseXrayMetallicity'",result.stderr)
-        self.assertFalse(self.run.exists())
-    @unittest.skipUnless(NATIVE_BINARY, 'Needs ES_PARAMCHECK_BINARY (provided by CTest)')
     def test_native_parser_accepts_blank_lines_and_comments(self):
-        with self.template.open('a') as stream:
+        with self.sim_params.open('a') as stream:
             stream.write('   \n\t\n  # indented comment\n')
-        defaults=self.base/'defaults.par'
+        defaults=self.defaults
         defaults.write_bytes(defaults.read_bytes().replace(b'\n',b'\r\n')
                              + b'\r\n   \r\n\t# comment in CRLF file\r\n')
         self.prepare()
         self.assertFalse((self.run/'output').exists())
+        self.assert_l10_configuration()
         effective_defaults=self.run/'provenance/defaults.par'
-        effective_defaults.write_bytes(effective_defaults.read_bytes().replace(b'\n',b'\r\n')
+        effective_defaults.write_bytes(effective_defaults.read_bytes()
                                        + b'\r\n   \r\n\t# native CRLF comment\r\n')
         # The prepared files themselves, with their final provenance paths,
         # must also pass. No simulation data are present in this fixture.
@@ -175,8 +187,8 @@ class Scripts(unittest.TestCase):
         self.assertIn('Parameter check passed:',result.stdout)
         self.assertFalse((self.run/'output').exists())
     @unittest.skipUnless(NATIVE_BINARY, 'Needs ES_PARAMCHECK_BINARY (provided by CTest)')
-    def test_native_parser_reports_unknown_template_parameter(self):
-        with self.template.open('a') as stream:
+    def test_native_parser_reports_unknown_simulation_parameter(self):
+        with self.sim_params.open('a') as stream:
             stream.write('UnknownESFixtureParameter : 1\n')
         result=self.prepare(False)
         self.assertIn("Unrecognised parameter 'UnknownESFixtureParameter'",result.stderr)
@@ -185,17 +197,17 @@ class Scripts(unittest.TestCase):
         self.assertFalse(self.run.exists())
     @unittest.skipUnless(NATIVE_BINARY, 'Needs ES_PARAMCHECK_BINARY (provided by CTest)')
     def test_native_parser_reports_unknown_default_parameter(self):
-        defaults=self.base/'defaults.par'
+        defaults=self.defaults
         with defaults.open('a') as stream:
             stream.write('UnknownDefaultFixtureParameter : 1\n')
         result=self.prepare(False)
         self.assertIn("Unrecognised parameter 'UnknownDefaultFixtureParameter'",result.stderr)
-        self.assertIn(f'legacy defaults from {defaults}',result.stderr)
+        self.assertIn(str(defaults),result.stderr)
         self.assertIn('at line ',result.stderr)
         self.assertFalse(self.run.exists())
     @unittest.skipUnless(NATIVE_BINARY, 'Needs ES_PARAMCHECK_BINARY (provided by CTest)')
     def test_native_parser_reports_malformed_default_line(self):
-        defaults=self.base/'defaults.par'
+        defaults=self.defaults
         line=len(defaults.read_text().splitlines())+1
         with defaults.open('a') as stream:
             stream.write('missing separator here\n')

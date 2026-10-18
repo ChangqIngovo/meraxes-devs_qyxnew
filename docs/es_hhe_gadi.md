@@ -15,9 +15,11 @@ all-snapshot slice). Galaxy catalogues and supported grid fields are written at 
 snapshot, including after reionization. `CALC_MAGS=OFF`; photometric catalogues
 are not enabled by this run template.
 
-The input inherits the existing L210 template's galaxy/source parameters,
-replaces all simulation-dependent parameters with the L10 parameters, and
-reuses `/g/data/qp00/sz4640/meraxes-devs/input/` table directories. The old
+The input is generated directly from this checkout's
+`input/params/simulations/Genesis_L10_N512.par` and uses this checkout's
+`input/params/defaults.par` for galaxy/source parameters. Runtime settings select
+mode 3 and all snapshots. Existing table data are reused from
+`/g/data/qp00/sz4640/meraxes-devs/input/`. The old
 Sobacchi reionization feedback, UVB/spin-temperature closure, legacy 21-cm
 brightness-temperature/power-spectrum outputs and black-hole
 ionizing source are disabled in mode 3. H/He recombination is enabled in the
@@ -28,13 +30,11 @@ enabled. The temperature is fixed at
 10,000 K. These choices define a controlled ES-HHe test, not an already
 recalibrated galaxy-feedback model.
 
-The effective defaults preserve values inherited from the L210 template's
-`DefaultsFile` and fill missing entries from this checkout's tracked defaults.
-Explicit input values retain precedence. The compatibility step omits the
-foreign `Flag_UseXrayMetallicity` default because mode 3 disables legacy X-ray
-heating; it does not implement that prescription. Other unknown keys, including
-this option if explicitly requested in the input template, still fail native
-validation. The external defaults and table directories are not modified.
+No external input or defaults file is read or merged. The obsolete `L10_INPUT`
+environment variable is unused. Galaxy/source values therefore follow the
+current branch defaults, including `SfEfficiency=0.08` and
+`ReionNionPhotPerBary=4000`, rather than an external calibration. Unknown
+parameters in the L10 simulation or branch defaults fail native validation.
 
 By default the source is monochromatic at 18 eV. This can ionize hydrogen but
 cannot directly ionize helium. Helium chemistry/recombination is implemented;
@@ -50,23 +50,30 @@ fractions.
 Run on Gadi from a clean `Photon_conservation` checkout:
 
 ```bash
+(
 set -euo pipefail
-cd /g/data/qp00/sz4640/meraxes_photon_conservation
+export PC_REPO=/g/data/qp00/sz4640/meraxes_photon_conservation
+export PC_BUILD_DIR="$PC_REPO/build-pc-mpi"
+cd "$PC_REPO"
 git switch Photon_conservation
 git pull --ff-only origin Photon_conservation
 git submodule update --init --recursive
 
-module load python3/3.11.7
-export ES_PYTHON=/g/data/qp00/sz4640/venvs/meraxes-es/bin/python
-if [[ ! -x "$ES_PYTHON" ]]; then
-    python3 -m venv --system-site-packages "$(dirname "$(dirname "$ES_PYTHON")")"
-fi
-"$ES_PYTHON" -m pip install numpy scipy h5py
+module --force purge
+module load gcc/12.2.0 openmpi/4.1.4 cmake/3.24.2
+module load fftw3/3.3.10-nci1 hdf5/1.12.2p gsl/2.7.1
+module load python3/3.11.7 intel-mkl/2023.2.0
+source /g/data/qp00/sz4640/venvs/tauefix/bin/activate
+export ES_PYTHON="$VIRTUAL_ENV/bin/python"
+export PC_ENV_FILE=/dev/null
+export L10_TABLES=/g/data/qp00/sz4640/meraxes-devs/input
+unset L10_INPUT L10_SIMULATION_DIR
 
 bash tools/gadi_es_l10.sh build
-export RUN_DIR=/g/data/qp00/sz4640/pc_runs/l10_es_hhe_$(git rev-parse --short=8 HEAD)
+export RUN_DIR=/g/data/qp00/sz4640/pc_runs/l10_es_hhe_$(git rev-parse --short=8 HEAD)_$(date +%Y%m%d_%H%M%S)
 bash tools/gadi_es_l10.sh prepare
 qsub -v "RUN_DIR=$RUN_DIR" "$RUN_DIR/submit.pbs"
+)
 ```
 
 Before creating a run directory, `prepare` invokes the built executable with
@@ -79,9 +86,8 @@ An invalid parameter file stops preparation before `qsub`.
 The prepare step does not submit a job. It copies the built binary, Python
 solver, input/default/simulation files, snapshot list, optional spectrum and
 build manifest into a new run directory, and records their SHA-256 hashes.
-The provenance directory retains `original_defaults.par`, `branch_defaults.par`,
-the merged `defaults.par` and `defaults_compatibility.json`, which records
-preserved, added and omitted values.
+The provenance directory retains exact copies of the branch's `defaults.par`
+and `Genesis_L10_N512.par`. The manifest records both source paths.
 The job checks these files before running. A pre-existing run directory is
 rejected; choose a new `RUN_DIR` for another run. The existing ES runs are
 untouched.
@@ -90,10 +96,9 @@ Environment overrides before `prepare`:
 
 | Variable | Default / meaning |
 |---|---|
-| `L10_INPUT` | Existing `Results/Genesis_L210_N4320/Fiducial_0.0propscale/input.par` |
 | `L10_SIMULATION_DIR` | `SimulationDir` in `Genesis_L10_N512.par` |
 | `L10_TABLES` | `/g/data/qp00/sz4640/meraxes-devs/input` |
-| `ES_PYTHON` | `/g/data/qp00/sz4640/venvs/meraxes-es/bin/python` |
+| `ES_PYTHON` | `/g/data/qp00/sz4640/venvs/tauefix/bin/python` |
 | `ES_SPECTRUM` | Optional explicit source SED file |
 | `ES_MAX_STEP_MYR` | 1 Myr maximum chemistry/source time step |
 | `ES_RADIUS_RATIO` | 1.1 between successive ES radii |
@@ -139,10 +144,10 @@ environment isolation and preparation without unused legacy recombination tables
 CTest passes the actual Meraxes executable to these runner tests so they also
 exercise native parsing of the generated inputs, whitespace/CRLF handling and
 unknown or malformed parameter diagnostics. Standalone runner tests without
-`ES_PARAMCHECK_BINARY` use a command fixture and skip the five native-parser cases.
-The foreign-default regression verifies inherited calibration, explicit-input
-precedence, supported optional parameters, branch-default fallback and the
-recorded omission of the inactive X-ray metallicity option.
+`ES_PARAMCHECK_BINARY` use a command fixture and skip the four native-parser cases.
+The input-source regressions verify the L10 volume and grid, branch-default
+galaxy/source values and exact provenance copies. Stale `L10_INPUT` values,
+including nonexistent paths or incompatible external files, have no effect.
 These tests do not require or replace a full L10 merger-tree run.
 
 A dilute 32^3 synthetic snapshot with one 18 eV source completed in 0.62 s
