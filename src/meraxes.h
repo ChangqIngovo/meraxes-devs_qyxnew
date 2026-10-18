@@ -352,6 +352,11 @@ typedef struct run_params_t
   double HHeCellCrossingFraction;
   double HHeMaxStepMyr;
   char HHeSourceSpectrumFile[STRLEN];
+  /* Mode 3: fixed-temperature, photon-conserving spectral ES closure. */
+  char ESPythonExecutable[STRLEN];
+  char ESWorkerPath[STRLEN];
+  double ESRadiusRatio;
+  double ESMaxRadiusCells;
   int Flag_EvolvingReionRBubbleMax;
   int Flag_InstantaneousSFR;
   int Flag_TemperatureDependentRec;

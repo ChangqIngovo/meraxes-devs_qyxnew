@@ -191,4 +191,37 @@ foreach(reader_ranks 1 2)
 endforeach()
 
 # Regression tests on the L10_N512 test set (no Criterion needed)
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_Interpreter_FOUND)
+    execute_process(COMMAND ${Python3_EXECUTABLE} -c "import numpy, scipy, h5py"
+        RESULT_VARIABLE ES_PYTHON_STATUS OUTPUT_QUIET ERROR_QUIET)
+    if(ES_PYTHON_STATUS EQUAL 0)
+        add_test(NAME test_photon_es_worker
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/es_hhe/test_snapshot_worker.py)
+        set_tests_properties(test_photon_es_worker PROPERTIES TIMEOUT 180
+            ENVIRONMENT "OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1")
+        add_test(NAME test_photon_es_runner
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/es_hhe/test_gadi_runner.py)
+        set_tests_properties(test_photon_es_runner PROPERTIES TIMEOUT 120
+            ENVIRONMENT "OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1")
+        add_executable(test_photon_es_adapter test_photon_es_adapter.c)
+        set_property(TARGET test_photon_es_adapter PROPERTY C_STANDARD 99)
+        target_include_directories(test_photon_es_adapter PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_BINARY_DIR})
+        target_link_libraries(test_photon_es_adapter PRIVATE meraxes_lib)
+        if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+            target_compile_options(test_photon_es_adapter PRIVATE -UNDEBUG -fno-fast-math -ffp-contract=off)
+        endif()
+        foreach(es_ranks 1 2 4)
+            add_test(NAME test_photon_es_adapter_${es_ranks}
+                COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${es_ranks} ${MPIEXEC_PREFLAGS}
+                    $<TARGET_FILE:test_photon_es_adapter> ${MPIEXEC_POSTFLAGS}
+                    ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/es_hhe/snapshot_worker.py)
+            set_tests_properties(test_photon_es_adapter_${es_ranks} PROPERTIES
+                PROCESSORS ${es_ranks} TIMEOUT 180
+                ENVIRONMENT "OMPI_MCA_rmaps_base_oversubscribe=1;OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1")
+        endforeach()
+    else()
+        message(STATUS "Spectral ES bridge tests disabled: Python needs numpy, scipy and h5py")
+    endif()
+endif()
 add_subdirectory(regression)

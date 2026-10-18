@@ -35,7 +35,11 @@ Meraxes, what it outputs, and the physics behind it:
 
 The guide's sources are in [`docs/`](docs/).
 
-The `Photon_conservation` branch also includes an opt-in
+The `Photon_conservation` branch includes an opt-in
+[spectral ES H/He mode and Gadi L10 runner](docs/es_hhe_gadi.md)
+(`Flag_PhotonConservation=3`). This uses fixed excursion-set spheres, shared
+photon accounts and isothermal H/He recombination, through an online C/Python
+bridge. It is distinct from the earlier opt-in
 [time-dependent H/He photon transport model](docs/photon_hhe_transport.md)
 (`Flag_PhotonConservation=2`), with explicit recombination radiation, thermal
 chemistry and MPI packet migration. Its parameter fragment and current physical

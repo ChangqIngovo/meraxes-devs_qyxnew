@@ -18,7 +18,7 @@ Flag_IncludeRecombinations : 0   # if 1 reionization accounts for H-recombinatio
 Flag_EvolvingReionRBubbleMax : 1 # if 1, ReionRBubbleMaxRecomb follows Qin+25 and ReionRBubbleMax/ReionRBubbleMaxRecomb are ignored
 
 # Excursion-set photon allocation (CPU; top-hat filters). See docs/photon_conservation.md.
-Flag_PhotonConservation : 0 # 0: ES; 1: ES allocation; 2: dynamic warm H/He
+Flag_PhotonConservation : 0 # 0: ES; 1: ES allocation; 2: packet H/He; 3: spectral ES H/He
 PhotonConservationDebug : 1 # 0: log; 1: per-snapshot ledger; 2: cell and edge certificates
 PhotonConservationRequireFull : 0 # 1 aborts if any budget remains unabsorbed
 PhotonConservationShape : 1 # unique quadratic target map; 0: staged flow only
@@ -39,6 +39,10 @@ HHeSourceEnergyEV : 18 # monochromatic fallback; cannot directly ionize helium
 HHeCellCrossingFraction : 0.25
 HHeMaxStepMyr : 0.1
 HHeSourceSpectrumFile : # optional two-column energy[eV], photon-number weight
+ESPythonExecutable : # mode 3: absolute Python with numpy/scipy/h5py
+ESWorkerPath : # mode 3: absolute tools/es_hhe/worker.py
+ESRadiusRatio : 1.1 # geometric ES radius sampling; check convergence
+ESMaxRadiusCells : 0 # 0 uses largest periodic minimum-image support
 
 Flag_TemperatureDependentRec : 1 # if 1, Recombination depends on gas temperature as well
 Flag_Compute21cmBrightTemp : 0   # if 1 Meraxes computes the 21cm Brightness Temperature 

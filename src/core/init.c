@@ -281,7 +281,7 @@ void init_meraxes()
 #endif
   // parse the requested output snaps
   parse_output_snaps(run_globals.params.OutputSnapsString);
-  if (run_globals.params.Flag_PhotonConservation == 2 &&
+  if (run_globals.params.Flag_PhotonConservation >= 2 &&
       (run_globals.params.HHeStartSnapshot >= run_globals.params.SnaplistLength ||
        run_globals.NOutputSnaps == 0 || run_globals.params.HHeStartSnapshot > run_globals.LastOutputSnap)) {
     mlog_error("HHeStartSnapshot must occur within the snapshots actually run.");
@@ -356,7 +356,7 @@ void init_meraxes()
 
   // Initialise interpolation tables for inhomogeneous recombinations
   // TODO: Should this also depend on Flag_PatchyReion? (apply decision to cleanup.c too)
-  if (run_globals.params.Flag_IncludeRecombinations && run_globals.params.Flag_PhotonConservation != 2) {
+  if (run_globals.params.Flag_IncludeRecombinations && run_globals.params.Flag_PhotonConservation < 2) {
     init_MHR();
   }
 

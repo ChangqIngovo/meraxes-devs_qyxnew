@@ -9,6 +9,7 @@
 #include "misc_tools.h"
 #include "photon_conservation_meraxes.h"
 #include "photon_hhe_meraxes.h"
+#include "photon_es_meraxes.h"
 #include "recombinations.h"
 #include "reionization.h"
 #include "utils.h"
@@ -750,6 +751,8 @@ void find_HII_bubbles(int snapshot, timer_info* timer_total)
   timer_start(&timer);
   if (run_globals.params.Flag_PhotonConservation == 2)
     photon_hhe_meraxes(snapshot);
+  else if (run_globals.params.Flag_PhotonConservation == 3)
+    photon_es_meraxes(snapshot);
   else
     _find_HII_bubbles(snapshot);
 #endif

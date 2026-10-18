@@ -28,6 +28,11 @@ else
         gsl/2.7.1 fftw3/3.3.10-nci1 python3/3.11.7
 fi
 
+pc_python_args=()
+if [[ -n ${ES_PYTHON:-} ]]; then
+    "$ES_PYTHON" -c 'import numpy, scipy, h5py'
+    pc_python_args+=("-DPython3_EXECUTABLE=$ES_PYTHON")
+fi
 cmake -S "$repo" -B "$build" \
     -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_C_COMPILER=mpicc \
     -DCMAKE_C_FLAGS_RELWITHDEBINFO='-O3 -g -DNDEBUG -march=cascadelake' \
@@ -35,11 +40,14 @@ cmake -S "$repo" -B "$build" \
     -DFFTW_INCLUDE_DIR=/apps/fftw3/3.3.10-nci1/include \
     -DFFTW_LIBRARY=/apps/fftw3/3.3.10-nci1/lib/libfftw3f.so \
     -DFFTW_MPI_LIBRARY=/apps/fftw3/3.3.10-nci1/lib/ompi3/libfftw3f_mpi.so \
-    -DBUILD_TESTS=ON -DUSE_CUDA=OFF "$@"
+    -DBUILD_TESTS=ON -DUSE_CUDA=OFF "${pc_python_args[@]}" "$@"
 # Two build workers are intentional on a login node; use PC_BUILD_JOBS in a job.
 cmake --build "$build" --parallel "${PC_BUILD_JOBS:-2}"
 ctest --test-dir "$build" --output-on-failure \
     -R '^test_photon_conservation(_es|_shape|_index)?$'
+if [[ -n ${ES_PYTHON:-} ]]; then
+    ctest --test-dir "$build" --output-on-failure --no-tests=error -R '^test_photon_es_'
+fi
 module -t list > "$build/pc_loaded_modules.txt" 2>&1 || true
 
 python3 - "$repo" "$build" "$pc_environment" <<'PY'
