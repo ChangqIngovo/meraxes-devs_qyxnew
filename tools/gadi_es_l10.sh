@@ -7,7 +7,7 @@ es_action=${1:-}
 case "$es_action" in
     build)
         shift
-        exec bash "$es_repo/tools/gadi_pc_build.sh" -DUSE_MINI_HALOS=OFF -DCALC_MAGS=OFF "$@"
+        exec bash "$es_repo/tools/gadi_pc_build.sh" -DUSE_MINI_HALOS=OFF -DCALC_MAGS=OFF -DBUILD_ES_NATIVE=ON "$@"
         ;;
     prepare) ;;
     *) echo 'Usage: bash tools/gadi_es_l10.sh {build|prepare}' >&2; exit 2 ;;
@@ -97,6 +97,10 @@ build_info = json.loads(manifest_file.read_text())
 binary = build / 'bin/meraxes'
 if build_info['commit'] != commit or digest(binary) != build_info['binary_sha256']:
     raise ValueError('Build manifest does not match HEAD/binary; run the build command first')
+native_library = build / 'lib/libes_hhe_kernels.so'
+if (not native_library.is_file()
+        or digest(native_library) != build_info.get('es_native_library_sha256')):
+    raise ValueError('Build manifest does not match native ES kernels; run the build command first')
 cache = (build / 'CMakeCache.txt').read_text()
 for name in ('CALC_MAGS', 'USE_MINI_HALOS'):
     if re.search(r'(?m)^' + name + r':BOOL=(ON|TRUE|1)$', cache):
@@ -191,6 +195,7 @@ run.mkdir(parents=True, exist_ok=False)
 (run / 'provenance').mkdir()
 shutil.copy2(binary, run / 'meraxes')
 shutil.copytree(worker_source, run / 'solver', ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+shutil.copy2(native_library, run / 'solver/libes_hhe_kernels.so')
 shutil.copy2(defaults, run / 'provenance/defaults.par')
 shutil.copy2(sim_file, run / 'provenance/Genesis_L10_N512.par')
 shutil.copy2(scale_file, run / 'provenance/a_list.txt')
@@ -208,6 +213,7 @@ record = {
     'source_spectrum': str(spectrum) if spectrum else 'controlled monochromatic 18 eV test',
     'simulation_parameter_file': str(sim_file), 'defaults_parameter_file': str(defaults),
     'max_step_myr': max_step, 'radius_ratio': ratio,
+    'es_native_library_sha256': digest(native_library),
     'python_version': sys.version,
     'python_packages': {'numpy': numpy.__version__, 'scipy': scipy.__version__, 'h5py': h5py.__version__},
     'simulation_snapshot_list': str(scale_file), 'simulation_snapshot_list_sha256': digest(scale_file),

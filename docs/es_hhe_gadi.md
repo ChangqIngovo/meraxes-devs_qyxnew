@@ -3,9 +3,10 @@
 `Flag_PhotonConservation=3` runs the optimized ES-HHe reference during Meraxes
 evolution through its C bridge. The spatial model uses periodic excursion-set
 spheres and a shared photon ledger. This mode does not use ray packets or solve
-the spatial radiation-transfer equation. Meraxes remains MPI-parallel; the
-Python ES-HHe solver runs on rank 0. This integration does not establish
-large-grid MPI scaling.
+the spatial radiation-transfer equation. Meraxes remains MPI-parallel. Its
+rank-0 worker coordinates C/OpenMP geometry and H/He kernels, with threaded
+FFTs for large grids. This is shared-memory parallelism within one node;
+the spatial ES solve is not distributed across MPI nodes.
 
 The supplied `Genesis_L10_N512.par` describes a 10 Mpc/h N-body volume with
 512^3 particles and **32^3 input density cells**. The runner uses these 32^3
@@ -142,17 +143,30 @@ chemistry tolerances.
 The PBS template requests 32 ranks, 320 GB and 48 hours on `hugemem`. The rank
 count fits the 32 input-grid slabs. NCI's [Queue Limits](https://opus.nci.org.au/spaces/Help/pages/90308823/Queue+Limits)
 page (checked 2026-10-18) allows 1–48 cores and 48 hours for a single-node
-`hugemem` job. The Python worker is single-process; increasing MPI ranks does
-not parallelize that solver.
+`hugemem` job. `ES_WORKER_THREADS` defaults to `PBS_NCPUS`. The adapter passes
+the union of the MPI ranks' CPU bindings to the worker, which uses that CPU
+set without changing its parents' bindings. Other ranks poll a nonblocking
+barrier with a 10 ms sleep while the worker computes. OpenMP waits passively
+between kernels; BLAS and the MPI parents retain one thread each.
+
+The L10 build enables `BUILD_ES_NATIVE=ON`, builds
+`lib/libes_hhe_kernels.so`, and records its SHA-256 in the build manifest.
+Preparation copies the library into `solver/`; PBS verifies its hash and
+requires the native backend. It cannot silently fall back to the serial
+reference when the library is missing. The worker log reports the OpenMP
+team size and CPU-affinity size. Each output/checkpoint records this execution
+metadata; numerical checkpoint identity includes both the native library and
+Python dispatch hashes. Thread count can change without changing per-row
+arithmetic or checkpoint identity.
 
 ## Integration validation
 
-The full CPU Meraxes executable was built with GCC 13.3, Open MPI 4.1.6,
+The earlier integration baseline built the full CPU Meraxes executable with GCC 13.3, Open MPI 4.1.6,
 FFTW 3.3.10, GSL 2.7.1 and HDF5 1.10.10. The online adapter passed synthetic
 consecutive-snapshot tests at 1, 2 and 4 ranks, including empty slabs, physical
 source/time units, H/He recombination, density remapping and photon/electron/
 nucleus accounting. A two-event star-formation regression verifies that mode 3
-adds each event's new SFR once. The worker has nine integration tests; nineteen
+adds each event's new SFR once. The worker has nine integration tests; twenty-seven
 runner tests cover full-snapshot configuration, provenance, PBS launch, shell
 environment isolation and preparation without unused legacy recombination tables.
 CTest passes the actual Meraxes executable to these runner tests so they also
@@ -199,14 +213,11 @@ mass-weighted neutral hydrogen fractions were `0.999606519956` and
 The gas and photon arrays were nonnegative. This is a solver replay, not a
 Meraxes restart or a measurement of complete L10 runtime on Gadi.
 
-A separate instrumented replay took 33 seconds including profiling overhead:
+A separate instrumented replay of the earlier implementation took 33 seconds including profiling overhead:
 selected-support chemistry accounted for about 58% and candidate selection
-about 40%. The next implementation targets are compiled sparse
-aggregate/scatter and chemistry kernels, plus reuse of periodic membership
-work across photon bands. Increasing the native MPI rank count alone does
-not accelerate these single-process Python paths. These are remaining
-optimization targets, not changes included in this patch or whole-run speed
-predictions.
+about 40%. This identified compiled aggregate/scatter and chemistry kernels
+as the next implementation targets, alongside reuse of periodic membership
+work across photon bands.
 
 New floor regressions cover per-account thresholds, accumulation/reactivation,
 post-debit inactivity, subnormal convergence, source/recombination ledgers and
@@ -215,3 +226,76 @@ aggregate/scatter adjoints and bounded dispatch. They are included in the
 Gadi build's `test_photon_es_` CTest selection. Start the updated production run
 in a fresh directory from snapshot 0; existing checkpoints retain their original
 solver/configuration identity and are not automatically migrated.
+
+## Compiled shared-memory execution
+
+The native backend evaluates periodic sparse support sums and indexed
+aggregate/scatter operations in C. Independent output rows run in OpenMP;
+each row keeps a fixed ordered expansion sum, including subnormal values.
+There is no floating-point reduction across threads. The H/He upward update
+uses the reference's exponential maps and small-probability series, with one
+independent update per cell. Small workloads stay serial inside the compiled
+kernel to avoid launching threads for tens of cells.
+
+The compact multi-support path also compiles the complete common-exposure
+midpoint loop: field construction, donor feasibility checks, backtracking and
+the earliest crossing event. It uses one shared exposure and photon ledger;
+overlapping spheres are never evolved as independent physical regions. A
+single support keeps the reference's exact monochromatic endpoint. Every
+successful native result still passes the Python photon, nucleus, electron,
+positivity and finite-value audits before commit. Invalid native results
+raise an error; they are not accepted as partial progress.
+
+Candidate row classification combines eligibility, representable absorption
+and necessary photon-count bounds in one OpenMP kernel. Rows have independent
+outputs. If contraction roundoff could change a count-bound decision, the
+whole radius uses the original NumPy classification, preserving its BLAS
+shape and summation behavior.
+
+Large native FFTs use SciPy's threaded transform at every thread count,
+including one, so changing thread count does not select a different FFT
+implementation. Transforms below 1,048,576 cells retain the original NumPy
+path. Compilation disables fast-math and floating-point contraction.
+
+Tests compare one/multiple threads, signed high-dynamic-range sums,
+subnormal retention, H/He nucleus and electron budgets, mixed spectra,
+overlapping supports, FFT round trips, checkpoint identity, and worker CPU
+allocation. A delayed-worker native adapter test checks that waiting MPI ranks
+consume little process CPU and preserve their original CPU bindings.
+
+For this change, the native library compiled locally with GCC 13 and strict
+floating-point options. The Python suite passed 81 tests; four cases requiring
+the complete Meraxes parameter parser were skipped. The four physical
+regressions also passed. The new MPI affinity/wait helper compiled against
+MPI, but this environment cannot initialize MPI sockets and lacks the full
+parallel HDF5/FFTW toolchain, so the updated full adapter tests still require
+the Gadi build gate. Earlier adapter results above are not evidence that this
+new MPI path has run on Gadi.
+
+The supplied snapshot-29 replay matches the previous commit `b4024054`
+bit-for-bit in all 18 output datasets at one, four and eight native threads.
+The candidate counts and photon residual are unchanged. Mixed-spectrum unit
+cases allow small libm/BLAS rounding differences within the existing account
+tolerance; general bitwise equivalence to NumPy is not promised.
+
+A sequential before/after replay in the same environment measured:
+
+| Implementation | Worker threads | Snapshot wall time | Process CPU time |
+| --- | ---: | ---: | ---: |
+| Previous `b4024054` | 1 | 22.28 s | 22.27 s |
+| Compiled kernels and candidate filter | 4 | 5.37 s | 5.78 s |
+
+This pair gives a 4.15x speedup. Other new-code repeats ranged from about
+5.1 to 9.0 seconds in this shared environment, so the paired result is not
+a production runtime guarantee. The CPU/wall ratio remains about 1.08:
+eliminating Python iteration is the main whole-frame gain, while individual
+large row kernels run in parallel. A separate 32^3, nine-band candidate-mask
+microbenchmark measured median 10.12 ms in NumPy, 1.87 ms in native one-thread
+and 0.98 ms in native four-thread execution, with identical classifications.
+
+The remaining L10 bottleneck is the per-field sphere filtering and weak-signal
+fallback, not the now-compiled compact absorption loop. Cross-field batched
+FFTs are a further optimization to investigate; they are not implemented by
+this change. Large-grid transforms already use threaded SciPy FFTs. These
+measurements do not establish 32-core scaling or the runtime of later,
+strongly ionized snapshots.

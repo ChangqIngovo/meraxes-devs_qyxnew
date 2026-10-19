@@ -1,11 +1,16 @@
+#define _GNU_SOURCE
 #define _POSIX_C_SOURCE 200809L
 #include <complex.h>
 #include <fftw3-mpi.h>
 #include <hdf5_hl.h>
 #include <math.h>
+#ifdef __linux__
+#include <sched.h>
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 #define _MAIN
 #include "core/misc_tools.h"
@@ -33,6 +38,13 @@ static void near(double actual, double expected, double rtol, double atol)
     fprintf(stderr, "rank %d: %.17g != %.17g\n", run_globals.mpi_rank, actual, expected);
     MPI_Abort(MPI_COMM_WORLD, 1);
   }
+}
+
+static double process_seconds(void)
+{
+  struct timespec value;
+  check(clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &value) == 0, "process CPU clock");
+  return (double)value.tv_sec + (double)value.tv_nsec * 1e-9;
 }
 
 static float* field(size_t size)
@@ -261,10 +273,47 @@ int main(int argc, char** argv)
     check(spectrum != NULL, "test spectrum creation");
     check(fputs("18 .7\n30 .2\n60 .1\n", spectrum) >= 0, "test spectrum write");
     check(fclose(spectrum) == 0, "test spectrum close");
+    /* A fixed delay gives the waiting ranks a measurable idle interval even
+     * for the initial empty snapshot. It belongs only to this test fixture. */
+    char target[1024], wrapper[1024];
+    snprintf(target, sizeof(target), "%s/actual_worker.py", directory);
+    check(symlink(argv[2], target) == 0, "test worker symlink");
+    snprintf(wrapper, sizeof(wrapper), "%s/delayed_worker.py", directory);
+    FILE* script = fopen(wrapper, "w");
+    check(script != NULL, "delayed worker creation");
+    check(fputs("import os, sys, time\n"
+                "from pathlib import Path\n"
+                "time.sleep(0.5)\n"
+                "worker = str(Path(__file__).with_name('actual_worker.py').resolve())\n"
+                "os.execv(sys.executable, [sys.executable, worker, *sys.argv[1:]])\n",
+                script) >= 0, "delayed worker write");
+    check(fclose(script) == 0, "delayed worker close");
   }
+  snprintf(run_globals.params.ESWorkerPath, STRLEN, "%s/delayed_worker.py", directory);
   MPI_Barrier(MPI_COMM_WORLD);
 
+#ifdef __linux__
+  cpu_set_t parent_affinity_before, parent_affinity_after;
+  check(sched_getaffinity(0, sizeof(parent_affinity_before), &parent_affinity_before) == 0,
+        "initial parent MPI affinity");
+#endif
+  const double idle_wall_start = MPI_Wtime(), idle_cpu_start = process_seconds();
   photon_es_meraxes(0);
+  const double idle_cpu = process_seconds() - idle_cpu_start;
+  const double idle_wall = MPI_Wtime() - idle_wall_start;
+#ifdef __linux__
+  check(sched_getaffinity(0, sizeof(parent_affinity_after), &parent_affinity_after) == 0,
+        "final parent MPI affinity");
+  check(CPU_EQUAL(&parent_affinity_before, &parent_affinity_after), "ES worker changed parent MPI affinity");
+#endif
+  if (rank) {
+    printf("ES wait rank %d: wall %.3f s, process CPU %.3f s\n", rank, idle_wall, idle_cpu);
+    check(idle_wall >= .45, "delayed worker did not provide an idle interval");
+    /* Includes gather/publish and interpreter startup. The generous fixed
+     * allowance avoids a timing threshold based on a few milliseconds. */
+    check(idle_cpu < .1 + .5 * idle_wall, "waiting MPI rank spent most of its time on CPU");
+  }
+  snprintf(run_globals.params.ESWorkerPath, STRLEN, "%s", argv[2]);
   audit_result initial = audit(0, directory, 0, 1);
   near(initial.hii, 0, 0, 0);
   near(initial.captures, 0, 0, 0);
@@ -296,7 +345,8 @@ int main(int argc, char** argv)
       snprintf(path, sizeof(path), "%s/es_state_%03d.hdf5", directory, snapshot);
       check(unlink(path) == 0, "response cleanup");
     }
-    const char* names[] = { ".es_request.hdf5", ".es_checkpoint.hdf5", ".es_checkpoint.hdf5.lock", "spectrum.txt" };
+    const char* names[] = { ".es_request.hdf5", ".es_checkpoint.hdf5", ".es_checkpoint.hdf5.lock",
+                           "spectrum.txt", "delayed_worker.py", "actual_worker.py" };
     for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
       snprintf(path, sizeof(path), "%s/%s", directory, names[i]);
       check(unlink(path) == 0, "state cleanup");

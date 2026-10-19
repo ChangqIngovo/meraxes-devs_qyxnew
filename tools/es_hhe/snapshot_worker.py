@@ -23,10 +23,11 @@ import numpy as np
 
 from es_hhe_reference import (MYR, OPACITY_E_EV, SpectralES, evolve_dark,
                               geometric_radii2)
+from native_backend import execution_metadata, numerical_identity
 
 SCHEMA = 1
 PHOTON_ACTIVITY_FLOOR = 1e-30  # Per cell/band, count / mean_h_atoms_per_cell.
-REFERENCE_SHA256 = "ad4921e75ad82e26a03275989c1cf00e0fbe1fa2a4dc35e4987b9891746a4ebd"
+REFERENCE_SHA256 = "d73cbae546dc11935f71d43f89b9c58102d3b5a4af6a31eebc0530b76ac5f420"
 SCALARS = ("emitted", "diffuse_emitted", "absorbed", "captures", "initial_electrons")
 ARRAYS = ("gas", "photons", "source_history", "initial_nuclei", "capture_counts",
           "baseline_nuclei", "matter_exchange", "source_emitted_by_group")
@@ -119,7 +120,8 @@ def read_request(filename, spectrum_override=None):
 def model_configuration(metadata):
     names = ("grid_dim", "mean_h_atoms_per_cell", "helium_number_ratio", "radius_ratio",
              "max_radius_cells", "temperature_K", "max_step_s", "source_energies_eV", "source_weights")
-    return dict({key: metadata[key] for key in names}, photon_activity_floor=PHOTON_ACTIVITY_FLOOR)
+    return dict({key: metadata[key] for key in names}, photon_activity_floor=PHOTON_ACTIVITY_FLOOR,
+                numerical_backend=numerical_identity())
 
 
 def verify_reference():
@@ -342,6 +344,7 @@ def write_response(handle, model, metadata, digest, diagnostics):
     handle.attrs["request_digest"] = digest
     handle.attrs["reference_sha256"] = REFERENCE_SHA256
     handle.attrs["photon_activity_floor"] = model.photon_floor
+    handle.attrs["execution_backend"] = json.dumps(execution_metadata(), sort_keys=True)
     handle.attrs["diagnostics"] = json.dumps(diagnostics, sort_keys=True, allow_nan=False)
     handle.attrs["count_normalization_atoms"] = metadata["mean_h_atoms_per_cell"]
     handle.attrs["cell_volume_cm3"] = metadata["cell_volume_cm3"]
@@ -379,6 +382,7 @@ def write_checkpoint(handle, model, metadata, digest, diagnostics):
     handle.attrs["reference_sha256"] = REFERENCE_SHA256
     handle.attrs["photon_activity_floor"] = model.photon_floor
     handle.attrs["configuration"] = json.dumps(model_configuration(metadata), sort_keys=True)
+    handle.attrs["execution_backend"] = json.dumps(execution_metadata(), sort_keys=True)
     for key in ("snapshot", "run_identity"):
         handle.attrs[key] = metadata[key]
     handle.attrs["request_digest"] = digest
@@ -446,6 +450,7 @@ def main():
     parser.add_argument("--spectrum", type=Path, help="Override primary spectrum: energy_eV photon_weight")
     args = parser.parse_args()
     start = time.monotonic()
+    print("ES execution:", json.dumps(execution_metadata(), sort_keys=True), flush=True)
     diagnostics = run(args.request, args.response, args.checkpoint, args.spectrum, progress=True)
     print(json.dumps(dict(status="ok", seconds=time.monotonic() - start, **diagnostics),
                      sort_keys=True, allow_nan=False), flush=True)

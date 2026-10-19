@@ -196,15 +196,26 @@ if(Python3_Interpreter_FOUND)
     execute_process(COMMAND ${Python3_EXECUTABLE} -c "import numpy, scipy, h5py"
         RESULT_VARIABLE ES_PYTHON_STATUS OUTPUT_QUIET ERROR_QUIET)
     if(ES_PYTHON_STATUS EQUAL 0)
+        set(ES_KERNEL_TEST_ENV "OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1;OMP_WAIT_POLICY=PASSIVE")
+        if(TARGET es_hhe_kernels)
+            list(APPEND ES_KERNEL_TEST_ENV "ES_NATIVE_LIBRARY=$<TARGET_FILE:es_hhe_kernels>"
+                 "ES_NATIVE_REQUIRED=1" "ES_WORKER_THREADS=1")
+            foreach(es_kernel_test native_geometry native_chemistry native_backend native_joint native_candidates)
+                add_test(NAME test_photon_es_${es_kernel_test}
+                    COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/es_hhe/test_${es_kernel_test}.py)
+                set_tests_properties(test_photon_es_${es_kernel_test} PROPERTIES TIMEOUT 180
+                    ENVIRONMENT "${ES_KERNEL_TEST_ENV}")
+            endforeach()
+        endif()
         add_test(NAME test_photon_es_worker
             COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/es_hhe/test_snapshot_worker.py)
         set_tests_properties(test_photon_es_worker PROPERTIES TIMEOUT 180
-            ENVIRONMENT "OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1")
+            ENVIRONMENT "${ES_KERNEL_TEST_ENV}")
         foreach(es_python_test photon_floor sparse_geometry)
             add_test(NAME test_photon_es_${es_python_test}
                 COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/es_hhe/test_${es_python_test}.py)
             set_tests_properties(test_photon_es_${es_python_test} PROPERTIES TIMEOUT 180
-                ENVIRONMENT "OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1")
+                ENVIRONMENT "${ES_KERNEL_TEST_ENV}")
         endforeach()
         add_test(NAME test_photon_es_runner
             COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/es_hhe/test_gadi_runner.py)
@@ -224,7 +235,7 @@ if(Python3_Interpreter_FOUND)
                     ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/es_hhe/snapshot_worker.py)
             set_tests_properties(test_photon_es_adapter_${es_ranks} PROPERTIES
                 PROCESSORS ${es_ranks} TIMEOUT 180
-                ENVIRONMENT "OMPI_MCA_rmaps_base_oversubscribe=1;OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1")
+                ENVIRONMENT "OMPI_MCA_rmaps_base_oversubscribe=1;${ES_KERNEL_TEST_ENV}")
         endforeach()
     else()
         message(STATUS "Spectral ES bridge tests disabled: Python needs numpy, scipy and h5py")

@@ -1,3 +1,9 @@
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
 #include "photon_es_meraxes.h"
 #include "meraxes.h"
 #include "misc_tools.h"
@@ -7,6 +13,9 @@
 #include <hdf5_hl.h>
 #include <limits.h>
 #include <math.h>
+#ifdef __linux__
+#include <sched.h>
+#endif
 #include <spawn.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -104,10 +113,76 @@ static double mean_h_atoms(void)
   return mass * (1.0 - run_globals.params.physics.Y_He) / PROTONMASS;
 }
 
+static void prepare_worker_affinity(void)
+{
+  const char* value = getenv("ES_WORKER_THREADS");
+  long threads = 1;
+  if (value) {
+    char* end;
+    errno = 0;
+    threads = strtol(value, &end, 10);
+    if (errno || !*value || *end || threads < 1 || threads > INT_MAX)
+      fail("ES_WORKER_THREADS must be a positive integer");
+  }
+#ifdef __linux__
+  /* Retain MPI core binding for the galaxy phases. Only the child may widen
+   * its affinity, and only to the union of CPUs already assigned to our ranks.
+   * An unbound launch can otherwise expose CPUs belonging to another job. */
+  MPI_Comm shared;
+  int local_ranks;
+  if (MPI_Comm_split_type(run_globals.mpi_comm, MPI_COMM_TYPE_SHARED, 0, MPI_INFO_NULL, &shared) != MPI_SUCCESS)
+    fail("could not inspect the ES worker's shared-memory allocation");
+  if (MPI_Comm_size(shared, &local_ranks) != MPI_SUCCESS || MPI_Comm_free(&shared) != MPI_SUCCESS)
+    fail("could not inspect ranks sharing the ES worker's node");
+  const int single_node = local_ranks == run_globals.mpi_size;
+  if (threads > 1 && !single_node)
+    fail("a multithreaded ES worker requires all MPI ranks on one node");
+
+  cpu_set_t affinity;
+  const int invalid = sched_getaffinity(0, sizeof(affinity), &affinity) != 0;
+  collective_check(invalid, "cannot read CPU affinity; Linux CPU IDs must fit CPU_SETSIZE");
+  unsigned char local[CPU_SETSIZE], combined[CPU_SETSIZE];
+  for (int cpu = 0; cpu < CPU_SETSIZE; cpu++)
+    local[cpu] = CPU_ISSET(cpu, &affinity) ? 1 : 0;
+  if (MPI_Reduce(local, combined, CPU_SETSIZE, MPI_UNSIGNED_CHAR, MPI_BOR, 0, run_globals.mpi_comm) != MPI_SUCCESS)
+    fail("could not combine MPI CPU affinities");
+  if (run_globals.mpi_rank == 0) {
+    /* A serial worker can still accompany a distributed Meraxes run. CPU IDs
+     * on its other nodes carry no meaning on rank zero's node. */
+    if (!single_node)
+      memcpy(combined, local, sizeof(combined));
+    char cpus[CPU_SETSIZE * 12 + 1];
+    size_t used = 0;
+    int count = 0;
+    for (int cpu = 0; cpu < CPU_SETSIZE; cpu++) {
+      if (!combined[cpu])
+        continue;
+      const int written = snprintf(cpus + used, sizeof(cpus) - used, "%s%d", used ? "," : "", cpu);
+      if (written < 0 || (size_t)written >= sizeof(cpus) - used)
+        fail("ES worker CPU affinity list is too long");
+      used += (size_t)written;
+      count++;
+    }
+    if (!count || threads > count)
+      fail("ES_WORKER_THREADS exceeds the CPUs assigned to MPI ranks");
+    if (setenv("ES_MPI_CPUSET", cpus, 1) != 0)
+      fail("could not pass allocated CPU affinities to ES worker");
+    mlog("ES/HHe worker allocation: %ld threads, %d allowed logical CPUs from MPI rank affinities", MLOG_MESG,
+         threads, count);
+  }
+#else
+  if (threads > 1)
+    fail("multithreaded ES worker affinity requires Linux");
+  if (run_globals.mpi_rank == 0 && unsetenv("ES_MPI_CPUSET") != 0)
+    fail("could not clear unsupported ES worker CPU affinity");
+#endif
+}
+
 static void initialize(int snapshot)
 {
   if (snapshot != run_globals.params.HHeStartSnapshot)
     fail("first call must be HHeStartSnapshot; implicit reset/restart is forbidden");
+  prepare_worker_affinity();
   const int n = run_globals.params.ReionGridDim;
   if (n < 1 || (double)n * n * n > INT_MAX)
     fail("grid exceeds MPI_Gatherv count/displacement range");
@@ -234,6 +309,28 @@ static void run_worker(const char* response)
   } while (waited < 0 && errno == EINTR);
   if (waited != child || !WIFEXITED(status) || WEXITSTATUS(status) != 0)
     fail("ES worker failed; inspect the preceding worker traceback in run.log");
+}
+
+static void wait_for_worker(void)
+{
+  /* Rank zero waits for its child with waitpid(). Other ranks must also yield
+   * their CPUs while the shared-memory ES kernels use the node. A blocking
+   * MPI_Barrier may busy-poll and compete with every worker thread. */
+  MPI_Request request;
+  if (MPI_Ibarrier(run_globals.mpi_comm, &request) != MPI_SUCCESS)
+    fail("could not begin ES worker synchronization");
+  int finished = 0;
+  while (!finished) {
+    if (MPI_Test(&request, &finished, MPI_STATUS_IGNORE) != MPI_SUCCESS)
+      fail("ES worker synchronization failed");
+    if (!finished) {
+      struct timespec remaining = { 0, 10000000L };
+      while (nanosleep(&remaining, &remaining) < 0) {
+        if (errno != EINTR)
+          fail("could not yield CPU while waiting for ES worker");
+      }
+    }
+  }
 }
 
 static void read_field(hid_t file, const char* name)
@@ -424,7 +521,7 @@ void photon_es_meraxes(int snapshot)
     mlog("ES/HHe worker: snapshot %d, dt=%.8g Myr, grid=%d^3", MLOG_MESG, snapshot, dt_s / SEC_PER_MEGAYEAR, state.n);
     run_worker(response);
   }
-  MPI_Barrier(run_globals.mpi_comm);
+  wait_for_worker();
   publish(snapshot, response);
   state.last_snapshot = snapshot;
   mlog("ES/HHe snapshot %d complete: volume xHI=%.8g, ne/(nH+nHe)=%.8g. "

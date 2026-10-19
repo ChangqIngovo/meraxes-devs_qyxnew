@@ -3,8 +3,8 @@
 `snapshot_worker.py` is called by the native Meraxes snapshot loop before its
 feedback and output stages. It advances the optimized, fixed-centre spherical
 ES model in `es_hhe_reference.py`. This solver version includes the dormant
-photon activity floor and sparse-geometry optimizations, SHA256
-`ad4921e75ad82e26a03275989c1cf00e0fbe1fa2a4dc35e4987b9891746a4ebd`.
+photon activity floor and sparse-geometry optimizations. The SHA-256 recorded
+in `snapshot_worker.REFERENCE_SHA256` identifies the validated solver source.
 The worker verifies this hash before accepting a request.
 
 The ES filter catalogue, common photon accounts and competing H/He absorption
@@ -12,13 +12,17 @@ retain the reference model. Local case-A recombination and eight coupled OTS
 channels operate at **fixed 10,000 K**. This is an isothermal closure, with
 uniform mixing inside selected ES spheres, rather than a spatial/angular
 radiation-transfer or thermal-evolution calculation. The worker runs in one
-Python process; the native MPI application distributes galaxy/grid work, but
-this Python solve does not provide distributed FFT or chemistry parallelism.
+Python coordinating process with C/OpenMP candidate filters, sparse sums,
+H/He updates and compact common-exposure loops, together with threaded
+large-grid FFTs. The native MPI application distributes galaxy/grid work.
+The ES worker uses a single node's allocated CPU set; it does not distribute
+the spatial ES solve across MPI nodes.
 
 ## Run and test
 
-Runtime dependencies are Python 3, NumPy and h5py. SciPy is only needed for
-optional independent reference validation, not for snapshot integration.
+The serial reference needs Python 3, NumPy and h5py. The Gadi native backend
+also uses SciPy for large FFTs and a C/OpenMP library compiled with
+`BUILD_ES_NATIVE=ON`. `tools/gadi_es_l10.sh build` enables this option.
 
 ```bash
 python tools/es_hhe/test_snapshot_worker.py
@@ -32,6 +36,14 @@ python tools/es_hhe/snapshot_worker.py \
 Copy the entire directory when freezing a run: the worker imports the reference
 from its own directory. Each physical substep logs its duration and remaining
 photon budget. The final JSON contains the cumulative count audit.
+
+`ES_NATIVE_LIBRARY` selects a library explicitly; a prepared worker otherwise
+loads `libes_hhe_kernels.so` beside its source. `ES_NATIVE_REQUIRED=1` prevents
+fallback when the library is absent. `ES_WORKER_THREADS` controls the maximum
+OpenMP/FFT thread count. The MPI adapter supplies `ES_MPI_CPUSET`, the union
+of its ranks' bindings, and only the worker expands to that set. Run on one
+node for multithreaded execution. Outputs record `execution_backend`; the
+checkpoint identity also freezes native-library and dispatch-source hashes.
 
 ## Request contract (schema version 1)
 

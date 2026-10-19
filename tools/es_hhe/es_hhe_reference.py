@@ -35,6 +35,7 @@ other photons in the same accepted region; no photon is discarded here.
 """
 from dataclasses import dataclass
 import numpy as np
+from native_backend import get_backend, rfftn, irfftn
 
 MYR = 365.25 * 86400 * 1e6
 CHANNEL_NAMES = ('H_ground', 'HeII_ground', 'HeII_excited_H',
@@ -796,11 +797,11 @@ class PreparedSphereFields:
                 self.transforms.append(None)
                 self.occupancy.append(None)
             else:
-                self.transforms.append(np.fft.rfftn(column.reshape(shape)))
+                self.transforms.append(rfftn(column.reshape(shape)))
                 geometry.counters['forward_ffts']+=1
                 present=column>0
                 if nonnegative and not np.all(present):
-                    self.occupancy.append(np.fft.rfftn(present.reshape(shape)))
+                    self.occupancy.append(rfftn(present.reshape(shape)))
                     geometry.counters['forward_ffts']+=1
                 else:
                     self.occupancy.append(None)
@@ -812,7 +813,7 @@ class PeriodicSphereGeometry:
         if self.side<1 or self.side!=side:
             raise ValueError('Positive integer grid side required')
         self.size=self.side**3
-        self.xyz=np.indices((self.side,)*3).reshape(3,-1).T
+        self.xyz=np.ascontiguousarray(np.indices((self.side,)*3).reshape(3,-1).T)
         delta=np.minimum(self.xyz,self.side-self.xyz)
         self.origin_distance2=np.sum(delta*delta,axis=1)
         self.radii2=(np.unique(self.origin_distance2) if radii2 is None
@@ -843,7 +844,7 @@ class PeriodicSphereGeometry:
             self._kernels.move_to_end(k)
             return self._kernels[k]
         mask=(self.origin_distance2<=self.radii2[k]).reshape((self.side,)*3)
-        self._kernels[k]=(np.fft.rfftn(mask),int(np.count_nonzero(mask)))
+        self._kernels[k]=(rfftn(mask),int(np.count_nonzero(mask)))
         self.counters['kernel_ffts']+=1
         if len(self._kernels)>2:
             self._kernels.popitem(last=False)
@@ -859,6 +860,9 @@ class PeriodicSphereGeometry:
         It skips exact zeros, never a small nonzero photon account. Chunking
         avoids retaining a centre-by-source distance or membership matrix.
         """
+        native=get_backend()
+        if native is not None:
+            return native.sparse_sums(self.side,self.xyz,indices,column,rows,self.radii2[radius_index])
         result=np.zeros(len(rows),dtype=float)
         if not len(indices):return result
         sources=self.xyz[indices]
@@ -900,14 +904,14 @@ class PeriodicSphereGeometry:
                     if prepared.constants[j]:
                         result[:,j]=column[0]*volume
                         continue
-                    result[:,j]=np.fft.irfftn(prepared.transforms[j]*kernel,s=shape).ravel()
+                    result[:,j]=irfftn(prepared.transforms[j]*kernel,shape).ravel()
                     self.counters['inverse_ffts']+=1
                     occupied=None
                     if prepared.nonnegative[j]:
                         result[:,j]=np.maximum(result[:,j],0.)
                         if prepared.occupancy[j] is not None:
-                            occupied=np.rint(np.fft.irfftn(
-                                prepared.occupancy[j]*kernel,s=shape).ravel())>0
+                            occupied=np.rint(irfftn(
+                                prepared.occupancy[j]*kernel,shape).ravel())>0
                             self.counters['inverse_ffts']+=1
                             result[~occupied,j]=0.
                     # Conservative signal-to-roundoff guard. Directly sum
@@ -973,6 +977,9 @@ class _CompactSphereOperator:
         if x.ndim not in (1,2) or x.shape[0]!=self.shape[1]:
             raise ValueError('Cell count does not match compact operator')
         if self.single_cells:return x[self.indices].copy()
+        native=get_backend()
+        if native is not None:
+            return native.indexed_sum(x,self.indices,self.offsets)
         out=np.empty((len(self),)+x.shape[1:])
         for row,(start,end) in enumerate(zip(self.offsets[:-1],self.offsets[1:])):
             out[row]=_column_sum(x[self.indices[start:end]])
@@ -986,6 +993,9 @@ class _CompactSphereOperator:
         if self.disjoint:
             out[self.indices]=y[self.owners]
             return out
+        native=get_backend()
+        if native is not None:
+            return native.indexed_sum(y,self.scatter_owners,self.scatter_offsets)
         for cell,(start,end) in enumerate(zip(self.scatter_offsets[:-1],self.scatter_offsets[1:])):
             out[cell]=_column_sum(y[self.scatter_owners[start:end]])
         return out
@@ -1152,6 +1162,13 @@ class _DenseSphereOperator:
 
 
 def _upward_cells(n,rate,exposure):
+    native=get_backend()
+    if native is not None:
+        return native.upward_cells(n,rate,exposure)
+    return _upward_cells_numpy(n,rate,exposure)
+
+
+def _upward_cells_numpy(n,rate,exposure):
     """Vector exact upward_map; exposure is scalar or one value per row."""
     t=np.asarray(exposure)
     x=rate*(t[:,None] if t.ndim else t)
@@ -1280,6 +1297,13 @@ def joint_exposure_update(gas,photons,energies,membership,epsilon=1e-5,
                         out=np.zeros_like(p0),where=p0>0))) if p0.size else 0.)
 
     if not op.shape[0] or not scale or not np.any(p>0):return finish()
+    native=get_backend()
+    if native is not None and op.shape[0]>1 and isinstance(op,_CompactSphereOperator):
+        result=native.joint_compact(initial,p0,cross,op.indices,op.offsets,
+            epsilon,donor_fraction,count_tolerance,photon_floor,max_iterations)
+        if result is not None:
+            n,p,absorbed,debit_total,reason,total_exposure,evaluations,accepted_steps,events=result
+            return finish()
     def fields(light):
         return op.scatter(op.aggregate((light*inverse[:,None])@cross)/volume[:,None])
     def accounting(light,rate,counts):
@@ -1795,32 +1819,38 @@ class SpectralES:
         for k in reversed(range(len(self.radii2))):
             aggregate=self.geometry.all_sums(fields,k)
             n,p=aggregate[:,:5],aggregate[:,5:]
-            normal=np.column_stack((n[:,:2].sum(1),n[:,2:].sum(1),n[:,2:].sum(1)))
-            remaining=np.column_stack((n[:,0],n[:,2],n[:,2]+n[:,3]))
-            needed=remaining-self.epsilon*normal
-            eligible=(normal>0)&(remaining>self.epsilon*normal+64*np.finfo(float).eps*normal)
-            # HeII can only be generated after a real initial HeI absorption.
-            # Match the chemistry's representable rates, not merely its
-            # Boolean transition graph: min-subnormal atoms times sigma can
-            # underflow to zero and must not create a stalled partial front.
-            hazard=n[:,[0,2,3]]@cross.T
-            # A monochromatic endpoint can consume a photon account smaller
-            # than a representable midpoint half-step. Leave that decision to
-            # the actual selected-support chemistry.
-            usable=np.any((p>0)&(hazard>0),axis=1)
-            valid=np.any(eligible,axis=1)&usable
+            native=get_backend()
+            flags=(native.candidate_flags(aggregate,cross,self.epsilon,self.count_pruning)
+                   if native is not None else None)
+            if flags is not None:
+                valid,proven_partial=flags
+            else:
+                normal=np.column_stack((n[:,:2].sum(1),n[:,2:].sum(1),n[:,2:].sum(1)))
+                remaining=np.column_stack((n[:,0],n[:,2],n[:,2]+n[:,3]))
+                needed=remaining-self.epsilon*normal
+                eligible=(normal>0)&(remaining>self.epsilon*normal+64*np.finfo(float).eps*normal)
+                # HeII can only be generated after a real initial HeI absorption.
+                # Match the chemistry's representable rates, not merely its
+                # Boolean transition graph: min-subnormal atoms times sigma can
+                # underflow to zero and must not create a stalled partial front.
+                hazard=n[:,[0,2,3]]@cross.T
+                # A monochromatic endpoint can consume a photon account smaller
+                # than a representable midpoint half-step. Leave that decision to
+                # the actual selected-support chemistry.
+                usable=np.any((p>0)&(hazard>0),axis=1)
+                valid=np.any(eligible,axis=1)&usable
+                proven_partial=np.zeros(self.size,dtype=bool)
+                if self.count_pruning:
+                    # Every transition is bounded by its ionizing-band photons,
+                    # even before competitors are paid. Below this necessary bound
+                    # a full crossing is impossible; no chemical endpoint is needed.
+                    upper=p@channels
+                    margin=64*np.finfo(float).eps*np.maximum(upper,remaining)
+                    possible=np.any(eligible&(upper+margin>=needed),axis=1)
+                    proven_partial=valid&~possible
             self.counters['candidate_checks']+=self.size
             self.counters['empty_or_ineligible']+=int(np.count_nonzero(~valid))
-            proven_partial=np.zeros(self.size,dtype=bool)
-            if self.count_pruning:
-                # Every transition is bounded by its ionizing-band photons,
-                # even before competitors are paid. Below this necessary bound
-                # a full crossing is impossible; no chemical endpoint is needed.
-                upper=p@channels
-                margin=64*np.finfo(float).eps*np.maximum(upper,remaining)
-                possible=np.any(eligible&(upper+margin>=needed),axis=1)
-                proven_partial=valid&~possible
-                self.counters['count_bound_pruned']+=int(np.count_nonzero(proven_partial))
+            self.counters['count_bound_pruned']+=int(np.count_nonzero(proven_partial))
             unresolved=np.flatnonzero(valid&~proven_partial)
             passing=np.zeros(self.size,dtype=bool)
             absorbable=proven_partial.copy()

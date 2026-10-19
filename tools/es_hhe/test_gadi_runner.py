@@ -24,7 +24,7 @@ class Scripts(unittest.TestCase):
         self.build = self.base/'build'
         self.sim = self.base/'simulation'
         self.tables = self.base/'tables'
-        for directory in [self.repo/'input/params/simulations', self.repo/'tools/es_hhe', self.build/'bin', self.sim/'trees', self.sim/'grids', self.base/'commands']:
+        for directory in [self.repo/'input/params/simulations', self.repo/'tools/es_hhe', self.build/'bin', self.build/'lib', self.sim/'trees', self.sim/'grids', self.base/'commands']:
             directory.mkdir(parents=True)
         for directory in ['photometric_tables','cooling_functions','stellar_feedback_tables/Kroupa','21cmFAST-tables','recombination_tables']:
             (self.tables/directory).mkdir(parents=True)
@@ -42,16 +42,22 @@ class Scripts(unittest.TestCase):
             binary.write_text('#!/bin/sh\nif [ "$#" -eq 2 ] && [ "$1" = "--check-params" ]; then exit 0; fi\necho "Fixture binary must not execute a simulation; expected mock mpirun" >&2\nexit 97\n')
         binary.chmod(0o755)
         (self.build/'CMakeCache.txt').write_text('CALC_MAGS:BOOL=OFF\nUSE_MINI_HALOS:BOOL=OFF\n')
-        (self.build/'pc_build_manifest.json').write_text(json.dumps({'commit':HEAD,'binary_sha256':hashlib.sha256(binary.read_bytes()).hexdigest()}))
+        self.native_library=self.build/'lib/libes_hhe_kernels.so'
+        self.native_library.write_bytes(b'fixture native ES kernel; never loaded by mock mpirun\n')
+        (self.build/'pc_build_manifest.json').write_text(json.dumps({
+            'commit':HEAD,'binary_sha256':hashlib.sha256(binary.read_bytes()).hexdigest(),
+            'es_native_library_sha256':hashlib.sha256(self.native_library.read_bytes()).hexdigest()}))
         git=self.base/'commands/git'
         git.write_text('#!/usr/bin/env python3\nimport sys\nif "rev-parse" in sys.argv: print('+repr(HEAD)+')\n')
         git.chmod(0o755)
         mpirun=self.base/'commands/mpirun'
-        mpirun.write_text('#!/usr/bin/env python3\nimport json,os,sys\nfrom pathlib import Path\nPath(os.environ["RUN_DIR"],"invocation.json").write_text(json.dumps(sys.argv))\n')
+        mpirun.write_text('#!/usr/bin/env python3\nimport json,os,sys\nfrom pathlib import Path\nPath(os.environ["RUN_DIR"],"invocation.json").write_text(json.dumps(sys.argv))\nPath(os.environ["RUN_DIR"],"launch_environment.json").write_text(json.dumps({name:os.environ.get(name) for name in ["ES_WORKER_THREADS","ES_NATIVE_REQUIRED","ES_NATIVE_LIBRARY","OMP_NUM_THREADS","OPENBLAS_NUM_THREADS","MKL_NUM_THREADS","NUMEXPR_NUM_THREADS","OMP_WAIT_POLICY","OMP_PROC_BIND","GOMP_CPU_AFFINITY","OMP_PLACES"]}))\n')
         mpirun.chmod(0o755)
         self.run=self.base/'run'
         self.env={**os.environ,'PC_REPO':str(self.repo),'PC_BUILD_DIR':str(self.build),'L10_SIMULATION_DIR':str(self.sim),'L10_TABLES':str(self.tables),'ES_PYTHON':sys.executable,'RUN_DIR':str(self.run),'PATH':str(self.base/'commands')+os.pathsep+os.environ['PATH']}
-        for name in ['L10_INPUT','ES_SPECTRUM','ES_RADIUS_RATIO','ES_MAX_STEP_MYR']:
+        for name in ['L10_INPUT','ES_SPECTRUM','ES_RADIUS_RATIO','ES_MAX_STEP_MYR',
+                     'ES_WORKER_THREADS','ES_NATIVE_REQUIRED','ES_NATIVE_LIBRARY',
+                     'PBS_NNODES','PBS_NODEFILE']:
             self.env.pop(name,None)
     def shell_environment(self, **updates):
         # Noninteractive bash still reads BASH_ENV, and imported functions take
@@ -104,6 +110,8 @@ class Scripts(unittest.TestCase):
             self.assertFalse((self.run/'provenance'/name).exists())
         for name in ['provenance/defaults.par','provenance/Genesis_L10_N512.par']:
             self.assertIn(name,record['files'])
+        self.assertEqual((self.run/'solver/libes_hhe_kernels.so').read_bytes(),self.native_library.read_bytes())
+        self.assertEqual(record['es_native_library_sha256'],record['files']['solver/libes_hhe_kernels.so'])
         for name,digest in record['files'].items():
             self.assertEqual(hashlib.sha256((self.run/name).read_bytes()).hexdigest(),digest)
     def test_existing_run_not_rewritten(self):
@@ -127,6 +135,14 @@ class Scripts(unittest.TestCase):
         self.assertFalse(legacy_tables.exists())
     def test_binary_mismatch_no_partial_run(self):
         (self.build/'bin/meraxes').write_text('wrong binary')
+        self.prepare(False)
+        self.assertFalse(self.run.exists())
+    def test_native_library_mismatch_no_partial_run(self):
+        self.native_library.write_bytes(b'changed native kernel')
+        self.prepare(False)
+        self.assertFalse(self.run.exists())
+    def test_missing_native_library_no_partial_run(self):
+        self.native_library.unlink()
         self.prepare(False)
         self.assertFalse(self.run.exists())
     def test_snapshot_list_validation(self):
@@ -214,8 +230,8 @@ class Scripts(unittest.TestCase):
         result=self.prepare(False)
         self.assertIn(f"Invalid parameter syntax in '{defaults}' at line {line}",result.stderr)
         self.assertFalse(self.run.exists())
-    def pbs(self):
-        env=self.shell_environment(PBS_NCPUS='32',PBS_JOBID='fixture.gadi-pbs')
+    def pbs(self, **updates):
+        env=self.shell_environment(**{'PBS_NCPUS':'32','PBS_JOBID':'fixture.gadi-pbs', **updates})
         return subprocess.run(['bash','--noprofile','--norc','-c','module() { :; }; export -f module; bash --noprofile --norc "$RUN_DIR/submit.pbs"'],env=env,text=True,capture_output=True)
     def assert_pbs_launch(self):
         result=self.pbs()
@@ -225,12 +241,54 @@ class Scripts(unittest.TestCase):
         self.assertTrue(invocation.is_file(), 'Mock mpirun did not record a launch.\n'+result.stdout+result.stderr+log)
         command=json.loads(invocation.read_text())
         self.assertEqual(command[1:3],['-np','32'])
+        self.assertEqual(command[3:7],['--bind-to','core','--map-by','slot'])
         self.assertEqual(command[-2:],[str(self.run/'meraxes'),str(self.run/'input.par')])
+        environment=json.loads((self.run/'launch_environment.json').read_text())
+        self.assertEqual(environment['ES_WORKER_THREADS'],'32')
+        self.assertEqual(environment['ES_NATIVE_REQUIRED'],'1')
+        self.assertEqual(environment['ES_NATIVE_LIBRARY'],str(self.run/'solver/libes_hhe_kernels.so'))
+        self.assertEqual(environment['OMP_WAIT_POLICY'],'PASSIVE')
+        self.assertEqual(environment['OMP_PROC_BIND'],'false')
+        self.assertIsNone(environment['GOMP_CPU_AFFINITY'])
+        self.assertIsNone(environment['OMP_PLACES'])
+        for name in ['OMP_NUM_THREADS','OPENBLAS_NUM_THREADS','MKL_NUM_THREADS','NUMEXPR_NUM_THREADS']:
+            self.assertEqual(environment[name],'1')
         self.assertTrue((self.run/'output').is_dir())
     def test_pbs_preflight_and_launch(self):
         self.prepare()
+        self.env.update(OMP_PROC_BIND='true',GOMP_CPU_AFFINITY='0',OMP_PLACES='{0}')
         self.assert_pbs_launch()
         self.assertNotEqual(self.pbs().returncode,0)
+    def test_pbs_worker_thread_override(self):
+        self.prepare()
+        result=self.pbs(ES_WORKER_THREADS='4',PBS_NNODES='1')
+        self.assertEqual(result.returncode,0,result.stdout+result.stderr+(self.run/'run_fixture.gadi-pbs.log').read_text())
+        environment=json.loads((self.run/'launch_environment.json').read_text())
+        self.assertEqual(environment['ES_WORKER_THREADS'],'4')
+    def test_pbs_rejects_invalid_worker_threads(self):
+        self.prepare()
+        for count in ['0','-1','33','1.5','invalid']:
+            with self.subTest(count=count):
+                result=self.pbs(ES_WORKER_THREADS=count)
+                self.assertNotEqual(result.returncode,0)
+                self.assertFalse((self.run/'invocation.json').exists())
+                (self.run/'.running').rmdir()
+    def test_pbs_rejects_multiple_nodes(self):
+        self.prepare()
+        self.assertNotEqual(self.pbs(PBS_NNODES='2').returncode,0)
+        self.assertFalse((self.run/'invocation.json').exists())
+    def test_pbs_rejects_multiple_hosts_in_nodefile(self):
+        self.prepare()
+        nodefile=self.base/'nodefile'
+        nodefile.write_text('node-a\nnode-b\n')
+        self.assertNotEqual(self.pbs(PBS_NODEFILE=str(nodefile)).returncode,0)
+        self.assertFalse((self.run/'invocation.json').exists())
+    def test_pbs_accepts_repeated_single_host_in_nodefile(self):
+        self.prepare()
+        nodefile=self.base/'nodefile'
+        nodefile.write_text('node-a\n'*32)
+        result=self.pbs(PBS_NODEFILE=str(nodefile))
+        self.assertEqual(result.returncode,0,result.stdout+result.stderr+(self.run/'run_fixture.gadi-pbs.log').read_text())
     def test_shell_startup_file_cannot_override_mocks(self):
         startup=self.base/'startup.bash'
         marker=self.base/'startup-ran'
@@ -258,6 +316,13 @@ class Scripts(unittest.TestCase):
         (self.sim/'a_list.txt').write_text('0.1\n0.2\n')
         self.assertNotEqual(self.pbs().returncode,0)
         self.assertFalse((self.run/'invocation.json').exists())
+    def test_pbs_detects_native_library_mutation(self):
+        self.prepare()
+        (self.run/'solver/libes_hhe_kernels.so').write_bytes(b'changed prepared native kernel')
+        self.assertNotEqual(self.pbs().returncode,0)
+        self.assertFalse((self.run/'invocation.json').exists())
+        self.assertIn('Prepared file changed: solver/libes_hhe_kernels.so',
+                      (self.run/'run_fixture.gadi-pbs.log').read_text())
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

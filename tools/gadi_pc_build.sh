@@ -67,6 +67,10 @@ def digest(path):
     return h.hexdigest()
 
 binary = build / 'bin/meraxes'
+native_library = build / 'lib/libes_hhe_kernels.so'
+native_enabled = any(line.startswith('BUILD_ES_NATIVE:BOOL=')
+                     and line.split('=', 1)[1] in {'ON', 'TRUE', '1'}
+                     for line in (build / 'CMakeCache.txt').read_text().splitlines())
 data = {
     'created_utc': datetime.now(timezone.utc).isoformat(),
     'repository': str(repo),
@@ -74,6 +78,8 @@ data = {
     'submodules': subprocess.check_output(['git', '-C', str(repo), 'submodule', 'status', '--recursive'], text=True),
     'binary': str(binary),
     'binary_sha256': digest(binary),
+    'es_native_library': str(native_library) if native_enabled else None,
+    'es_native_library_sha256': digest(native_library) if native_enabled else None,
     'cmake_cache_sha256': digest(build / 'CMakeCache.txt'),
     'pc_env_file': str(environment) if environment.is_file() else None,
     'pc_env_sha256': digest(environment) if environment.is_file() else None,

@@ -21,6 +21,12 @@ echo "Job: $PBS_JOBID; start: $(date); directory: $RUN_DIR"
 module --force purge
 module load gcc/12.2.0 openmpi/4.1.4 fftw3/3.3.10-nci1 hdf5/1.12.2p gsl/2.7.1 python3/3.11.7
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
+export OMP_WAIT_POLICY=PASSIVE
+export OMP_PROC_BIND=false
+unset GOMP_CPU_AFFINITY OMP_PLACES
+export ES_WORKER_THREADS=${ES_WORKER_THREADS:-$PBS_NCPUS}
+export ES_NATIVE_REQUIRED=1
+export ES_NATIVE_LIBRARY="$RUN_DIR/solver/libes_hhe_kernels.so"
 export PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 module list
 
@@ -35,7 +41,16 @@ import numpy
 import scipy
 
 manifest = json.loads(Path('run_manifest.json').read_text())
-if int(os.environ['PBS_NCPUS']) > manifest['grid']:
+ncpus = int(os.environ['PBS_NCPUS'])
+threads = int(os.environ['ES_WORKER_THREADS'])
+if ncpus < 1 or threads < 1 or threads > ncpus:
+    raise RuntimeError('ES_WORKER_THREADS must be positive and no greater than PBS_NCPUS')
+if int(os.environ.get('PBS_NNODES', '1')) != 1:
+    raise RuntimeError('The shared-memory ES worker requires a single-node allocation')
+nodefile = os.environ.get('PBS_NODEFILE')
+if nodefile and len(set(Path(nodefile).read_text().split())) != 1:
+    raise RuntimeError('The shared-memory ES worker requires one host in PBS_NODEFILE')
+if ncpus > manifest['grid']:
     raise RuntimeError('MPI ranks must not exceed the grid slab count')
 versions = {'numpy': numpy.__version__, 'scipy': scipy.__version__, 'h5py': h5py.__version__}
 if versions != manifest['python_packages']:
@@ -56,7 +71,10 @@ output.mkdir(exist_ok=True)
 print('Commit:', manifest['commit'], flush=True)
 print('Snapshots:', manifest['output_snapshots'], flush=True)
 print('Python:', manifest['python'], flush=True)
+print('ES worker threads:', threads, '; native kernels required', flush=True)
 PY
 
+# The adapter supplies the child with the union of these MPI rank affinities;
+# parent ranks retain their core bindings throughout the galaxy calculation.
 mpirun -np "$PBS_NCPUS" --bind-to core --map-by slot "$RUN_DIR/meraxes" "$RUN_DIR/input.par"
 echo "Finished: $(date)"

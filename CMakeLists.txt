@@ -62,6 +62,7 @@ option(USE_MINI_HALOS "Consider minihalos" OFF)
 option(USE_STOCHASTICITY "Compile stochastic stellar-source prescriptions" OFF)
 set(SECTOR_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/src/sector" CACHE PATH "Base directory of sector library")
 option(BUILD_TESTS "Build criterion tests" OFF)
+option(BUILD_ES_NATIVE "Build deterministic OpenMP kernels for the ES/HHe Python worker" OFF)
 option(GDB "Drop into GDB with mpi_debug_here() calls" OFF)
 option(ENABLE_PROFILING "Enable profiling of executable with gperftools." OFF)
 option(USE_CUDA "Build with CUDA support for reionization calculations (currently unsupported, see BUILD.md)" OFF)
@@ -121,6 +122,24 @@ set_target_properties(meraxes_lib PROPERTIES
 add_executable(meraxes ${CMAKE_CURRENT_SOURCE_DIR}/src/core/meraxes.c)
 set_target_properties(meraxes PROPERTIES C_STANDARD 99)
 target_link_libraries(meraxes PRIVATE meraxes_lib)
+
+if(BUILD_ES_NATIVE)
+    find_package(OpenMP REQUIRED COMPONENTS C)
+    add_library(es_hhe_kernels SHARED
+        tools/es_hhe/native_runtime.c
+        tools/es_hhe/native_geometry.c
+        tools/es_hhe/native_chemistry.c
+        tools/es_hhe/native_joint.c
+        tools/es_hhe/native_candidates.c)
+    set_target_properties(es_hhe_kernels PROPERTIES C_STANDARD 99)
+    target_link_libraries(es_hhe_kernels PRIVATE OpenMP::OpenMP_C m)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(es_hhe_kernels PRIVATE -fno-fast-math -ffp-contract=off)
+    endif()
+    if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+        target_compile_options(es_hhe_kernels PRIVATE -fexcess-precision=standard)
+    endif()
+endif()
 
 target_compile_definitions(meraxes_lib PUBLIC
     N_HISTORY_SNAPS=${N_HISTORY_SNAPS}
