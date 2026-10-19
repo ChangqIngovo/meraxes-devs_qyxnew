@@ -27,7 +27,7 @@ from native_backend import execution_metadata, numerical_identity
 
 SCHEMA = 1
 PHOTON_ACTIVITY_FLOOR = 1e-30  # Per cell/band, count / mean_h_atoms_per_cell.
-REFERENCE_SHA256 = "d73cbae546dc11935f71d43f89b9c58102d3b5a4af6a31eebc0530b76ac5f420"
+REFERENCE_SHA256 = "86590596b2f365773d8c601971551d1b99161195d3f3f3393d429f0d8ff41d7b"
 SCALARS = ("emitted", "diffuse_emitted", "absorbed", "captures", "initial_electrons")
 ARRAYS = ("gas", "photons", "source_history", "initial_nuclei", "capture_counts",
           "baseline_nuclei", "matter_exchange", "source_emitted_by_group")
@@ -296,19 +296,28 @@ def evolve_snapshot(model, metadata, arrays, progress=False):
         emitted_so_far = np.zeros_like(source)
         for index in range(steps):
             started = time.monotonic()
+            def report(info):
+                fields = ' '.join(f'{key}={value}' for key, value in info.items())
+                print(f"ES snapshot={metadata['snapshot']} substep={index + 1}/{steps} {fields}", flush=True)
             if progress:
                 print(f"ES snapshot={metadata['snapshot']} substep={index + 1}/{steps} "
                       f"dt_Myr={step / MYR:.8g} retained={model.photons.sum():.8g} start", flush=True)
+                report(dict(phase='recombine_before',state='start'))
             model.react(step / 2, cell_volume=volume)
+            if progress:
+                report(dict(phase='recombine_before',state='done'))
             # The final remainder closes the prescribed total despite rounding.
             addition = source - emitted_so_far if index == steps - 1 else source / steps
             if np.any(addition < 0):
                 raise ArithmeticError("Time splitting produced a negative source remainder")
             model.inject_counts(addition)
             emitted_so_far += addition
-            model.illuminate()
+            model.illuminate(progress=report if progress else None)
+            if progress:
+                report(dict(phase='recombine_after',state='start'))
             model.react(step / 2, cell_volume=volume)
             if progress:
+                report(dict(phase='recombine_after',state='done'))
                 print(f"ES snapshot={metadata['snapshot']} substep={index + 1}/{steps} "
                       f"seconds={time.monotonic() - started:.3f} "
                       f"retained={model.photons.sum():.8g} absorbed_total={model.absorbed:.8g} done", flush=True)

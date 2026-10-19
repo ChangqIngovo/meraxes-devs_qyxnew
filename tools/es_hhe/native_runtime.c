@@ -1,7 +1,7 @@
 #include <omp.h>
 
 /* Small ABI and runtime checks used before any scientific state is changed. */
-int es_kernel_abi_version(void) { return 1; }
+int es_kernel_abi_version(void) { return 2; }
 int es_kernel_openmp_version(void) { return _OPENMP; }
 int es_kernel_team_size(int requested)
 {

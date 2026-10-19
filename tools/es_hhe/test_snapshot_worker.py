@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Small integration tests for the online state/accounting contract."""
 import hashlib
+import contextlib
+import io
 import json
 from pathlib import Path
 import tempfile
@@ -47,6 +49,20 @@ class SnapshotTests(unittest.TestCase):
     def test_reference_frozen(self):
         path = Path(__file__).with_name("es_hhe_reference.py")
         self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), REFERENCE_SHA256)
+
+    def test_progress_identifies_selection_absorption_and_recombination(self):
+        self.advance(0, source_energy_eV=18.)
+        response = self.write(1, photons=.2, dt=.01*MYR, source_energy_eV=18.)
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            diagnostics = run(self.request, response, self.checkpoint, progress=True)
+        log = output.getvalue()
+        for phase in ('select', 'absorb', 'recombine_before', 'recombine_after'):
+            self.assertIn(f'phase={phase}', log)
+        self.assertIn('state=start', log)
+        self.assertIn('state=done', log)
+        self.assertIn('iterations=', log)
+        self.assertLess(abs(diagnostics['photon_error']), 1e-10)
 
     def test_default_radius_spans_periodic_box(self):
         self.write(0, grid_dim=4, max_radius_cells=0.)

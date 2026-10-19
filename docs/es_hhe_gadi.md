@@ -299,3 +299,49 @@ FFTs are a further optimization to investigate; they are not implemented by
 this change. Large-grid transforms already use threaded SciPy FFTs. These
 measurements do not establish 32-core scaling or the runtime of later,
 strongly ionized snapshots.
+
+## Snapshot 49 slow-progress diagnosis
+
+The supplied snapshot-48 checkpoint and snapshot-49 request came from the
+older `b4024054` run. They contain finite, nonnegative states and matching run
+identities. Replaying that version on one local CPU completed the first
+substep in 38.3 seconds: four complete catalogue scans took 26.3 seconds and
+absorption took about 11 seconds. The uploaded log ends at substep start;
+the supplied state does not reproduce a deadlock.
+
+Two cells had reached `xHI=1e-5` while retaining 0.2281 and 0.09487 normalized
+photons. Their HI counts were only `4.33e-5` and `1.79e-5`. Neutral helium
+kept a target eligible, while 18 eV photons continued absorbing the diminishing
+HI tail. The 409-cell radius-zero partial batch consequently used 9,973
+midpoint steps. The existing photon activity floor cannot remove this work:
+the remaining photon accounts are large, and the tiny quantity is HI.
+
+For independent one-cell supports with no possible crossing, the existing
+H-only equations have the terminal count solution
+`absorbed = min(initial_HI, active_photons)`. Photon-limited cells exhaust
+every active account regardless of its H opacity. For atom-limited cells,
+equal active H opacities preserve account ratios and determine their individual
+debits. The new exact path implements those two cases, retaining all unused
+and initially inactive photon credits. It does not floor a species. Unequal
+opacities in atom-limited cells, any active He opacity, overlapping supports
+and possible crossing events continue through the coupled solver. The final
+photon, nucleus and electron audits apply to both paths.
+
+The other bottleneck was weak-signal support recomputation for dense fields.
+It now uses the same ordered, compensated sums in a C/OpenMP periodic-offset
+kernel, without constructing a centre-by-support array. With this change
+alone, the complete six-substep snapshot-49 replay decreased from 148.65 to
+50.20 seconds and all 18 response datasets were bitwise unchanged. New progress
+lines identify selection, absorption and recombination so a long substep no
+longer hides which phase is active.
+
+With the independent H endpoint enabled as well, the complete snapshot took
+36.74 seconds locally. Its largest per-cell `xHI` difference from `34d6ccc9`
+was `1.49e-14`; the largest species-count difference was `1.29e-13` in normalized
+units. The remaining photon sum changed from `1.19e-12` to `2.16e-13` because
+the exact endpoint absorbs the former numerical tails. These counts enter the
+same absorption ledger, whose residual is `8.54e-15` relative to total emission.
+There were 38 committed batches in both runs. The updated suite passed 99
+tests with four native-parser cases skipped in this environment; four physical
+regressions also passed. The native ABI is now version 2, requiring a fresh
+build and prepared run. These local replays do not time a complete Gadi job.

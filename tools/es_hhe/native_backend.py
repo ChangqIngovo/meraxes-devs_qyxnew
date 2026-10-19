@@ -46,7 +46,7 @@ class NativeBackend:
             function = getattr(lib, name)
             function.argtypes = []
             function.restype = ctypes.c_int
-        if lib.es_kernel_abi_version() != 1 or lib.es_kernel_openmp_version() <= 0:
+        if lib.es_kernel_abi_version() != 2 or lib.es_kernel_openmp_version() <= 0:
             raise RuntimeError("ES native kernel ABI/OpenMP mismatch; rebuild with BUILD_ES_NATIVE=ON")
         lib.es_kernel_team_size.argtypes = [ctypes.c_int]
         lib.es_kernel_team_size.restype = ctypes.c_int
@@ -59,6 +59,8 @@ class NativeBackend:
         i64 = ctypes.c_int64
         lib.es_sparse_sums.argtypes = [i64, ip, ip, i64, fp, ip, i64, ctypes.c_double, fp, ctypes.c_int]
         lib.es_sparse_sums.restype = ctypes.c_int
+        lib.es_periodic_offset_sums.argtypes = [i64, ip, fp, ip, i64, ip, i64, fp, ctypes.c_int]
+        lib.es_periodic_offset_sums.restype = ctypes.c_int
         lib.es_indexed_sum.argtypes = [fp, i64, i64, ip, i64, ip, i64, fp, ctypes.c_int]
         lib.es_indexed_sum.restype = ctypes.c_int
         lib.es_upward_cells.argtypes = [ctypes.c_size_t, fp, fp, fp, ctypes.c_int, fp, fp, ctypes.c_int]
@@ -101,6 +103,19 @@ class NativeBackend:
                     offsets, len(offsets)-1, out, self.threads), "indexed sums")
         return out
 
+    def periodic_offset_sums(self, side, xyz, column, rows, offsets):
+        xyz = np.ascontiguousarray(xyz, dtype=np.int64)
+        column = np.ascontiguousarray(column, dtype=np.float64)
+        rows = np.ascontiguousarray(rows, dtype=np.int64)
+        offsets = np.ascontiguousarray(offsets, dtype=np.int64)
+        if (xyz.shape != (side**3, 3) or column.shape != (side**3,)
+                or rows.ndim != 1 or offsets.ndim != 2 or offsets.shape[1] != 3):
+            raise ValueError("Invalid periodic support array shapes")
+        out = np.empty(len(rows))
+        self._check(self.library.es_periodic_offset_sums(side, xyz, column, rows,
+            len(rows), offsets, len(offsets), out, self.threads), "periodic support sums")
+        return out
+
     def upward_cells(self, species, rates, exposure):
         n = np.ascontiguousarray(species, dtype=np.float64)
         r = np.ascontiguousarray(rates, dtype=np.float64)
@@ -117,7 +132,7 @@ class NativeBackend:
         return updated, counts
 
     def metadata(self):
-        return dict(backend="C/OpenMP", abi=1, library_sha256=self.sha256,
+        return dict(backend="C/OpenMP", abi=2, library_sha256=self.sha256,
                     threads=self.threads, openmp_team_size=self.team_size,
                     affinity_cpus=self.affinity)
 

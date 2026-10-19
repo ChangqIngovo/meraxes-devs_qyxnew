@@ -35,6 +35,9 @@ class NativeGeometry(unittest.TestCase):
         cls.lib.es_sparse_sums.argtypes = [i64, integer, integer, i64, floating,
                                           integer, i64, ctypes.c_double, floating, i32]
         cls.lib.es_sparse_sums.restype = i32
+        cls.lib.es_periodic_offset_sums.argtypes = [i64, integer, floating,
+            integer, i64, integer, i64, floating, i32]
+        cls.lib.es_periodic_offset_sums.restype = i32
         cls.lib.es_indexed_sum.argtypes = [floating, i64, i64, integer, i64,
                                           integer, i64, floating, i32]
         cls.lib.es_indexed_sum.restype = i32
@@ -57,6 +60,80 @@ class NativeGeometry(unittest.TestCase):
                                         len(indices), offsets, len(out), out, threads)
         self.assertEqual(status, 0)
         return out
+
+    def periodic(self, side, xyz, column, rows, offsets, threads):
+        out = np.empty(len(rows))
+        status = self.lib.es_periodic_offset_sums(side, xyz, column, rows,
+            len(rows), offsets, len(offsets), out, threads)
+        self.assertEqual(status, 0)
+        return out
+
+    def test_periodic_offsets_signed_dynamic_range_and_threads(self):
+        rng = np.random.default_rng(493)
+        side = 16
+        xyz = np.ascontiguousarray(np.indices((side,)*3).reshape(3, -1).T, dtype=np.int64)
+        delta = np.minimum(xyz, side-xyz)
+        offsets = xyz[np.sum(delta*delta, axis=1) <= 25]
+        column = rng.choice([-1., 0., 1.], len(xyz)) * 10.**rng.uniform(-320, 200, len(xyz))
+        tiny = np.nextafter(0., 1.)
+        column[:12] = [1e200, 1., -1e200, tiny, tiny, -tiny,
+                       1., 2.**-53, tiny, -1., -2.**-53, -tiny]
+        rows = np.r_[np.arange(0, len(xyz), 4, dtype=np.int64), len(xyz)-1]
+        expected = []
+        for row in rows:
+            points = (offsets + xyz[row]) % side
+            cells = (points[:, 0]*side + points[:, 1])*side + points[:, 2]
+            expected.append(math.fsum(column[cells].tolist()))
+        expected = np.asarray(expected)
+        for threads in (1, 4):
+            actual = self.periodic(side, xyz, column, rows, offsets, threads)
+            np.testing.assert_array_equal(actual.view(np.uint64), expected.view(np.uint64))
+
+    def test_periodic_offsets_cancellation_subnormals_and_empty(self):
+        side = 2
+        xyz = np.ascontiguousarray(np.indices((side,)*3).reshape(3, -1).T, dtype=np.int64)
+        rows = np.arange(len(xyz), dtype=np.int64)
+        tiny = np.nextafter(0., 1.)
+        for column in (np.array([1e16, 1., -1e16, tiny, tiny, -tiny, 0., -0.]),
+                       np.array([tiny, tiny, -tiny, 0., -0., 0., 0., 0.])):
+            for offsets in (xyz, xyz[:3], xyz[:0]):
+                expected = []
+                for row in rows:
+                    points = (offsets + xyz[row]) % side
+                    cells = (points[:, 0]*side + points[:, 1])*side + points[:, 2]
+                    expected.append(math.fsum(column[cells].tolist()))
+                np.testing.assert_array_equal(self.periodic(side, xyz, column, rows, offsets, 4), expected)
+        self.assertEqual(self.periodic(side, xyz, column, rows[:0], xyz, 4).size, 0)
+
+    def test_periodic_offsets_invalid_and_nonfinite(self):
+        side = 2
+        xyz = np.ascontiguousarray(np.indices((side,)*3).reshape(3, -1).T, dtype=np.int64)
+        rows = np.array([7], dtype=np.int64)
+        offsets = np.array([[1, 1, 1]], dtype=np.int64)
+        column = np.ones(len(xyz))
+        out = np.empty(1)
+        def call(centres=rows, support=offsets, positions=xyz, threads=4, grid_side=side):
+            return self.lib.es_periodic_offset_sums(grid_side, positions, column,
+                centres, len(centres), support, len(support), out, threads)
+        for value in (np.nan, np.inf, -np.inf):
+            column[0] = value
+            self.assertEqual(call(), 2)
+        column[0] = np.finfo(float).max
+        self.assertEqual(call(support=np.repeat(offsets, 2, axis=0)), 2)
+        column[0] = 1.
+        for index in (-1, len(xyz)):
+            self.assertEqual(call(centres=np.array([index], dtype=np.int64)), 1)
+        for value in (-1, side):
+            invalid = offsets.copy()
+            invalid[0, 0] = value
+            self.assertEqual(call(support=invalid), 1)
+        invalid = xyz.copy()
+        invalid[7, 0] = side
+        self.assertEqual(call(positions=invalid), 1)
+        for threads in (0, 1025):
+            self.assertEqual(call(threads=threads), 1)
+        for grid_side in (0, 2097152):
+            self.assertEqual(call(grid_side=grid_side), 1)
 
     def test_sparse_minimum_image_and_parallel_determinism(self):
         rng = np.random.default_rng(661)

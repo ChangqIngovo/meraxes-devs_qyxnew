@@ -35,7 +35,9 @@ python tools/es_hhe/snapshot_worker.py \
 
 Copy the entire directory when freezing a run: the worker imports the reference
 from its own directory. Each physical substep logs its duration and remaining
-photon budget. The final JSON contains the cumulative count audit.
+photon budget. Progress also identifies recombination, candidate selection and
+absorption, including support counts and chemistry iterations per batch.
+The final JSON contains the cumulative count audit.
 
 `ES_NATIVE_LIBRARY` selects a library explicitly; a prepared worker otherwise
 loads `libes_hhe_kernels.so` beside its source. `ES_NATIVE_REQUIRED=1` prevents
@@ -95,6 +97,13 @@ conversion. The generic reference API defaults to a zero absolute floor;
 metadata records this numerical policy, and the diagnostics report the number
 and summed balance of dormant accounts. See `docs/es_hhe_gadi.md` for the
 snapshot-29 convergence replay and bounded sparse-geometry implementation.
+
+Independent one-cell H-only supports use an exact terminal count update when
+no new crossing can occur. Photon-limited cells consume their active accounts;
+atom-limited cells with equal active H opacities share the HI debit in proportion
+to their photon balances. Unused and dormant photons remain explicit. He-active,
+overlapping and possible-crossing cases retain the coupled solver. This avoids
+thousands of steps following an already-ionized cell's vanishing neutral tail.
 
 The first requested snapshot initializes neutral gas and requires `dt_s=0`
 and no sources. Every subsequent request must have the next consecutive

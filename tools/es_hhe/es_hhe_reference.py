@@ -34,6 +34,7 @@ Unabsorbed diffuse counts persist by channel. The ES layer may pool them with
 other photons in the same accepted region; no photon is discarded here.
 """
 from dataclasses import dataclass
+import time
 import numpy as np
 from native_backend import get_backend, rfftn, irfftn
 
@@ -827,7 +828,7 @@ class PeriodicSphereGeometry:
         self.counters=dict(field_preparations=0,forward_ffts=0,inverse_ffts=0,
                            kernel_ffts=0,direct_sums=0,dynamic_range_fallbacks=0)
 
-    def cells(self,center,radius_index):
+    def offsets(self,radius_index):
         k=int(radius_index)
         if k not in self._offsets:
             self._offsets[k]=self.xyz[self.origin_distance2<=self.radii2[k]]
@@ -835,7 +836,10 @@ class PeriodicSphereGeometry:
                 self._offsets.popitem(last=False)
         else:
             self._offsets.move_to_end(k)
-        points=(self._offsets[k]+self.xyz[int(center)])%self.side
+        return self._offsets[k]
+
+    def cells(self,center,radius_index):
+        points=(self.offsets(radius_index)+self.xyz[int(center)])%self.side
         return (points[:,0]*self.side+points[:,1])*self.side+points[:,2]
 
     def kernel(self,radius_index):
@@ -927,6 +931,9 @@ class PeriodicSphereGeometry:
                     indices=prepared.nonzero_indices[j]
                     if indices is not None and len(indices)<volume:
                         result[rows,j]=self.sparse_sums(column,indices,rows,radius_index)
+                    elif len(rows) and get_backend() is not None:
+                        result[rows,j]=get_backend().periodic_offset_sums(self.side,self.xyz,
+                            column,rows,self.offsets(radius_index))
                     else:
                         for c in rows:
                             result[c,j]=_column_sum(column[self.cells(c,radius_index)])
@@ -1203,6 +1210,70 @@ def _upward_cells_numpy(n,rate,exposure):
     return new,counts
 
 
+def _disjoint_hydrogen_endpoint(initial,p0,cross,op,epsilon,residual):
+    """Exact no-crossing H endpoint for independent one-cell supports.
+
+    Photon-limited cells consume every active account regardless of opacity.
+    Equal H opacities preserve account ratios in atom-limited cells. The
+    photon total and HI have the same loss, so either asymptotic endpoint
+    spends min(HI, photons). This closes the existing reaction ODE;
+    it does not impose a floor on a species or discard a photon account.
+    Different cells may use different opacities because they do not overlap.
+    """
+    if not (getattr(op,'single_cells',False) and getattr(op,'disjoint',False)):
+        return None
+    covered=np.asarray(op.multiplicity)>0
+    potential=(p0>residual)&covered[:,None]
+    # Preserve the common H/He path whenever a physically active channel can
+    # ionize He. An inactive or completely nonabsorbing account stays intact.
+    if np.any(potential&np.any(cross[:,1:]>0,axis=1)[None,:]):
+        return None
+    active=potential&(initial[:,0,None]>0)&(cross[:,0]>0)[None,:]
+    live=np.any(active,axis=1)
+    if not np.any(live):
+        return None
+    light=np.where(active,p0,0.)
+    available=np.array([math.fsum(row.tolist()) for row in light])
+    normal=initial[:,:2].sum(axis=1)
+    if np.any(~np.isfinite(available)) or np.any(~np.isfinite(normal)):
+        return None
+    neutral=initial[:,0]
+    atom_limited=live&(available>neutral)
+    first=np.argmax(active,axis=1)
+    opacity=cross[first,0]
+    if np.any(atom_limited[:,None]&active&(cross[:,0][None,:]!=opacity[:,None])):
+        return None
+    threshold=epsilon*normal
+    eligible=(normal>0)&(neutral>threshold+64*np.finfo(float).eps*normal)
+    needed=neutral-threshold
+    margin=64*np.finfo(float).eps*np.maximum.reduce((available,neutral,normal))
+    # Every initially unmet H target must remain strictly unreachable, with
+    # the same roundoff allowance as the ES candidate decision. Otherwise
+    # the earliest event must still stop the shared integration.
+    if np.any(live&eligible&~(available+margin<needed)):
+        return None
+    amount=np.minimum(neutral,available)
+    amount[~live]=0.
+    fraction=np.divide(amount,available,out=np.zeros_like(amount),where=available>0)
+    debit=light.copy()
+    debit[atom_limited]=light[atom_limited]*fraction[atom_limited,None]
+    # Dividing HI by a vastly larger photon reservoir can underflow even
+    # though the individual capture is representable. Form the normalized
+    # account share first in just those cells.
+    underflow=atom_limited&(fraction==0)&(amount>0)
+    debit[underflow]=(light[underflow]/available[underflow,None])*amount[underflow,None]
+    state=initial.copy()
+    state[:,0]-=amount
+    state[:,1]+=amount
+    photons=p0-debit
+    absorbed=np.zeros((len(initial),3));absorbed[:,0]=amount
+    # All changes share the same capture count. The public finish() audits
+    # the small floating-point partition error when duplicate bands exist.
+    reason='absorber_saturation' if np.any(atom_limited) else 'photon_exhaustion'
+    return dict(species=state,photons=photons,absorbed=absorbed,debit=debit,
+                stop=reason)
+
+
 def joint_exposure_update(gas,photons,energies,membership,epsilon=1e-5,
                           donor_fraction=.02,count_tolerance=1e-13,
                           max_iterations=20000,monochromatic_fastpath=True,
@@ -1271,7 +1342,7 @@ def joint_exposure_update(gas,photons,energies,membership,epsilon=1e-5,
     # Dormant photons remain in p and the ledger; they never constrain steps.
     residual=np.maximum(photon_floor,count_tolerance*np.minimum(p0,donor_capacity))
     total_exposure=0.;evaluations=0;accepted_steps=0;events=[];reason='no_absorption'
-    monochromatic_fluence=None;used_exact=False
+    monochromatic_fluence=None;used_exact=False;endpoint_kind=None
     smallest=np.nextafter(0.,1.)
 
     def finish():
@@ -1290,13 +1361,20 @@ def joint_exposure_update(gas,photons,energies,membership,epsilon=1e-5,
         return dict(species=n,photons=p,absorbed=absorbed,debit=debit_total,
                     stop=reason,exposure=total_exposure,iterations=evaluations,
                     monochromatic_fluence=monochromatic_fluence,
-                    exposure_kind="normalized_monochromatic_fluence" if used_exact else "midpoint_coordinate",
+                    exposure_kind=endpoint_kind or ("normalized_monochromatic_fluence" if used_exact else "midpoint_coordinate"),
                     substeps=accepted_steps,events=events,proposals=op.shape[0],
                     absorbed_count=amount,photon_error=photon_error,
                     max_debit_fraction=float(np.max(np.divide(debit_total,p0,
                         out=np.zeros_like(p0),where=p0>0))) if p0.size else 0.)
 
     if not op.shape[0] or not scale or not np.any(p>0):return finish()
+    if monochromatic_fastpath and op.shape[0]>1:
+        endpoint=_disjoint_hydrogen_endpoint(initial,p0,cross,op,epsilon,residual)
+        if endpoint is not None:
+            n,p,absorbed,debit_total=(endpoint[key] for key in ('species','photons','absorbed','debit'))
+            reason=endpoint['stop'];total_exposure=None;accepted_steps=1
+            endpoint_kind='independent_hydrogen_endpoint'
+            return finish()
     native=get_backend()
     if native is not None and op.shape[0]>1 and isinstance(op,_CompactSphereOperator):
         result=native.joint_compact(initial,p0,cross,op.indices,op.offsets,
@@ -1903,11 +1981,13 @@ class SpectralES:
         self.absorbed+=absorbed
         self.events.append(dict(kind=kind,proposals=len(membership),
                                 exposure=result['exposure'],stop=result['stop'],
+                                iterations=result['iterations'],substeps=result['substeps'],
+                                exposure_kind=result['exposure_kind'],
                                 absorbed=absorbed,
                                 radius=float(np.sqrt(self.radii2[proposals.radius_index]))))
         return True
 
-    def illuminate(self, max_batches=500):
+    def illuminate(self, max_batches=500, progress=None):
         """Conservative geometry/chemistry stage; max_batches is a fail-loud guard.
 
         Unlike scalar H, no general H/He finite-event performance bound is claimed.
@@ -1925,11 +2005,27 @@ class SpectralES:
             if not np.any(self._active_photons):
                 self.audit()
                 return
+            started=time.monotonic()
+            if progress:
+                progress(dict(phase='select',batch=committed+1,state='start'))
             kind, proposals=self._select(excluded_partial_radii)
+            if progress:
+                progress(dict(phase='select',batch=committed+1,state='done',
+                    seconds=round(time.monotonic()-started,3),kind=kind,
+                    supports=len(proposals),radius_squared=(float(self.radii2[proposals.radius_index])
+                        if proposals else None)))
             if not proposals:
                 self.audit()
                 return
-            if self._commit(proposals,kind):
+            started=time.monotonic()
+            if progress:
+                progress(dict(phase='absorb',batch=committed+1,state='start'))
+            accepted=self._commit(proposals,kind)
+            if progress:
+                details={key:self.events[-1][key] for key in ('stop','absorbed','iterations','substeps','exposure_kind')} if accepted else {}
+                progress(dict(phase='absorb',batch=committed+1,state='done',
+                    seconds=round(time.monotonic()-started,3),accepted=accepted,**details))
+            if accepted:
                 committed+=1
                 excluded_partial_radii.clear()
             else:

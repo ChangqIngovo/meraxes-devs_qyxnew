@@ -142,6 +142,56 @@ int es_sparse_sums(int64_t side, const int64_t *xyz,
     return status;
 }
 
+int es_periodic_offset_sums(int64_t side, const int64_t *xyz,
+                           const double *column, const int64_t *rows,
+                           int64_t nrows, const int64_t *offsets,
+                           int64_t noffsets, double *out, int threads)
+{
+    if (side < 1 || side > 2097151 || nrows < 0 || noffsets < 0 ||
+        noffsets > INT64_MAX / 3 || threads < 1 || threads > 1024)
+        return 1;
+    int64_t size = side * side * side;
+    if (size > INT64_MAX / 3 || !xyz || !column ||
+        (noffsets && !offsets) || (nrows && (!rows || !out))) return 1;
+    for (int64_t j = 0; j < 3 * noffsets; ++j)
+        if (offsets[j] < 0 || offsets[j] >= side) return 1;
+    for (int64_t i = 0; i < nrows; ++i) {
+        if (rows[i] < 0 || rows[i] >= size) return 1;
+        for (int axis = 0; axis < 3; ++axis)
+            if (xyz[3 * rows[i] + axis] < 0 || xyz[3 * rows[i] + axis] >= side)
+                return 1;
+    }
+    int count = thread_count(threads, nrows, (long double)nrows * noffsets);
+    int status = 0;
+#pragma omp parallel num_threads(count) if(count > 1) reduction(max:status)
+    {
+        double partials[ES_SUM_CAPACITY];
+#pragma omp for schedule(static)
+        for (int64_t row = 0; row < nrows; ++row) {
+            int n = 0;
+            const int64_t *center = xyz + 3 * rows[row];
+            for (int64_t j = 0; j < noffsets; ++j) {
+                int64_t x = center[0] + offsets[3 * j];
+                int64_t y = center[1] + offsets[3 * j + 1];
+                int64_t z = center[2] + offsets[3 * j + 2];
+                if (x >= side) x -= side;
+                if (y >= side) y -= side;
+                if (z >= side) z -= side;
+                double value = column[(x * side + y) * side + z];
+                if (value == 0.0) continue;
+                int error = expansion_add(value, partials, &n);
+                if (error) {
+                    if (error > status) status = error;
+                    break;
+                }
+            }
+            out[row] = expansion_total(partials, n);
+            if (!isfinite(out[row]) && status < 2) status = 2;
+        }
+    }
+    return status;
+}
+
 int es_indexed_sum(const double *values, int64_t value_rows, int64_t columns,
                    const int64_t *indices, int64_t nindices,
                    const int64_t *offsets, int64_t nrows,
