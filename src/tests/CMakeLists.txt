@@ -200,6 +200,12 @@ if(Python3_Interpreter_FOUND)
             COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/es_hhe/test_snapshot_worker.py)
         set_tests_properties(test_photon_es_worker PROPERTIES TIMEOUT 180
             ENVIRONMENT "OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1")
+        foreach(es_python_test photon_floor sparse_geometry)
+            add_test(NAME test_photon_es_${es_python_test}
+                COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/es_hhe/test_${es_python_test}.py)
+            set_tests_properties(test_photon_es_${es_python_test} PROPERTIES TIMEOUT 180
+                ENVIRONMENT "OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1")
+        endforeach()
         add_test(NAME test_photon_es_runner
             COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/es_hhe/test_gadi_runner.py)
         set_tests_properties(test_photon_es_runner PROPERTIES TIMEOUT 120

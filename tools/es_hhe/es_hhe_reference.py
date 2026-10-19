@@ -200,7 +200,8 @@ def recombine(n, dt):
     return out, capture
 
 
-def absorb_local(n, photons, tolerance=1e-12, max_iter=20000, donor_fraction=.005):
+def absorb_local(n, photons, tolerance=1e-12, max_iter=20000, donor_fraction=.005,
+                 photon_floor=0.):
     """Infinite-fast local absorption closure, limited by available atoms.
 
     Simultaneous competing hazards prevent different spectral channels from
@@ -216,7 +217,8 @@ def absorb_local(n, photons, tolerance=1e-12, max_iter=20000, donor_fraction=.00
         raise ValueError('Finite nonnegative species and diffuse counts required')
     if (not np.isfinite(tolerance) or not 0 < tolerance < 1
             or not np.isfinite(donor_fraction) or not 0 < donor_fraction <= 1
-            or not isinstance(max_iter, (int, np.integer)) or max_iter <= 0):
+            or not isinstance(max_iter, (int, np.integer)) or max_iter <= 0
+            or not np.isfinite(photon_floor) or photon_floor < 0):
         raise ValueError('Invalid local absorption convergence controls')
     absorbed = np.zeros((8, 3))
     cross = cross_sections(OPACITY_E_EV)
@@ -226,7 +228,7 @@ def absorb_local(n, photons, tolerance=1e-12, max_iter=20000, donor_fraction=.00
     # upward chain creates new HeII while absorbing photons.
     reachable = np.array([n[0], n[2], n[2]+n[3]])
     usable = cross > 0
-    photon_tolerance = tolerance*np.minimum(photons, usable@reachable)
+    photon_tolerance = np.maximum(photon_floor, tolerance*np.minimum(photons, usable@reachable))
     atom_tolerance = tolerance*np.minimum(reachable, photons@usable)
     for iteration in range(max_iter):
         # Keep negligible residual atoms and photons in the returned state,
@@ -266,7 +268,8 @@ class Ledger:
     steps: int = 0
 
 
-def evolve_dark(n, duration, max_step, pending=None, absorption_donor_fraction=.005):
+def evolve_dark(n, duration, max_step, pending=None, absorption_donor_fraction=.005,
+                photon_floor=0.):
     """Source-off evolution at fixed density, fixed T=10^4 K.
 
     Returns species, retained diffuse photons, ledger. Lie splitting error
@@ -281,7 +284,8 @@ def evolve_dark(n, duration, max_step, pending=None, absorption_donor_fraction=.
     if (not np.isfinite(duration) or not np.isfinite(max_step)
             or duration < 0 or max_step <= 0):
         raise ValueError('Invalid time')
-    if not np.isfinite(absorption_donor_fraction) or not 0 < absorption_donor_fraction <= 1:
+    if (not np.isfinite(absorption_donor_fraction) or not 0 < absorption_donor_fraction <= 1
+            or not np.isfinite(photon_floor) or photon_floor < 0):
         raise ValueError('Invalid absorption donor fraction')
     ledger = Ledger(np.zeros(3), np.zeros(8), np.zeros((8, 3)))
     elapsed = 0.
@@ -290,7 +294,7 @@ def evolve_dark(n, duration, max_step, pending=None, absorption_donor_fraction=.
         n, rec = recombine(n, dt)
         emission = emit_from_captures(rec)
         n, pending, absorbed, iterations = absorb_local(n, pending+emission,
-            donor_fraction=absorption_donor_fraction)
+            donor_fraction=absorption_donor_fraction, photon_floor=photon_floor)
         ledger.captures += rec
         ledger.emitted += emission
         ledger.absorbed += absorbed
@@ -773,6 +777,7 @@ class PreparedSphereFields:
         self.constants=[]
         self.nonnegative=[]
         self.error_bounds=[]
+        self.nonzero_indices=[]
         geometry.counters['field_preparations']+=1
         shape=(geometry.side,)*3
         for column in self.x.T:
@@ -780,6 +785,11 @@ class PreparedSphereFields:
             nonnegative=bool(np.all(column>=0))
             self.constants.append(constant)
             self.nonnegative.append(nonnegative)
+            # Exact zeros carry no signal. Retain every other value, including
+            # subnormals, for sparse high-dynamic-range support sums.
+            sparse=(not constant and np.count_nonzero(column)<=
+                    min(65536,geometry.size//4))
+            self.nonzero_indices.append(np.flatnonzero(column!=0) if sparse else None)
             self.error_bounds.append(64*np.finfo(float).eps*max(1.,np.log2(geometry.size))
                                      *float(np.max(np.abs(column))))
             if geometry.direct or constant:
@@ -842,6 +852,27 @@ class PeriodicSphereGeometry:
     def prepare(self,values):
         return PreparedSphereFields(self,values)
 
+    def sparse_sums(self,column,indices,rows,radius_index):
+        """Exact weak-support sums over occupied cells, with bounded workspace.
+
+        This is the same minimum-image membership and math.fsum as cells().
+        It skips exact zeros, never a small nonzero photon account. Chunking
+        avoids retaining a centre-by-source distance or membership matrix.
+        """
+        result=np.zeros(len(rows),dtype=float)
+        if not len(indices):return result
+        sources=self.xyz[indices]
+        values=column[indices]
+        chunk=max(1,65536//len(indices))
+        for lo in range(0,len(rows),chunk):
+            centres=self.xyz[rows[lo:lo+chunk]]
+            delta=np.abs(centres[:,None,:]-sources[None,:,:])
+            delta=np.minimum(delta,self.side-delta)
+            inside=np.sum(delta*delta,axis=2)<=self.radii2[radius_index]
+            result[lo:lo+len(centres)]=[math.fsum(values[hit].tolist())
+                                      for hit in inside]
+        return result
+
     def all_sums(self,values,radius_index):
         if self.radii2[radius_index]==0 and not isinstance(values,PreparedSphereFields):
             x=np.asarray(values,dtype=float)
@@ -889,8 +920,12 @@ class PeriodicSphereGeometry:
                     if occupied is not None:
                         weak &= occupied
                     rows=np.flatnonzero(weak)
-                    for c in rows:
-                        result[c,j]=_column_sum(column[self.cells(c,radius_index)])
+                    indices=prepared.nonzero_indices[j]
+                    if indices is not None and len(indices)<volume:
+                        result[rows,j]=self.sparse_sums(column,indices,rows,radius_index)
+                    else:
+                        for c in rows:
+                            result[c,j]=_column_sum(column[self.cells(c,radius_index)])
                     self.counters['direct_sums']+=len(rows)
                     self.counters['dynamic_range_fallbacks']+=len(rows)
         return result[:,0] if prepared.scalar else result
@@ -907,6 +942,60 @@ class _SphereTranspose:
         return self.operator.scatter(values)
     def __matmul__(self,values):
         return self.dot(values)
+
+
+class _CompactSphereOperator:
+    """Exact sparse membership on the union of a small selected support set.
+
+    Storage follows the number of actual memberships, with no sphere-by-cell
+    dense matrix. Aggregate and scatter use the same memberships and accurate
+    sums, so their adjoint relationship does not depend on FFT cancellation.
+    """
+    def __init__(self,cells,offsets):
+        self.cell_indices,self.indices=np.unique(cells,return_inverse=True)
+        self.offsets=np.asarray(offsets,dtype=np.int64)
+        sizes=np.diff(self.offsets)
+        self.shape=(len(sizes),len(self.cell_indices))
+        self.volumes=sizes.astype(float)
+        self.multiplicity=np.bincount(self.indices,minlength=self.shape[1]).astype(float)
+        self.owners=np.repeat(np.arange(self.shape[0]),sizes)
+        order=np.argsort(self.indices,kind='stable')
+        self.scatter_owners=self.owners[order]
+        self.scatter_offsets=np.r_[0,np.cumsum(self.multiplicity,dtype=np.int64)]
+        self.single_cells=bool(np.all(sizes==1))
+        self.disjoint=bool(np.all(self.multiplicity==1))
+        self.T=_SphereTranspose(self)
+
+    def __len__(self):return self.shape[0]
+
+    def aggregate(self,values):
+        x=np.asarray(values,dtype=float)
+        if x.ndim not in (1,2) or x.shape[0]!=self.shape[1]:
+            raise ValueError('Cell count does not match compact operator')
+        if self.single_cells:return x[self.indices].copy()
+        out=np.empty((len(self),)+x.shape[1:])
+        for row,(start,end) in enumerate(zip(self.offsets[:-1],self.offsets[1:])):
+            out[row]=_column_sum(x[self.indices[start:end]])
+        return out
+
+    def scatter(self,values):
+        y=np.asarray(values,dtype=float)
+        if y.ndim not in (1,2) or y.shape[0]!=len(self):
+            raise ValueError('Sphere count does not match compact operator')
+        out=np.empty((self.shape[1],)+y.shape[1:])
+        if self.disjoint:
+            out[self.indices]=y[self.owners]
+            return out
+        for cell,(start,end) in enumerate(zip(self.scatter_offsets[:-1],self.scatter_offsets[1:])):
+            out[cell]=_column_sum(y[self.scatter_owners[start:end]])
+        return out
+
+    def sum(self,axis):
+        if axis==0:return self.multiplicity
+        if axis==1:return self.volumes
+        raise ValueError('Specify sphere sum axis 0 or 1')
+    def dot(self,values):return self.aggregate(values)
+    def __matmul__(self,values):return self.aggregate(values)
 
 
 class SphereOperator:
@@ -943,10 +1032,39 @@ class SphereOperator:
             volume=np.array([np.count_nonzero(geometry.origin_distance2<=geometry.radii2[k])
                              for k in radii],dtype=float)
             self.volumes=volume[inverse]
-        self.multiplicity=np.rint(self.scatter(np.ones(len(self))))
+        self._compact_operator=None
+        self._compact_cells=None
+        # Selected early-time supports occupy a small part of the volume.
+        # Retain their exact index lists only while storage is bounded both
+        # absolutely and by the already allocated grid. Large supports keep
+        # the implicit FFT implementation and its linear storage bound.
+        entries=int(self.volumes.sum())
+        if (len(self) and entries<=min(1000000,geometry.size) and
+                not (len(self)==1 and self.volumes[0]==geometry.size)):
+            offsets=np.r_[0,np.cumsum(self.volumes,dtype=np.int64)]
+            cells=np.empty(entries,dtype=np.int64)
+            for row,(start,end) in enumerate(zip(offsets[:-1],offsets[1:])):
+                cells[start:end]=geometry.cells(self.centres[row],self.radius_indices[row])
+            compact=_CompactSphereOperator(cells,offsets)
+            # Many overlapping cells are faster with grouped FFTs than with
+            # Python accurate sums. Disjoint supports scatter by indexing and
+            # remain efficient even when their union covers most of the grid.
+            if compact.disjoint or len(compact.cell_indices)<=geometry.size//16:
+                self._compact_operator=compact
+                self._compact_cells=compact.cell_indices
+                self.multiplicity=np.zeros(self.shape[1])
+                self.multiplicity[self._compact_cells]=compact.multiplicity
+        if self._compact_operator is None:
+            self.multiplicity=np.rint(self.scatter(np.ones(len(self))))
 
     def __len__(self):
         return self.shape[0]
+
+    def compact(self):
+        """Return covered grid indices and an exact operator on those cells."""
+        if self._compact_operator is None or len(self._compact_cells)==self.shape[1]:
+            return None
+        return self._compact_cells,self._compact_operator
 
     def aggregate(self,values):
         x=np.asarray(values,dtype=float)
@@ -957,6 +1075,8 @@ class SphereOperator:
             return x[self.centres].copy()
         if len(self)==1 and self.volumes[0]==self.shape[1]:
             return np.asarray(_column_sum(x))[None,...]
+        if self._compact_operator is not None:
+            return self._compact_operator.aggregate(x[self._compact_cells])
         prepared=None if self.geometry.direct else self.geometry.prepare(x)
         for k in np.unique(self.radius_indices):
             rows=np.flatnonzero(self.radius_indices==k)
@@ -978,6 +1098,9 @@ class SphereOperator:
             return out
         if len(self)==1 and self.volumes[0]==self.shape[1]:
             return np.broadcast_to(y[0],out.shape).copy()
+        if self._compact_operator is not None:
+            out[self._compact_cells]=self._compact_operator.scatter(y)
+            return out
         if self.geometry.direct:
             for cell in range(self.shape[1]):
                 delta=np.abs(self.geometry.xyz[self.centres]-self.geometry.xyz[cell])
@@ -1065,7 +1188,8 @@ def _upward_cells(n,rate,exposure):
 
 def joint_exposure_update(gas,photons,energies,membership,epsilon=1e-5,
                           donor_fraction=.02,count_tolerance=1e-13,
-                          max_iterations=20000,monochromatic_fastpath=True):
+                          max_iterations=20000,monochromatic_fastpath=True,
+                          photon_floor=0.):
     """Common ES field with positive exponential-midpoint photon depletion.
 
     membership is Boolean(sphere,cell), or has shape,volumes,multiplicity,
@@ -1088,7 +1212,7 @@ def joint_exposure_update(gas,photons,energies,membership,epsilon=1e-5,
     if (not all(np.all(np.isfinite(a)) for a in (initial,p0,e)) or np.any(initial<0)
             or np.any(p0<0) or not 0<epsilon<1 or not 0<donor_fraction<1
             or not 0<count_tolerance<1 or not isinstance(max_iterations,(int,np.integer))
-            or max_iterations<1):
+            or max_iterations<1 or not np.isfinite(photon_floor) or photon_floor<0):
         raise ValueError('Finite nonnegative states and valid controls required')
     n=initial.copy();p=p0.copy();absorbed=np.zeros((len(n),3));debit_total=np.zeros_like(p)
     volume=np.asarray(op.volumes,dtype=float);multiplicity=np.asarray(op.multiplicity,dtype=float)
@@ -1096,6 +1220,23 @@ def joint_exposure_update(gas,photons,energies,membership,epsilon=1e-5,
             np.any(volume<=0) or np.any(multiplicity<0) or
             not np.all(np.isfinite(volume)) or not np.all(np.isfinite(multiplicity))):
         raise ValueError('Invalid sphere volumes or multiplicities')
+    # Small selected supports touch only a small fraction of the box. Evolve
+    # exactly those cells, using the same membership and donor multiplicities.
+    # All input cells were validated above; uncovered accounts stay unchanged.
+    compact=op.compact() if hasattr(op,'compact') else None
+    if compact is not None:
+        cells,restricted=compact
+        if len(cells)<len(n):
+            result=joint_exposure_update(initial[cells],p0[cells],e,restricted,
+                epsilon=epsilon,donor_fraction=donor_fraction,count_tolerance=count_tolerance,
+                max_iterations=max_iterations,monochromatic_fastpath=monochromatic_fastpath,
+                photon_floor=photon_floor)
+            n[cells]=result['species'];p[cells]=result['photons']
+            absorbed[cells]=result['absorbed'];debit_total[cells]=result['debit']
+            result.update(species=n,photons=p,absorbed=absorbed,debit=debit_total)
+            result['absorbed_count']=float(absorbed.sum())
+            result['photon_error']=float(debit_total.sum()-absorbed.sum())
+            return result
     inverse=np.divide(1.,multiplicity,out=np.zeros_like(multiplicity),where=multiplicity>0)
     cross=cross_sections(e);scale=float(cross.max()) if cross.size else 0.
     if scale:cross/=scale
@@ -1109,7 +1250,9 @@ def joint_exposure_update(gas,photons,energies,membership,epsilon=1e-5,
     reachable=np.column_stack((n[:,0],n[:,2],n[:,2]+n[:,3]))
     # Conservative reachable counts set only per-account numerical tolerances.
     donor_capacity=(op.scatter(op.aggregate(reachable))@(cross>0).T)*inverse[:,None]
-    residual=count_tolerance*np.minimum(p0,donor_capacity)
+    # Absolute activity floor is in the same count units as each account.
+    # Dormant photons remain in p and the ledger; they never constrain steps.
+    residual=np.maximum(photon_floor,count_tolerance*np.minimum(p0,donor_capacity))
     total_exposure=0.;evaluations=0;accepted_steps=0;events=[];reason='no_absorption'
     monochromatic_fluence=None;used_exact=False
     smallest=np.nextafter(0.,1.)
@@ -1502,7 +1645,7 @@ class SpectralES:
     def __init__(self, side=3, helium=.081, epsilon=1e-5, donor_fraction=.02,
                  radii2=None, count_tolerance=1e-12, count_pruning=True,
                  trial_cache=True, radius_ratio=None, batch_candidates=True,
-                 candidate_batch_size=256):
+                 candidate_batch_size=256, photon_floor=0.):
         self.side=side
         if radius_ratio is not None:
             if radii2 is not None:
@@ -1513,6 +1656,9 @@ class SpectralES:
         self.size=self.geometry.size
         self.radii2=self.geometry.radii2
         self.count_tolerance=count_tolerance
+        if not np.isfinite(photon_floor) or photon_floor<0:
+            raise ValueError('Finite nonnegative photon activity floor required')
+        self.photon_floor=float(photon_floor)
         self.count_pruning=count_pruning
         self.trial_cache=trial_cache
         self.batch_candidates=batch_candidates
@@ -1563,11 +1709,21 @@ class SpectralES:
         Residual diffuse photons are retained as separate channels.
         """
         for i in range(self.size):
+            previous=self.photons[i,3:].copy()
+            pending=previous/cell_volume
             n,p,l = evolve_dark(self.gas[i]/cell_volume,dt,dt if max_step is None else max_step,
-                               pending=self.photons[i,3:]/cell_volume,
-                               absorption_donor_fraction=self.donor_fraction)
+                               pending=pending,
+                               absorption_donor_fraction=self.donor_fraction,
+                               photon_floor=self.photon_floor/cell_volume)
             self.gas[i] = n*cell_volume
-            self.photons[i,3:] = p*cell_volume
+            restored=p*cell_volume
+            # Retain dormant credits in count units even when converting
+            # them to a density would underflow to zero.
+            unspent=l.absorbed.sum(axis=1)==0
+            restored[unspent]=previous[unspent]+l.emitted[unspent]*cell_volume
+            underflow=(~unspent)&(previous>0)&(pending==0)
+            restored[underflow]+=previous[underflow]
+            self.photons[i,3:] = restored
             self.diffuse_emitted += float(l.emitted.sum()*cell_volume)
             self.absorbed += float(l.absorbed.sum()*cell_volume)
             self.captures += float(l.captures.sum()*cell_volume)
@@ -1615,7 +1771,18 @@ class SpectralES:
         return active,passed
 
     def _select(self, excluded_partial_radii=()):
+        # A failed partial commit changes neither gas nor photons. Reuse its
+        # completed scan instead of repeating every FFT for each trial radius.
+        # A successful commit clears exclusions, which starts a fresh scan.
+        if excluded_partial_radii and getattr(self,'_partial_retry_cache',None) is not None:
+            for proposal in reversed(self._partial_retry_cache):
+                if proposal.radius_index not in excluded_partial_radii:
+                    return 'partial',proposal
+            return None,[]
+        self._partial_retry_cache=None
         active=getattr(self,'_active_photons',self.photons)
+        if self.photon_floor:
+            active=np.where(active>self.photon_floor,active,0.)
         fields=self.geometry.prepare(np.column_stack((self.gas,active)))
         cross=cross_sections(self.energies)
         if np.any(cross):
@@ -1623,6 +1790,8 @@ class SpectralES:
         channels=cross>0
         cache={} if self.trial_cache else None
         partial=[]
+        partial_candidates=[]
+        cached_centres=0
         for k in reversed(range(len(self.radii2))):
             aggregate=self.geometry.all_sums(fields,k)
             n,p=aggregate[:,:5],aggregate[:,5:]
@@ -1663,8 +1832,15 @@ class SpectralES:
                 return 'crossing',ProposalBatch(np.flatnonzero(passing),k)
             if np.any(absorbable) and k not in excluded_partial_radii:
                 partial=ProposalBatch(np.flatnonzero(absorbable),k)
+                if partial_candidates is not None:
+                    cached_centres+=len(partial)
+                    if cached_centres<=1000000:  # At most 8 MB of cached indices.
+                        partial_candidates.append(partial)
+                    else:
+                        partial_candidates=None
         # All partial fronts at the single smallest absorbable radius. An
         # empty distant centre must not grow a partial sphere to a remote source.
+        self._partial_retry_cache=partial_candidates
         return ('partial',partial) if partial else (None,[])
 
     def _commit(self, proposals, kind):
@@ -1676,7 +1852,8 @@ class SpectralES:
         retained=self.photons-self._active_photons
         result=joint_exposure_update(self.gas,self._active_photons,self.energies,
                                     membership,epsilon=self.epsilon,
-                                    donor_fraction=self.donor_fraction)
+                                    donor_fraction=self.donor_fraction,
+                                    photon_floor=self.photon_floor)
         absorbed=float(result['absorbed'].sum())
         if (absorbed==0 and np.array_equal(result['species'],self.gas) and
                 np.array_equal(result['photons'],self._active_photons)):
@@ -1713,7 +1890,11 @@ class SpectralES:
             # Each entry account sets its own residual floor; inactive counts
             # stay in the photon ledger and never set another band's tolerance.
             self._active_photons=np.where(
-                self.photons>self.count_tolerance*baseline,self.photons,0.)
+                self.photons>np.maximum(self.photon_floor,self.count_tolerance*baseline),
+                self.photons,0.)
+            if not np.any(self._active_photons):
+                self.audit()
+                return
             kind, proposals=self._select(excluded_partial_radii)
             if not proposals:
                 self.audit()

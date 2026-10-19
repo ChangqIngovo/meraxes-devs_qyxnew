@@ -125,6 +125,20 @@ recombination datasets are actual event counts. The `diagnostics` attribute
 records the snapshot accounting checks. These archives retain helium and
 photon information even where a standard Meraxes grid has no matching field.
 
+The worker uses a per-cell, per-band photon activity floor of `1e-30` in
+normalized count units: photon number divided by `count_normalization_atoms`.
+Accounts at or below this floor remain in the state and conservation ledger;
+they do not set absorption steps or select ES candidates. New source or
+recombination emission can accumulate in the same account and reactivate it.
+The floor also applies after each absorption debit and to local diffuse
+absorption, with the appropriate density-unit conversion. It is not a minimum
+physical photon number or a change to an ionization/recombination coefficient.
+Output records `photon_activity_floor`, `deferred_photon_accounts` and
+`deferred_photons`. For the default nine bands on a 32^3 grid, the instantaneous
+sum in accounts at or below this floor is bounded by `2.95e-25` normalized
+counts. These retained accounts are distinct from the existing relative
+chemistry tolerances.
+
 The PBS template requests 32 ranks, 320 GB and 48 hours on `hugemem`. The rank
 count fits the 32 input-grid slabs. NCI's [Queue Limits](https://opus.nci.org.au/spaces/Help/pages/90308823/Queue+Limits)
 page (checked 2026-10-18) allows 1–48 cores and 48 hours for a single-node
@@ -155,3 +169,49 @@ with approximately 85 MiB process peak RSS. It exercised the full periodic
 radius catalogue and retained a zero photon-count residual. This is a
 single-step smoke test, not a timing estimate for dense or late-time snapshots.
 Gadi execution and the complete L10 history have not been tested here.
+
+## Small-account convergence and sparse geometry
+
+The supplied snapshot-28 checkpoint and snapshot-29 request exposed four
+subnormal photon accounts that controlled the common exposure step while their
+computed debits rounded to zero. The old solver reached its 20,000-iteration
+guard in substep 3. The activity floor removes these accounts from the active
+calculation without deleting their balances or raising the iteration guard.
+
+The sparse implementation also:
+
+- Computes weak FFT support sums over occupied cells when that is cheaper than
+  traversing every cell in a sphere, retaining exact periodic membership and
+  accurate sums, including subnormal values.
+- Evolves only the union of selected supports when it is small. Storage is
+  bounded by one million memberships and the grid size; broad overlapping
+  supports retain the FFT path after that path proved faster in a benchmark.
+- Reuses a completed candidate scan only after an exactly unchanged partial
+  update. Any successful update triggers a fresh scan; cached centre indices
+  are bounded to eight MB.
+
+A controlled replay transferred the validated old checkpoint's arrays in memory
+to the new worker and evolved the supplied snapshot-29 request. All four
+substeps completed in approximately 24 seconds locally. The final photon
+accounting residual was `1.43e-15` relative to total emission; volume- and
+mass-weighted neutral hydrogen fractions were `0.999606519956` and
+`0.999173852705`. Thirty dormant accounts retained `6.98e-30` normalized counts.
+The gas and photon arrays were nonnegative. This is a solver replay, not a
+Meraxes restart or a measurement of complete L10 runtime on Gadi.
+
+A separate instrumented replay took 33 seconds including profiling overhead:
+selected-support chemistry accounted for about 58% and candidate selection
+about 40%. The next implementation targets are compiled sparse
+aggregate/scatter and chemistry kernels, plus reuse of periodic membership
+work across photon bands. Increasing the native MPI rank count alone does
+not accelerate these single-process Python paths. These are remaining
+optimization targets, not changes included in this patch or whole-run speed
+predictions.
+
+New floor regressions cover per-account thresholds, accumulation/reactivation,
+post-debit inactivity, subnormal convergence, source/recombination ledgers and
+unit-conversion preservation. Geometry regressions compare exact memberships,
+aggregate/scatter adjoints and bounded dispatch. They are included in the
+Gadi build's `test_photon_es_` CTest selection. Start the updated production run
+in a fresh directory from snapshot 0; existing checkpoints retain their original
+solver/configuration identity and are not automatically migrated.

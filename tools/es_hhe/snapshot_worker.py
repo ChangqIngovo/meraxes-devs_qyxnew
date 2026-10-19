@@ -25,7 +25,8 @@ from es_hhe_reference import (MYR, OPACITY_E_EV, SpectralES, evolve_dark,
                               geometric_radii2)
 
 SCHEMA = 1
-REFERENCE_SHA256 = "b83f15e8ff5b3e3a93c8a8e688b5ff27927d0d74ba25bb943fb3e947465844e0"
+PHOTON_ACTIVITY_FLOOR = 1e-30  # Per cell/band, count / mean_h_atoms_per_cell.
+REFERENCE_SHA256 = "ad4921e75ad82e26a03275989c1cf00e0fbe1fa2a4dc35e4987b9891746a4ebd"
 SCALARS = ("emitted", "diffuse_emitted", "absorbed", "captures", "initial_electrons")
 ARRAYS = ("gas", "photons", "source_history", "initial_nuclei", "capture_counts",
           "baseline_nuclei", "matter_exchange", "source_emitted_by_group")
@@ -118,7 +119,7 @@ def read_request(filename, spectrum_override=None):
 def model_configuration(metadata):
     names = ("grid_dim", "mean_h_atoms_per_cell", "helium_number_ratio", "radius_ratio",
              "max_radius_cells", "temperature_K", "max_step_s", "source_energies_eV", "source_weights")
-    return {key: metadata[key] for key in names}
+    return dict({key: metadata[key] for key in names}, photon_activity_floor=PHOTON_ACTIVITY_FLOOR)
 
 
 def verify_reference():
@@ -134,7 +135,8 @@ class SnapshotModel(SpectralES):
         # not a zero-radius-only ES catalogue.
         radii = geometric_radii2(metadata["grid_dim"], metadata["radius_ratio"],
                                 metadata["max_radius_cells"] or None)
-        super().__init__(side=metadata["grid_dim"], helium=metadata["helium_number_ratio"], radii2=radii)
+        super().__init__(side=metadata["grid_dim"], helium=metadata["helium_number_ratio"],
+                         radii2=radii, photon_floor=PHOTON_ACTIVITY_FLOOR)
         self.primary_count = len(metadata["source_energies_eV"])
         self.energies = np.r_[metadata["source_energies_eV"], OPACITY_E_EV]
         self.source_weights = np.asarray(metadata["source_weights"])
@@ -159,14 +161,23 @@ class SnapshotModel(SpectralES):
             return
         # Exactly neutral, photon-free cells have exactly zero local update.
         active = np.flatnonzero(np.any(self.gas[:, [1, 3, 4]] > 0, axis=1) |
-                                np.any(self.photons[:, self.primary_count:] > 0, axis=1))
+                                np.any(self.photons[:, self.primary_count:] > self.photon_floor, axis=1))
         for i in active:
+            previous = self.photons[i, self.primary_count:].copy()
+            pending = previous / cell_volume
             species, photons, ledger = evolve_dark(self.gas[i] / cell_volume, dt,
                 dt if max_step is None else max_step,
-                pending=self.photons[i, self.primary_count:] / cell_volume,
-                absorption_donor_fraction=self.donor_fraction)
+                pending=pending, absorption_donor_fraction=self.donor_fraction,
+                photon_floor=self.photon_floor / cell_volume)
             self.gas[i] = species * cell_volume
-            self.photons[i, self.primary_count:] = photons * cell_volume
+            restored = photons * cell_volume
+            # Preserve inactive credits in their original count units. A
+            # density conversion must not round a retained subnormal to zero.
+            unspent = ledger.absorbed.sum(axis=1) == 0
+            restored[unspent] = previous[unspent] + ledger.emitted[unspent] * cell_volume
+            underflow = (~unspent) & (previous > 0) & (pending == 0)
+            restored[underflow] += previous[underflow]
+            self.photons[i, self.primary_count:] = restored
             captures = ledger.captures * cell_volume
             self.capture_counts[i] += captures
             self.diffuse_emitted += float(ledger.emitted.sum() * cell_volume)
@@ -231,6 +242,10 @@ class SnapshotModel(SpectralES):
         if abs(capture_error) > 2e-9 * max(self.captures, np.finfo(float).tiny):
             raise AssertionError("Per-cell recombination ledger failed")
         result["capture_count_error"] = capture_error
+        dormant=(self.photons>0)&(self.photons<=self.photon_floor)
+        result["photon_activity_floor"] = self.photon_floor
+        result["deferred_photon_accounts"] = int(np.count_nonzero(dormant))
+        result["deferred_photons"] = float(self.photons[dormant].sum())
         return result
 
 
@@ -326,6 +341,7 @@ def write_response(handle, model, metadata, digest, diagnostics):
         handle.attrs[key] = metadata[key]
     handle.attrs["request_digest"] = digest
     handle.attrs["reference_sha256"] = REFERENCE_SHA256
+    handle.attrs["photon_activity_floor"] = model.photon_floor
     handle.attrs["diagnostics"] = json.dumps(diagnostics, sort_keys=True, allow_nan=False)
     handle.attrs["count_normalization_atoms"] = metadata["mean_h_atoms_per_cell"]
     handle.attrs["cell_volume_cm3"] = metadata["cell_volume_cm3"]
@@ -361,6 +377,7 @@ def write_response(handle, model, metadata, digest, diagnostics):
 def write_checkpoint(handle, model, metadata, digest, diagnostics):
     handle.attrs["schema"] = SCHEMA
     handle.attrs["reference_sha256"] = REFERENCE_SHA256
+    handle.attrs["photon_activity_floor"] = model.photon_floor
     handle.attrs["configuration"] = json.dumps(model_configuration(metadata), sort_keys=True)
     for key in ("snapshot", "run_identity"):
         handle.attrs[key] = metadata[key]

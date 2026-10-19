@@ -2,9 +2,9 @@
 
 `snapshot_worker.py` is called by the native Meraxes snapshot loop before its
 feedback and output stages. It advances the optimized, fixed-centre spherical
-ES model in `es_hhe_reference.py`. The reference is copied byte-for-byte from
-the validated research version, SHA256
-`b83f15e8ff5b3e3a93c8a8e688b5ff27927d0d74ba25bb943fb3e947465844e0`.
+ES model in `es_hhe_reference.py`. This solver version includes the dormant
+photon activity floor and sparse-geometry optimizations, SHA256
+`ad4921e75ad82e26a03275989c1cf00e0fbe1fa2a4dc35e4987b9891746a4ebd`.
 The worker verifies this hash before accepting a request.
 
 The ES filter catalogue, common photon accounts and competing H/He absorption
@@ -22,6 +22,8 @@ optional independent reference validation, not for snapshot integration.
 
 ```bash
 python tools/es_hhe/test_snapshot_worker.py
+python tools/es_hhe/test_photon_floor.py
+python tools/es_hhe/test_sparse_geometry.py
 python tools/es_hhe/snapshot_worker.py \
   --request request.hdf5 --response es_state_001.hdf5 \
   --checkpoint .es_checkpoint.hdf5
@@ -70,6 +72,17 @@ Internal gas and photon arrays are numbers divided by a constant
 volume `cell_volume_cm3/Q`, so its input densities are in physical cm^-3.
 Q must be calculated from the comoving cell volume and be invariant throughout
 the run. The physical cell volume changes with redshift.
+
+The worker applies a per-cell, per-band activity floor of `1e-30` in these
+normalized count units. Smaller accounts remain in `photons` and the ledger,
+but do not constrain absorption steps or select ES supports. Emission can
+accumulate and reactivate an account. The local recombination/OTS solver uses
+the equivalent density threshold, preserving dormant credits across unit
+conversion. The generic reference API defaults to a zero absolute floor;
+`SnapshotModel` explicitly selects the production floor. Response/checkpoint
+metadata records this numerical policy, and the diagnostics report the number
+and summed balance of dormant accounts. See `docs/es_hhe_gadi.md` for the
+snapshot-29 convergence replay and bounded sparse-geometry implementation.
 
 The first requested snapshot initializes neutral gas and requires `dt_s=0`
 and no sources. Every subsequent request must have the next consecutive
