@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Independent H endpoints retain photon credits and the ES crossing rule."""
+import math
 import unittest
 from unittest import mock
 
@@ -75,10 +76,91 @@ class DisjointHydrogenEndpoint(unittest.TestCase):
         photons=np.array([[.2,.01],[.3,0.]])
         self.assertIsNone(self.endpoint(gas,photons,[18.,60.]))
 
-    def test_distinct_atom_limited_hydrogen_opacities_use_general_solver(self):
+    def test_distinct_atom_limited_hydrogen_opacities_close_accounts(self):
         gas=np.tile([1e-6,1.,.08,0.,0.],(2,1))
         photons=np.array([[.2,.01],[.3,0.]])
-        self.assertIsNone(self.endpoint(gas,photons,[18.,13.6]))
+        result=self.endpoint(gas,photons,[18.,13.6])
+        self.assert_conserves(gas,photons,result)
+        np.testing.assert_array_equal(result['species'][:,0],0.)
+        cross=reference.cross_sections(np.array([18.,13.6]))[:,0]
+        exposure=-np.log1p(-result['debit'][0]/photons[0])/cross
+        np.testing.assert_allclose(exposure,exposure[0],rtol=8e-15)
+
+    def test_snapshot65_mixed_hydrogen_tail_regression(self):
+        # Two actual independent cells from snapshot 65's failing 1104-cell
+        # batch: an active 13.6 eV recombination tail prevents equal-opacity
+        # dispatch despite the dominant 18 eV primary account.
+        gas=np.array([
+            [2.0849700704491452e-5,2.281709206108317,.1801365833533438,0.,0.],
+            [2.1517001390457134e-5,2.1516786220443227,.16987106360887225,0.,0.]])
+        photons=np.array([
+            [.0026644121651093135,7.273597238049652e-16,7e-31],
+            [.05712788891626835,9.265885417669346e-16,3e-31]])
+        result=reference.joint_exposure_update(gas,photons,[18.,13.6,60.],
+            self.operator(2),epsilon=1e-5,photon_floor=1e-30)
+        self.assert_conserves(gas,photons,result)
+        self.assertEqual(result['exposure_kind'],'independent_hydrogen_endpoint')
+        self.assertEqual(result['substeps'],1)
+        np.testing.assert_array_equal(result['species'][:,0],0.)
+        np.testing.assert_array_equal(result['photons'][:,2],photons[:,2])
+        self.assertTrue(np.all(result['debit'][:,1]>0))
+        self.assertTrue(np.all(result['debit'][:,1]<photons[:,1]))
+        self.assertEqual(result['events'],[])
+
+    def test_unequal_scalar_endpoint_matches_quadratic_solution(self):
+        light=np.array([.3,.2]);opacity=np.array([1.,.5]);amount=.1
+        debit=reference._hydrogen_account_debits(light,opacity,amount)
+        root=(-.2+math.sqrt(.04+1.2*(.5-amount)))/.6
+        expected=light*np.array([1-root*root,1-root])
+        np.testing.assert_allclose(debit,expected,rtol=8e-15,atol=0.)
+        self.assertEqual(math.fsum(debit),amount)
+
+    def test_unequal_scalar_endpoint_preserves_duplicate_band_partition(self):
+        light=np.array([.2,.1,.3]);opacity=np.array([1.,1.,.5]);amount=.1
+        debit=reference._hydrogen_account_debits(light,opacity,amount)
+        self.assertAlmostEqual(debit[0]/debit[1],2.,places=14)
+        permutation=np.array([2,0,1])
+        permuted=reference._hydrogen_account_debits(
+            light[permutation],opacity[permutation],amount)
+        np.testing.assert_allclose(permuted,debit[permutation],rtol=8e-15)
+        self.assertEqual(math.fsum(debit),amount)
+
+    def test_unequal_scalar_endpoint_retains_extreme_opacity_channel(self):
+        debit=reference._hydrogen_account_debits([1.,1.],[1.,1e-300],1e-6)
+        self.assertIsNotNone(debit)
+        self.assertGreater(debit[1],0.)
+        self.assertEqual(math.fsum(debit),1e-6)
+        np.testing.assert_allclose(debit[1],-math.log1p(-debit[0])*1e-300,
+                                   rtol=8e-15,atol=0.)
+
+    def test_unequal_scalar_endpoint_preserves_subnormal_capture(self):
+        amount=1e-320
+        debit=reference._hydrogen_account_debits(
+            [1e-310,2e-310],[1.,.5],amount)
+        self.assertIsNotNone(debit)
+        self.assertTrue(np.all(debit>0))
+        self.assertEqual(math.fsum(debit),amount)
+
+    def test_unequal_unrepresentable_exposure_uses_general_solver(self):
+        # HI/rate underflows, even though the debit itself is representable.
+        self.assertIsNone(reference._hydrogen_account_debits(
+            [1e300,1e300],[1.,.5],1e-320))
+        gas=np.array([[1e-320,1.,.08,0.,0.],[1.,0.,.08,0.,0.]])
+        photons=np.array([[1e300,1e300],[.2,0.]])
+        self.assertIsNone(self.endpoint(gas,photons,[18.,13.6],floor=0.))
+
+    def test_unequal_unresolved_optical_depth_uses_general_solver(self):
+        # The weak optical depth is ~1e-600, below binary64, but its
+        # capture (~1e-300) is representable because the account is large.
+        # Returning a zero debit would silently lose this spectral channel.
+        self.assertIsNone(reference._hydrogen_account_debits(
+            [1e300,1e300],[1.,1e-300],1.))
+
+    def test_unequal_scalar_endpoint_rejects_unresolved_opacity_or_count_scale(self):
+        self.assertIsNone(reference._hydrogen_account_debits(
+            [1.,1.],[1e300,1e-300],.1))
+        self.assertIsNone(reference._hydrogen_account_debits(
+            [1e308,1e308],[1.,.5],.1))
 
     def test_unequal_photon_limited_opacities_consume_all_active_accounts(self):
         gas=np.tile([1.,0.,.08,0.,0.],(2,1))

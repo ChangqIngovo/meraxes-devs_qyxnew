@@ -1210,11 +1210,101 @@ def _upward_cells_numpy(n,rate,exposure):
     return new,counts
 
 
+def _hydrogen_account_debits(light, opacity, amount):
+    """Solve sum(P_g * -expm1(-sigma_g*u)) = amount.
+
+    Return None when the common exposure cannot be bracketed/resolved in
+    binary64. A caller must then use its existing general reaction solver.
+    Inputs contain just the positive active accounts of one atom-limited cell.
+    """
+    light=np.asarray(light,dtype=float)
+    opacity=np.asarray(opacity,dtype=float)
+    if (light.ndim!=1 or opacity.shape!=light.shape or not len(light) or
+            not np.all(np.isfinite(light)) or not np.all(np.isfinite(opacity)) or
+            np.any(light<=0) or np.any(opacity<=0) or
+            not math.isfinite(amount) or amount<=0):
+        return None
+    try:
+        total=math.fsum(light.tolist())
+    except OverflowError:
+        return None
+    if not math.isfinite(total) or amount>=total:
+        return None
+    # u is measured in the largest active cross section. Reject underflowing
+    # ratios instead of silently deleting a physically active channel.
+    relative=opacity/float(np.max(opacity))
+    if np.any(relative==0):
+        return None
+    rate=math.fsum((light*relative).tolist())
+    if not math.isfinite(rate) or rate<=0:
+        return None
+    upper=amount/rate
+    if not math.isfinite(upper) or upper<=0:
+        return None
+    tolerance=8*np.finfo(float).eps*amount+2*math.ulp(amount)
+
+    def evaluate(exposure):
+        depth=relative*exposure
+        if np.any(depth==0):
+            # A tiny optical depth can still carry a representable debit
+            # when its photon account is large. Preserve that channel by
+            # declining this endpoint instead of silently rounding it away.
+            return None,None
+        debit=light*(-np.expm1(-depth))
+        return debit,math.fsum(debit.tolist())
+
+    lower=0.
+    # The linearized exposure is a lower bound. Doubling normally brackets
+    # a small tail immediately; pathological dynamic ranges use the fallback.
+    for _ in range(128):
+        debit,captured=evaluate(upper)
+        if debit is None:
+            return None
+        if captured>=amount or abs(captured-amount)<=tolerance:
+            break
+        lower=upper
+        upper*=2.
+        if not math.isfinite(upper):
+            return None
+    else:
+        return None
+    exposure=upper
+    for _ in range(96):
+        debit,captured=evaluate(exposure)
+        if debit is None:
+            return None
+        residual=amount-captured
+        if abs(residual)<=tolerance:
+            # Only correct roundoff in the resolved root, never rescale the
+            # physical spectral partition. Pick the largest debit account.
+            largest=int(np.argmax(debit))
+            corrected=float(debit[largest])+residual
+            if not 0<=corrected<=light[largest]:
+                return None
+            debit[largest]=corrected
+            if abs(math.fsum(debit.tolist())-amount)>tolerance:
+                return None
+            return debit
+        if captured<amount:
+            lower=exposure
+        else:
+            upper=exposure
+        derivative=math.fsum((light*relative*np.exp(-relative*exposure)).tolist())
+        candidate=exposure+residual/derivative if derivative>0 else math.nan
+        if not math.isfinite(candidate) or not lower<candidate<upper:
+            candidate=lower+(upper-lower)/2.
+        if candidate==exposure or candidate==lower or candidate==upper:
+            return None
+        exposure=candidate
+    return None
+
+
 def _disjoint_hydrogen_endpoint(initial,p0,cross,op,epsilon,residual):
     """Exact no-crossing H endpoint for independent one-cell supports.
 
     Photon-limited cells consume every active account regardless of opacity.
-    Equal H opacities preserve account ratios in atom-limited cells. The
+    Equal H opacities preserve account ratios in atom-limited cells; unequal
+    H opacities use their shared scalar neutral-exposure endpoint. The
     photon total and HI have the same loss, so either asymptotic endpoint
     spends min(HI, photons). This closes the existing reaction ODE;
     it does not impose a floor on a species or discard a photon account.
@@ -1241,8 +1331,7 @@ def _disjoint_hydrogen_endpoint(initial,p0,cross,op,epsilon,residual):
     atom_limited=live&(available>neutral)
     first=np.argmax(active,axis=1)
     opacity=cross[first,0]
-    if np.any(atom_limited[:,None]&active&(cross[:,0][None,:]!=opacity[:,None])):
-        return None
+    unequal=atom_limited&np.any(active&(cross[:,0][None,:]!=opacity[:,None]),axis=1)
     threshold=epsilon*normal
     eligible=(normal>0)&(neutral>threshold+64*np.finfo(float).eps*normal)
     needed=neutral-threshold
@@ -1262,6 +1351,12 @@ def _disjoint_hydrogen_endpoint(initial,p0,cross,op,epsilon,residual):
     # account share first in just those cells.
     underflow=atom_limited&(fraction==0)&(amount>0)
     debit[underflow]=(light[underflow]/available[underflow,None])*amount[underflow,None]
+    for cell in np.flatnonzero(unequal):
+        channels=active[cell]
+        resolved=_hydrogen_account_debits(light[cell,channels],cross[channels,0],amount[cell])
+        if resolved is None:
+            return None
+        debit[cell,channels]=resolved
     state=initial.copy()
     state[:,0]-=amount
     state[:,1]+=amount
@@ -1743,11 +1838,197 @@ class ProposalBatch:
         return len(self.centres)
 
 
+_EPS = np.finfo(float).eps
+_ROUND = 64 * _EPS
+
+
+def _upper_sum(values):
+    """Upward-padded sum of finite nonnegative binary64 values."""
+    x = np.asarray(values, dtype=float)
+    value = float(np.sum(x))
+    if not math.isfinite(value):
+        return math.inf
+    return float(np.nextafter(value * (1 + 8 * x.size * _EPS), np.inf))
+
+
+class RadiusScreen:
+    def __init__(self, count):
+        self.margins = np.full((count, 3), -np.inf)
+
+    @staticmethod
+    def aggregate_reserve(fields):
+        """L1 reserve exceeding the geometry's FFT roundoff guard.
+
+        It also covers direct sums and the local sums used to form targets.
+        Nonnegative fields make their L1 norms independent of cancellation.
+        The reserve is deliberately global; weak-signal direct summation can
+        only improve the bound. It is a screening guard, not a photon cutoff.
+        """
+        x = np.asarray(fields, dtype=float)
+        factor = 1024 * _EPS * max(1., math.log2(len(x)))
+        return np.array([factor * _upper_sum(column) for column in x.T])
+
+    def record(self, radius, aggregate, cross, epsilon, reserve):
+        self.margins[radius] = -np.inf
+        x = np.asarray(aggregate, dtype=float)
+        # Cover errors in both this cached aggregate and a future scan.
+        # During illumination the target sums and photon L1 norms decrease;
+        # the total H/He nucleus norms stay fixed up to advance() padding.
+        error = 4 * np.asarray(reserve, dtype=float)
+        if (x.ndim != 2 or x.shape[1] != len(error) or
+                not np.isfinite(x).all() or not np.isfinite(error).all()):
+            return
+        n, p = x[:, :5], x[:, 5:]
+        normal = np.column_stack((n[:, :2].sum(1), n[:, 2:].sum(1), n[:, 2:].sum(1)))
+        remaining = np.column_stack((n[:, 0], n[:, 2], n[:, 2] + n[:, 3]))
+        upper = p @ (cross > 0)
+        en = np.array([error[:2].sum(), error[2:5].sum(), error[2:5].sum()])
+        er = np.array([error[0], error[2], error[2] + error[3]])
+        eu = error[5:] @ (cross > 0)
+        # Include currently ineligible targets as well: their negative margin
+        # merely disables screening, avoiding any threshold-roundoff ambiguity.
+        targets = normal > 0
+        if not np.any(targets):
+            return
+        needed_lower = remaining - er - epsilon * (normal + en)
+        upper_high = upper + eu
+        margin = (needed_lower - upper_high -
+                  _ROUND * np.maximum(upper_high, remaining + er))
+        margin -= 256 * _EPS * (remaining + normal + upper + er + en + eu)
+        for channel in range(3):
+            rows = targets[:, channel]
+            if not np.any(rows):
+                self.margins[radius, channel] = np.inf
+                continue
+            value = float(np.min(margin[rows, channel]))
+            if math.isfinite(value):
+                self.margins[radius, channel] = np.nextafter(value, -np.inf)
+
+    def can_skip(self, radius):
+        return bool(np.all(self.margins[radius] > 0))
+
+    def advance(self, before, after, old_photons, new_photons, epsilon):
+        """Debit an upper bound on any sphere's deficit reduction.
+
+        Actual positive decreases/increases are used, including rounding
+        changes. This remains safe if a species or photon account has a tiny
+        numerical increase. Exact upward chemistry reduces this to captures.
+        """
+        b, a = np.asarray(before), np.asarray(after)
+        br = np.column_stack((b[:, 0], b[:, 2], b[:, 2] + b[:, 3]))
+        ar = np.column_stack((a[:, 0], a[:, 2], a[:, 2] + a[:, 3]))
+        bn = np.column_stack((b[:, :2].sum(1), b[:, 2:].sum(1), b[:, 2:].sum(1)))
+        an = np.column_stack((a[:, :2].sum(1), a[:, 2:].sum(1), a[:, 2:].sum(1)))
+        loss = np.array([_upper_sum(np.maximum(br[:, s] - ar[:, s], 0.)) +
+                         epsilon * _upper_sum(np.maximum(an[:, s] - bn[:, s], 0.))
+                         for s in range(3)])
+        loss += (1 + _ROUND) * _upper_sum(np.maximum(new_photons - old_photons, 0.))
+        # Cover subtraction, reduction and local nucleus-rounding errors.
+        scale = sum(_upper_sum(x) for x in (b, a, old_photons, new_photons))
+        loss += 4096 * _EPS * max(1., math.log2(len(b))) * scale
+        if not np.isfinite(loss).all():
+            self.margins[:] = -np.inf
+        else:
+            self.margins = np.nextafter(self.margins - loss, -np.inf)
+
+
+def select_with_screen(model, excluded_partial_radii=()):
+    if excluded_partial_radii and getattr(model, '_partial_retry_cache', None) is not None:
+        for proposal in reversed(model._partial_retry_cache):
+            if proposal.radius_index not in excluded_partial_radii:
+                return 'partial', proposal
+        return None, []
+    model._partial_retry_cache = None
+    active = getattr(model, '_active_photons', model.photons)
+    if model.photon_floor:
+        active = np.where(active > model.photon_floor, active, 0.)
+    fields = model.geometry.prepare(np.column_stack((model.gas, active)))
+    cross = cross_sections(model.energies)
+    if np.any(cross):
+        cross = cross / np.max(cross)
+    channels = cross > 0
+    screen = model._radius_screen
+    reserve = screen.aggregate_reserve(fields.x)
+    cache = {} if model.trial_cache else None
+
+    def evaluate(k):
+        aggregate = model.geometry.all_sums(fields, k)
+        screen.record(k, aggregate, cross, model.epsilon, reserve)
+        n, p = aggregate[:, :5], aggregate[:, 5:]
+        native = get_backend()
+        flags = (native.candidate_flags(aggregate, cross, model.epsilon, model.count_pruning)
+                 if native is not None else None)
+        if flags is not None:
+            valid, proven_partial = flags
+        else:
+            normal = np.column_stack((n[:, :2].sum(1), n[:, 2:].sum(1), n[:, 2:].sum(1)))
+            remaining = np.column_stack((n[:, 0], n[:, 2], n[:, 2] + n[:, 3]))
+            needed = remaining - model.epsilon * normal
+            eligible = (normal > 0) & (remaining > model.epsilon * normal + _ROUND * normal)
+            hazard = n[:, [0, 2, 3]] @ cross.T
+            usable = np.any((p > 0) & (hazard > 0), axis=1)
+            valid = np.any(eligible, axis=1) & usable
+            proven_partial = np.zeros(model.size, dtype=bool)
+            if model.count_pruning:
+                upper = p @ channels
+                margin = _ROUND * np.maximum(upper, remaining)
+                possible = np.any(eligible & (upper + margin >= needed), axis=1)
+                proven_partial = valid & ~possible
+        model.counters['candidate_checks'] += model.size
+        model.counters['empty_or_ineligible'] += int(np.count_nonzero(~valid))
+        model.counters['count_bound_pruned'] += int(np.count_nonzero(proven_partial))
+        unresolved = np.flatnonzero(valid & ~proven_partial)
+        passing = np.zeros(model.size, dtype=bool)
+        absorbable = proven_partial.copy()
+        if len(unresolved):
+            absorbs, crosses = model._candidate_decisions(n[unresolved], p[unresolved], cache)
+            absorbable[unresolved] = absorbs
+            passing[unresolved] = crosses
+        return passing, absorbable
+
+    partial = []
+    partial_candidates = []
+    cached_centres = 0
+    skipped = []
+    for k in reversed(range(len(model.radii2))):
+        if screen.can_skip(k):
+            skipped.append(k)
+            model.counters['radius_scans_skipped'] += 1
+            continue
+        passing, absorbable = evaluate(k)
+        if np.any(passing):
+            return 'crossing', ProposalBatch(np.flatnonzero(passing), k)
+        if np.any(absorbable) and k not in excluded_partial_radii:
+            partial = ProposalBatch(np.flatnonzero(absorbable), k)
+            if partial_candidates is not None:
+                cached_centres += len(partial)
+                if cached_centres <= 1000000:
+                    partial_candidates.append(partial)
+                else:
+                    partial_candidates = None
+    # A no-crossing certificate says nothing about partial absorption. Inspect
+    # every skipped radius that could precede the smallest known partial one.
+    for k in sorted(skipped):
+        if partial and k >= partial.radius_index:
+            break
+        if k in excluded_partial_radii:
+            continue
+        passing, absorbable = evaluate(k)
+        if np.any(passing):
+            raise ArithmeticError('Radius no-crossing certificate failed revalidation')
+        if np.any(absorbable):
+            partial = ProposalBatch(np.flatnonzero(absorbable), k)
+            break
+    # An incomplete radius catalogue must not become a partial retry cache.
+    model._partial_retry_cache = partial_candidates if not skipped else None
+    return ('partial', partial) if partial else (None, [])
+
+
 class SpectralES:
     def __init__(self, side=3, helium=.081, epsilon=1e-5, donor_fraction=.02,
                  radii2=None, count_tolerance=1e-12, count_pruning=True,
                  trial_cache=True, radius_ratio=None, batch_candidates=True,
-                 candidate_batch_size=256, photon_floor=0.):
+                 candidate_batch_size=256, photon_floor=0., radius_screening=True):
         self.side=side
         if radius_ratio is not None:
             if radii2 is not None:
@@ -1762,6 +2043,7 @@ class SpectralES:
             raise ValueError('Finite nonnegative photon activity floor required')
         self.photon_floor=float(photon_floor)
         self.count_pruning=count_pruning
+        self.radius_screening=bool(radius_screening)
         self.trial_cache=trial_cache
         self.batch_candidates=batch_candidates
         self.candidate_batch_size=int(candidate_batch_size)
@@ -1771,7 +2053,7 @@ class SpectralES:
             raise ValueError('Relative count tolerance must lie in (0,1)')
         self.counters=dict(candidate_checks=0,candidate_integrations=0,
                            count_bound_pruned=0,trial_cache_hits=0,
-                           empty_or_ineligible=0,batch_calls=0,inactive_support_retries=0)
+                           empty_or_ineligible=0,batch_calls=0,inactive_support_retries=0,radius_scans_skipped=0)
         self.gas = np.zeros((self.size,5))
         self.gas[:,0], self.gas[:,2] = 1., helium
         self.initial_nuclei = self.nuclei()
@@ -1873,6 +2155,8 @@ class SpectralES:
         return active,passed
 
     def _select(self, excluded_partial_radii=()):
+        if getattr(self,'_radius_screen',None) is not None:
+            return select_with_screen(self,excluded_partial_radii)
         # A failed partial commit changes neither gas nor photons. Reuse its
         # completed scan instead of repeating every FFT for each trial radius.
         # A successful commit clears exclusions, which starts a fresh scan.
@@ -1976,8 +2260,12 @@ class SpectralES:
             raise RuntimeError('Selected ES support made no numerical progress: '
                 f'kind={kind}, radius_squared={self.radii2[proposals.radius_index]}, '
                 f'stop={result["stop"]}; state and photon credits retained')
+        new_photons=result['photons']+retained
+        screen=getattr(self,'_radius_screen',None)
+        if screen is not None:
+            screen.advance(self.gas,result['species'],self.photons,new_photons,self.epsilon)
         self.gas=result['species']
-        self.photons=result['photons']+retained
+        self.photons=new_photons
         self.absorbed+=absorbed
         self.events.append(dict(kind=kind,proposals=len(membership),
                                 exposure=result['exposure'],stop=result['stop'],
@@ -1988,6 +2276,14 @@ class SpectralES:
         return True
 
     def illuminate(self, max_batches=500, progress=None):
+        self._radius_screen=(RadiusScreen(len(self.radii2))
+            if self.radius_screening and self.count_pruning else None)
+        try:
+            return self._illuminate(max_batches=max_batches,progress=progress)
+        finally:
+            self._radius_screen=None
+
+    def _illuminate(self, max_batches=500, progress=None):
         """Conservative geometry/chemistry stage; max_batches is a fail-loud guard.
 
         Unlike scalar H, no general H/He finite-event performance bound is claimed.

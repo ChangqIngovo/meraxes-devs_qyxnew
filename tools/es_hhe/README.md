@@ -39,6 +39,18 @@ photon budget. Progress also identifies recombination, candidate selection and
 absorption, including support counts and chemistry iterations per batch.
 The final JSON contains the cumulative count audit.
 
+Independent H-only partial supports use a conservative terminal solution.
+For different active H opacities, a monotone scalar exposure solve assigns
+the captures to each photon account, including retained recombination photons.
+He-active, overlapping and potentially crossing supports keep the coupled
+solver. This avoids following a vanishing HI tail with thousands of midpoint
+steps while retaining the same ES crossing conditions and count audits.
+
+Within each illumination stage, conservative per-radius photon-deficit bounds
+avoid repeated scans that cannot produce a crossing. Partial supports are
+still evaluated when needed; all bounds reset before the next physical
+substep. Diagnostics report the number of skipped radius scans.
+
 `ES_NATIVE_LIBRARY` selects a library explicitly; a prepared worker otherwise
 loads `libes_hhe_kernels.so` beside its source. `ES_NATIVE_REQUIRED=1` prevents
 fallback when the library is absent. `ES_WORKER_THREADS` controls the maximum

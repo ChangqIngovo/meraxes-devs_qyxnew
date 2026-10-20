@@ -27,7 +27,7 @@ from native_backend import execution_metadata, numerical_identity
 
 SCHEMA = 1
 PHOTON_ACTIVITY_FLOOR = 1e-30  # Per cell/band, count / mean_h_atoms_per_cell.
-REFERENCE_SHA256 = "86590596b2f365773d8c601971551d1b99161195d3f3f3393d429f0d8ff41d7b"
+REFERENCE_SHA256 = "4075d324a8e965ecc317bb4a4c85033b5d41cedb1a8385ca52b52c270d3cd542"
 SCALARS = ("emitted", "diffuse_emitted", "absorbed", "captures", "initial_electrons")
 ARRAYS = ("gas", "photons", "source_history", "initial_nuclei", "capture_counts",
           "baseline_nuclei", "matter_exchange", "source_emitted_by_group")

@@ -322,9 +322,9 @@ H-only equations have the terminal count solution
 every active account regardless of its H opacity. For atom-limited cells,
 equal active H opacities preserve account ratios and determine their individual
 debits. The new exact path implements those two cases, retaining all unused
-and initially inactive photon credits. It does not floor a species. Unequal
-opacities in atom-limited cells, any active He opacity, overlapping supports
-and possible crossing events continue through the coupled solver. The final
+and initially inactive photon credits. It does not floor a species. At that
+version, unequal opacities in atom-limited cells, any active He opacity,
+overlapping supports and possible crossing events used the coupled solver. The final
 photon, nucleus and electron audits apply to both paths.
 
 The other bottleneck was weak-signal support recomputation for dense fields.
@@ -345,3 +345,66 @@ There were 38 committed batches in both runs. The updated suite passed 99
 tests with four native-parser cases skipped in this environment; four physical
 regressions also passed. The native ABI is now version 2, requiring a fresh
 build and prepared run. These local replays do not time a complete Gadi job.
+
+## Snapshot 65 mixed-opacity convergence failure
+
+The supplied `34d6ccc9` checkpoint is snapshot 64; its request is snapshot 65.
+The checkpoint and response share identical state arrays and a consistent
+photon ledger. The original failure is native status 4: a common-field update
+exhausted its 20,000-step guard. The same failure was reproduced with
+`611b9e1` at the first substep's 48th batch, containing 1,104 independent
+radius-zero supports. Eight atom-limited cells contain both active 18 eV
+primary photons and 13.6 eV recombination photons. Their unequal H opacities
+prevented the earlier proportional-debit endpoint from being used.
+
+For an independent H-only cell, let `u` be its integrated neutral exposure.
+Each account obeys `P_g(u) = P_g(0) exp(-sigma_g u)`. An atom-limited endpoint
+therefore solves the monotone scalar equation
+
+```
+sum_g P_g(0) * [-expm1(-sigma_g*u)] = initial_HI.
+```
+
+The solver brackets this root and uses safeguarded Newton steps. Each account
+is debited by its own capture, including the small recombination contribution.
+Photon-limited cells still spend all initially active accounts. He-active or
+overlapping supports and possible crossing events retain the coupled solver.
+Unrepresentable exposure scales return to that solver; no photon band is
+silently removed. This is a terminal solution of the existing absorption
+system, with unchanged ionization thresholds and species/count audits.
+
+Repeated large-radius scans are also screened during a fixed-source
+illumination stage. For each target (HI, HeI and HeI+HeII), the code stores a
+lower bound on the minimum photon deficit over all centres at that radius.
+Accepted updates reduce this bound by an upper bound on the actual target
+loss, nucleus-sum increase and photon-account increase. A radius can be
+skipped only while all three deficits remain positive after roundoff guards.
+The retained bounds require only three values per radius. They are discarded
+at every illumination exit, including exceptions, and rebuilt after source
+injection, density remapping or recombination. Skipped radii are evaluated
+when needed to identify the smallest partially absorbing support.
+
+A full eight-substep replay of the uploaded snapshot-65 request passes with
+both the H endpoint fix alone and with radius screening enabled. On the same
+local two-thread setup:
+
+| Implementation | Wall time | Candidate checks | Committed updates |
+| --- | ---: | ---: | ---: |
+| Mixed-opacity endpoint, full radius scans | 550.60 s | 678,526,976 | 567 |
+| Mixed-opacity endpoint and radius screening | 250.85 s | 184,647,680 | 567 |
+
+All 18 response datasets are bitwise identical between these runs, as are
+all 567 ordered update events. Screening skipped 15,072 radius scans and
+reduced candidate checks by 72.79%. The relative photon ledger residual is
+`5.2064e-15`; volume- and mass-weighted xHI are `0.9582474788` and
+`0.9141187953`. These are local worker replays, not full Gadi job timings.
+The original `611b9e1` version aborts on this input, so its complete-frame
+runtime and final state are not comparison baselines.
+
+Validation passed 119 Python tests, with four full-Meraxes parameter-parser
+cases skipped locally, plus four physics regression cases. The new tests
+include the captured mixed-opacity tail, analytic spectral-partition checks,
+underflow/overflow fallback, H/He event equivalence, partial-radius retries
+and screening invalidation after new sources or exceptions. Radius screening
+is enabled by default. Its implementation is included in the frozen reference
+hash; the native kernel ABI remains 2. Pull, rebuild and prepare a fresh run.

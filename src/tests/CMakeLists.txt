@@ -211,7 +211,7 @@ if(Python3_Interpreter_FOUND)
             COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/es_hhe/test_snapshot_worker.py)
         set_tests_properties(test_photon_es_worker PROPERTIES TIMEOUT 180
             ENVIRONMENT "${ES_KERNEL_TEST_ENV}")
-        foreach(es_python_test photon_floor sparse_geometry disjoint_hydrogen)
+        foreach(es_python_test photon_floor sparse_geometry disjoint_hydrogen radius_screen)
             add_test(NAME test_photon_es_${es_python_test}
                 COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/es_hhe/test_${es_python_test}.py)
             set_tests_properties(test_photon_es_${es_python_test} PROPERTIES TIMEOUT 180
