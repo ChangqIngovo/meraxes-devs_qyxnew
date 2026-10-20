@@ -15,7 +15,6 @@
 #include "meraxes.h"
 #include "misc_tools.h"
 #include "read_grids.h"
-#include "photon_hhe_meraxes.h"
 #include "photon_es_meraxes.h"
 #include "reionization.h"
 #include "virial_properties.h"
@@ -77,13 +76,11 @@ static void update_mass_weighted_tau_e(const int snapshot)
     return;
 
   double xHII;
-  if (run_globals.params.Flag_PhotonConservation == 2)
-    xHII = photon_hhe_mean_electron_per_baryon();
-  else if (run_globals.params.Flag_PhotonConservation == 3)
+  if (run_globals.params.Flag_PhotonConservation == 3)
     xHII = photon_es_mean_electron_per_nucleus();
   else
     xHII = fmax(0.0, fmin(1.0, 1.0 - grids->mass_weighted_global_xH));
-  // The legacy-named history field holds ne/(nH+nHe) in modes 2/3, which may exceed one.
+  // The legacy-named history field holds ne/(nH+nHe) in mode 3, which may exceed one.
 
   if (grids->tau_e_prev_snapshot >= 0) {
     int prev_snapshot = grids->tau_e_prev_snapshot;
@@ -1405,7 +1402,6 @@ void malloc_reionization_grids()
 
 void free_reionization_grids()
 {
-  photon_hhe_meraxes_free();
   photon_es_meraxes_free();
   mlog("Freeing reionization grids...", MLOG_OPEN);
 

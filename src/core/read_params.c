@@ -6,60 +6,10 @@
 // test
 static void check_problem_params(run_params_t* run_params)
 {
-  if (run_params->Flag_PhotonConservation < 0 || run_params->Flag_PhotonConservation > 3) {
-    mlog_error("Flag_PhotonConservation must be 0 (ES), 1 (ES allocation), 2 (packet H/He), or 3 (spectral ES H/He).");
+  if (run_params->Flag_PhotonConservation != 0 && run_params->Flag_PhotonConservation != 3) {
+    mlog_error("Flag_PhotonConservation must be 0 (original ES) or 3 (spectral ES H/He). "
+               "The obsolete allocation and packet modes 1 and 2 have been removed.");
     ABORT(EXIT_FAILURE);
-  }
-  if (run_params->Flag_PhotonConservation == 1) {
-    if (!run_params->Flag_PatchyReion || run_params->ReionFilterType != 0 ||
-        run_params->ReionRtoMFilterType != 0 || run_params->ReionGridDim < 1 ||
-        !isfinite(run_params->ReionDeltaRFactor) || run_params->ReionDeltaRFactor <= 1.0 ||
-        run_params->PhotonConservationDebug < 0 || run_params->PhotonConservationDebug > 2 ||
-        run_params->PhotonConservationRequireFull < 0 || run_params->PhotonConservationRequireFull > 1 ||
-        run_params->PhotonConservationShape < 0 || run_params->PhotonConservationShape > 1 ||
-        run_params->PhotonConservationMaxEdges < 0 || run_params->PhotonConservationMemoryMB < 1 ||
-        run_params->PhotonConservationMaxIterations < 1 || run_params->PhotonConservationMaxEvaluations < 1 ||
-        run_params->PhotonConservationMaxCuts < 1 || !isfinite(run_params->PhotonConservationTolerance) ||
-        run_params->PhotonConservationTolerance <= 0.0 || run_params->PhotonConservationTolerance > 1e-5) {
-      mlog_error("Invalid photon-conservation settings: require top-hat filters, DeltaRFactor > 1, "
-                 "nonnegative MaxEdges (0 disables the edge cap), positive remaining resource limits "
-                 "and tolerance in (0,1e-5]. See docs/photon_conservation.md.");
-      ABORT(EXIT_FAILURE);
-    }
-  }
-  if (run_params->Flag_PhotonConservation == 2) {
-    if (!run_params->Flag_PatchyReion || run_params->Flag_IncludeRecombinations != 1 ||
-        run_params->ReionGridDim < 1 ||
-        !isfinite(run_params->physics.Y_He) || run_params->physics.Y_He < 0.0 || run_params->physics.Y_He > 1.0 ||
-        !isfinite(run_params->physics.ReionNionPhotPerBary) || run_params->physics.ReionNionPhotPerBary < 0.0 ||
-        run_params->HHeStartSnapshot < 0 || run_params->HHeEmissionDirections < 1 ||
-        run_params->HHeMemoryMB < 1 ||
-        (run_params->HHeBoundaryPeriodic != 0 && run_params->HHeBoundaryPeriodic != 1) ||
-        !isfinite(run_params->HHeInitialTemperature) || run_params->HHeInitialTemperature < 5000.0 ||
-        run_params->HHeInitialTemperature > 20000.0 ||
-        !isfinite(run_params->HHeSourceEnergyEV) || run_params->HHeSourceEnergyEV < 13.6 ||
-        run_params->HHeSourceEnergyEV > 1000.0 ||
-        !isfinite(run_params->HHeCellCrossingFraction) || run_params->HHeCellCrossingFraction <= 0.0 ||
-        run_params->HHeCellCrossingFraction > 0.5 ||
-        !isfinite(run_params->HHeMaxStepMyr) || run_params->HHeMaxStepMyr <= 0.0) {
-      mlog_error("Invalid dynamic H/He settings: require Flag_IncludeRecombinations=1, a warm 5000--20000 K initial state, "
-                 "positive memory/directions/time step, and cell-crossing fraction in (0,0.5]. "
-                 "See docs/photon_hhe_transport.md.");
-      ABORT(EXIT_FAILURE);
-    }
-    if (run_params->Flag_IncludeSpinTemp || run_params->ReionUVBFlag || run_params->FlagMCMC ||
-        run_params->FlagInteractive ||
-        run_params->physics.Flag_ReionizationModifier || run_params->physics.Flag_FescCGMSuppression ||
-        run_params->physics.EscapeFracBHNorm != 0.0) {
-      mlog_error("Dynamic H/He currently requires SpinTemp=0, ReionUVBFlag=0, FlagMCMC=0, FlagInteractive=0, "
-                 "Flag_ReionizationModifier=0, Flag_FescCGMSuppression=0 and EscapeFracBHNorm=0. "
-                 "The packet model does not supply the legacy UVB/X-ray/AGN closures.");
-      ABORT(EXIT_FAILURE);
-    }
-#if USE_MINI_HALOS
-    mlog_error("Dynamic H/He requires a USE_MINI_HALOS=OFF build; no Pop III spectrum is specified.");
-    ABORT(EXIT_FAILURE);
-#endif
   }
   if (run_params->Flag_PhotonConservation == 3) {
     if (!run_params->Flag_PatchyReion || run_params->Flag_IncludeRecombinations != 1 ||
@@ -254,22 +204,10 @@ void read_parameter_file(char* fname, int mode)
       n_param = 0;
       // Optional settings also have defaults for older parameter files.
       run_params->Flag_PhotonConservation = 0;
-      run_params->PhotonConservationDebug = 1;
-      run_params->PhotonConservationRequireFull = 0;
-      run_params->PhotonConservationShape = 1;
-      run_params->PhotonConservationMaxEdges = 0;
-      run_params->PhotonConservationMemoryMB = 2048;
-      run_params->PhotonConservationMaxIterations = 10000;
-      run_params->PhotonConservationMaxEvaluations = 1000000;
-      run_params->PhotonConservationMaxCuts = 512;
-      run_params->PhotonConservationTolerance = 1e-9;
       run_params->HHeStartSnapshot = 0;
-      run_params->HHeEmissionDirections = 12;
-      run_params->HHeMemoryMB = 2048;
       run_params->HHeBoundaryPeriodic = 1;
       run_params->HHeInitialTemperature = 10000.0;
       run_params->HHeSourceEnergyEV = 18.0;
-      run_params->HHeCellCrossingFraction = 0.25;
       run_params->HHeMaxStepMyr = 0.1;
       run_params->HHeSourceSpectrumFile[0] = '\0';
       run_params->ESPythonExecutable[0] = '\0';
@@ -1089,63 +1027,8 @@ void read_parameter_file(char* fname, int mode)
       required_tag[n_param] = 0;
       params_type[n_param++] = PARAM_TYPE_INT;
 
-      strncpy(params_tag[n_param], "PhotonConservationDebug", tag_length);
-      params_addr[n_param] = &(run_params->PhotonConservationDebug);
-      required_tag[n_param] = 0;
-      params_type[n_param++] = PARAM_TYPE_INT;
-
-      strncpy(params_tag[n_param], "PhotonConservationRequireFull", tag_length);
-      params_addr[n_param] = &(run_params->PhotonConservationRequireFull);
-      required_tag[n_param] = 0;
-      params_type[n_param++] = PARAM_TYPE_INT;
-
-      strncpy(params_tag[n_param], "PhotonConservationShape", tag_length);
-      params_addr[n_param] = &(run_params->PhotonConservationShape);
-      required_tag[n_param] = 0;
-      params_type[n_param++] = PARAM_TYPE_INT;
-
-      strncpy(params_tag[n_param], "PhotonConservationMaxEdges", tag_length);
-      params_addr[n_param] = &(run_params->PhotonConservationMaxEdges);
-      required_tag[n_param] = 0;
-      params_type[n_param++] = PARAM_TYPE_INT;
-
-      strncpy(params_tag[n_param], "PhotonConservationMemoryMB", tag_length);
-      params_addr[n_param] = &(run_params->PhotonConservationMemoryMB);
-      required_tag[n_param] = 0;
-      params_type[n_param++] = PARAM_TYPE_INT;
-
-      strncpy(params_tag[n_param], "PhotonConservationMaxIterations", tag_length);
-      params_addr[n_param] = &(run_params->PhotonConservationMaxIterations);
-      required_tag[n_param] = 0;
-      params_type[n_param++] = PARAM_TYPE_INT;
-
-      strncpy(params_tag[n_param], "PhotonConservationMaxEvaluations", tag_length);
-      params_addr[n_param] = &(run_params->PhotonConservationMaxEvaluations);
-      required_tag[n_param] = 0;
-      params_type[n_param++] = PARAM_TYPE_INT;
-
-      strncpy(params_tag[n_param], "PhotonConservationMaxCuts", tag_length);
-      params_addr[n_param] = &(run_params->PhotonConservationMaxCuts);
-      required_tag[n_param] = 0;
-      params_type[n_param++] = PARAM_TYPE_INT;
-
-      strncpy(params_tag[n_param], "PhotonConservationTolerance", tag_length);
-      params_addr[n_param] = &(run_params->PhotonConservationTolerance);
-      required_tag[n_param] = 0;
-      params_type[n_param++] = PARAM_TYPE_DOUBLE;
-
       strncpy(params_tag[n_param], "HHeStartSnapshot", tag_length);
       params_addr[n_param] = &(run_params->HHeStartSnapshot);
-      required_tag[n_param] = 0;
-      params_type[n_param++] = PARAM_TYPE_INT;
-
-      strncpy(params_tag[n_param], "HHeEmissionDirections", tag_length);
-      params_addr[n_param] = &(run_params->HHeEmissionDirections);
-      required_tag[n_param] = 0;
-      params_type[n_param++] = PARAM_TYPE_INT;
-
-      strncpy(params_tag[n_param], "HHeMemoryMB", tag_length);
-      params_addr[n_param] = &(run_params->HHeMemoryMB);
       required_tag[n_param] = 0;
       params_type[n_param++] = PARAM_TYPE_INT;
 
@@ -1161,11 +1044,6 @@ void read_parameter_file(char* fname, int mode)
 
       strncpy(params_tag[n_param], "HHeSourceEnergyEV", tag_length);
       params_addr[n_param] = &(run_params->HHeSourceEnergyEV);
-      required_tag[n_param] = 0;
-      params_type[n_param++] = PARAM_TYPE_DOUBLE;
-
-      strncpy(params_tag[n_param], "HHeCellCrossingFraction", tag_length);
-      params_addr[n_param] = &(run_params->HHeCellCrossingFraction);
       required_tag[n_param] = 0;
       params_type[n_param++] = PARAM_TYPE_DOUBLE;
 

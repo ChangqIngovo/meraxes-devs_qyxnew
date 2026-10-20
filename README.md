@@ -39,12 +39,9 @@ The `Photon_conservation` branch includes an opt-in
 [spectral ES H/He mode and Gadi L10 runner](docs/es_hhe_gadi.md)
 (`Flag_PhotonConservation=3`). This uses fixed excursion-set spheres, shared
 photon accounts and isothermal H/He recombination, through an online C/Python
-bridge. It is distinct from the earlier opt-in
-[time-dependent H/He photon transport model](docs/photon_hhe_transport.md)
-(`Flag_PhotonConservation=2`), with explicit recombination radiation, thermal
-chemistry and MPI packet migration. Its parameter fragment and current physical
-scope are described in that document; modes `0` and `1` retain their existing
-ionization calculations.
+bridge. `Flag_PhotonConservation=0` selects the original ES calculation.
+These are the two supported modes; the retired maximum-flow and packet
+implementations have been removed. Post-processing is kept outside this repository.
 
 
 ## **Acknowledging**

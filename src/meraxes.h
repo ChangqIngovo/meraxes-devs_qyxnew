@@ -333,26 +333,13 @@ typedef struct run_params_t
   int Flag_IncludeMetalEvo; // New for Metallicity
   int Flag_IncludeRecombinations;
   int Flag_PhotonConservation;
-  int PhotonConservationDebug;
-  int PhotonConservationRequireFull;
-  int PhotonConservationShape;
-  int PhotonConservationMaxEdges;
-  int PhotonConservationMemoryMB;
-  int PhotonConservationMaxIterations;
-  int PhotonConservationMaxEvaluations;
-  int PhotonConservationMaxCuts;
-  double PhotonConservationTolerance;
-  /* Mode 2: native, time-dependent warm H/He packet transport. */
+  /* Mode 3: fixed-temperature, photon-conserving spectral ES closure. */
   int HHeStartSnapshot;
-  int HHeEmissionDirections;
-  int HHeMemoryMB;
   int HHeBoundaryPeriodic;
   double HHeInitialTemperature;
   double HHeSourceEnergyEV;
-  double HHeCellCrossingFraction;
   double HHeMaxStepMyr;
   char HHeSourceSpectrumFile[STRLEN];
-  /* Mode 3: fixed-temperature, photon-conserving spectral ES closure. */
   char ESPythonExecutable[STRLEN];
   char ESWorkerPath[STRLEN];
   double ESRadiusRatio;

@@ -17,30 +17,18 @@ VolumeFactor           : 1.0  # Set to 1.0 unless the trees are subsampled
 Flag_IncludeRecombinations : 0   # if 1 reionization accounts for H-recombination
 Flag_EvolvingReionRBubbleMax : 1 # if 1, ReionRBubbleMaxRecomb follows Qin+25 and ReionRBubbleMax/ReionRBubbleMaxRecomb are ignored
 
-# Excursion-set photon allocation (CPU; top-hat filters). See docs/photon_conservation.md.
-Flag_PhotonConservation : 0 # 0: ES; 1: ES allocation; 2: packet H/He; 3: spectral ES H/He
-PhotonConservationDebug : 1 # 0: log; 1: per-snapshot ledger; 2: cell and edge certificates
-PhotonConservationRequireFull : 0 # 1 aborts if any budget remains unabsorbed
-PhotonConservationShape : 1 # unique quadratic target map; 0: staged flow only
-PhotonConservationMaxEdges : 0 # 0: no edge-count cap; the memory guard still applies
-PhotonConservationMemoryMB : 2048
-PhotonConservationMaxIterations : 10000
-PhotonConservationMaxEvaluations : 1000000
-PhotonConservationMaxCuts : 512
-PhotonConservationTolerance : 1e-9
+# Photon-conserving spectral ES H/He (CPU; top-hat filters). See docs/es_hhe_gadi.md.
+Flag_PhotonConservation : 0 # 0: original ES; 3: photon-conserving spectral ES H/He
 
-# Native warm H/He transport (mode 2 only). See docs/photon_hhe_transport.md.
+# Spectral ES H/He settings (mode 3 only).
 HHeStartSnapshot : 0
-HHeEmissionDirections : 12
-HHeMemoryMB : 2048 # per-rank allocation budget; exceeding it fails without discarding photons
 HHeBoundaryPeriodic : 1
 HHeInitialTemperature : 10000
 HHeSourceEnergyEV : 18 # monochromatic fallback; cannot directly ionize helium
-HHeCellCrossingFraction : 0.25
 HHeMaxStepMyr : 0.1
 HHeSourceSpectrumFile : # optional two-column energy[eV], photon-number weight
 ESPythonExecutable : # mode 3: absolute Python with numpy/scipy/h5py
-ESWorkerPath : # mode 3: absolute tools/es_hhe/worker.py
+ESWorkerPath : # mode 3: absolute tools/es_hhe/snapshot_worker.py
 ESRadiusRatio : 1.1 # geometric ES radius sampling; check convergence
 ESMaxRadiusCells : 0 # 0 uses largest periodic minimum-image support
 

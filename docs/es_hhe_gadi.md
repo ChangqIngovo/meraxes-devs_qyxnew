@@ -48,6 +48,12 @@ fractions.
 
 ## Update, build and prepare
 
+This branch supports mode 0 (original ES) and mode 3 (the current ES/HHe PC
+method). The retired maximum-flow and packet-transport modes and their
+parameters are no longer accepted. After updating, rebuild and prepare a new
+run from the current branch defaults; existing frozen runs remain self-contained.
+Post-processing scripts are maintained outside this repository.
+
 Run on Gadi from a clean `Photon_conservation` checkout:
 
 ```bash
@@ -200,51 +206,6 @@ team size and CPU-affinity size. Each output/checkpoint records this execution
 metadata; numerical checkpoint identity includes both the native library and
 Python dispatch hashes. Thread count can change without changing per-row
 arithmetic or checkpoint identity.
-
-## Comparing PC and original ES outputs
-
-`tools/es_hhe/compare_pc_es.py` reads either prepared run directories, output
-directories, or `meraxes.hdf5` masters with their external grid files present.
-It uses native `xH` fields and metadata, with `es_state_NNN.hdf5` as a fallback.
-With only `--pc-log` and `--es-log`, it produces histories and durations, and
-reports missing grids instead of inventing spatial maps. Inputs are read-only;
-the output directory must be new or empty.
-
-```bash
-python3 tools/es_hhe/compare_pc_es.py \
-    --pc-run /path/to/pc_run --es-run /path/to/original_es_run \
-    --snapshots 60 68 75 --match-xhi 0.98 0.95 0.92 \
-    --output-dir /path/to/new/comparison
-```
-
-The script writes PNG/PDF histories, PC/ES/difference slices at the same
-redshift, and separate nearest-snapshot comparisons at matched mean neutral
-fraction. Both snapshots must lie within `--match-tolerance` (default 0.005)
-of the target and each other. Actual means/redshifts are printed on each map;
-fields are not interpolated between snapshots. The default slice is the
-central z plane, fixed for both models, with no smoothing. Change
-`--slice-axis` and `--slice-index` to inspect other planes.
-
-Periodic six-neighbour components use `xH < 0.5`. Size distributions retain
-at least 19 cells by default and plot number-weighted cumulative distributions
-of volume-equivalent radius, not MFP. `comparison.json` also retains all region
-counts and the ionized volume fraction surviving this cut, plus full-grid
-RMS/mean absolute differences, correlations and ionized-mask Jaccard indices.
-Do not compare the legacy `r_bubble` placeholder against actual ES bubble sizes.
-
-`eor_duration.json` reports 10%, 25%, 50%, 75% and 90% **volume ionization**
-crossings, with 10--90% and 25--75% durations in redshift and Myr. Crossings are
-interpolated only between bracketing data; missing, left-censored or repeated
-crossings remain unmeasured. Duration is never the simulation's wall time or
-the whole span of its snapshot redshifts. The supplied L10 data end near z=10;
-the current PC and ES runs do not cover complete reionization and cannot
-measure either duration. Their sources and recombination closures differ, so
-this remains a comparison of complete models.
-
-`tools/gadi_compare_pc_es.pbs` runs this analysis with the existing tauefix
-Python environment. Set `COMPARE_OUT` to a new directory; `PC_RUN_DIR`,
-`ES_RUN_DIR`, `COMPARE_PYTHON` and `PC_REPO` can override its paths. This analysis
-does not compile or rerun Meraxes.
 
 ## Integration validation
 

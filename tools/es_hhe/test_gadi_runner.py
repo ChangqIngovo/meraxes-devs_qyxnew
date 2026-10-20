@@ -197,6 +197,36 @@ class Scripts(unittest.TestCase):
                 self.assertNotIn(foreign_name,path.read_text())
         self.assert_pbs_launch()
     @unittest.skipUnless(NATIVE_BINARY, 'Needs ES_PARAMCHECK_BINARY (provided by CTest)')
+    def test_native_parser_keeps_original_es_and_rejects_removed_pc_modes(self):
+        # prepare() first verifies the valid mode-3 input with the real parser.
+        # Check sibling parameter files directly: PBS provenance hashes and
+        # mock mpirun must not substitute for this native mode-selection test.
+        self.prepare()
+        original = (self.run/'input.par').read_text()
+        for mode in (0, 1, 2):
+            with self.subTest(mode=mode):
+                config, replacements = re.subn(
+                    r'(?m)^Flag_PhotonConservation\s*:\s*3\s*$',
+                    f'Flag_PhotonConservation : {mode}', original)
+                self.assertEqual(replacements, 1)
+                parameter_file = self.run/f'check_mode_{mode}.par'
+                parameter_file.write_text(config)
+                result = subprocess.run(
+                    [str(self.run/'meraxes'), '--check-params', str(parameter_file)],
+                    env=self.shell_environment(), text=True, capture_output=True)
+                diagnostic = result.stdout + result.stderr
+                if mode == 0:
+                    self.assertEqual(result.returncode, 0, diagnostic)
+                    self.assertIn('Parameter check passed:', result.stdout)
+                    self.assertRegex(result.stdout, r'\bFlag_PhotonConservation\s+0(?:\s|$)')
+                else:
+                    self.assertNotEqual(result.returncode, 0, diagnostic)
+                    self.assertIn('Flag_PhotonConservation must be 0 (original ES) or 3', diagnostic)
+                    self.assertIn('modes 1 and 2 have been removed', diagnostic)
+        self.assertEqual((self.run/'input.par').read_text(), original)
+        self.assertFalse((self.run/'output').exists())
+        self.assertFalse((self.run/'invocation.json').exists())
+    @unittest.skipUnless(NATIVE_BINARY, 'Needs ES_PARAMCHECK_BINARY (provided by CTest)')
     def test_native_parser_accepts_blank_lines_and_comments(self):
         with self.sim_params.open('a') as stream:
             stream.write('   \n\t\n  # indented comment\n')

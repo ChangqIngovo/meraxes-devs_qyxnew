@@ -43,8 +43,6 @@ cmake -S "$repo" -B "$build" \
     -DBUILD_TESTS=ON -DUSE_CUDA=OFF "${pc_python_args[@]}" "$@"
 # Two build workers are intentional on a login node; use PC_BUILD_JOBS in a job.
 cmake --build "$build" --parallel "${PC_BUILD_JOBS:-2}"
-ctest --test-dir "$build" --output-on-failure \
-    -R '^test_photon_conservation(_es|_shape|_index)?$'
 if [[ -n ${ES_PYTHON:-} ]]; then
     ctest --test-dir "$build" --output-on-failure --no-tests=error -R '^test_photon_es_'
 fi

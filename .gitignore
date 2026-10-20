@@ -56,3 +56,8 @@ build
 
 /docs/_build/
 .venv/
+
+# PC/ES output analysis is maintained outside the simulation repository.
+/tools/es_hhe/compare_pc_es.py
+/tools/es_hhe/test_compare_pc_es.py
+/tools/gadi_compare_pc_es.pbs

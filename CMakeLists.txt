@@ -96,13 +96,8 @@ list(REMOVE_ITEM SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/core/meraxes.c)
 # Conservation certificates require IEEE finite checks and ordered arithmetic,
 # including in Release builds, whose legacy physics uses -ffast-math.
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
-    file(GLOB PHOTON_CONSERVATION_SOURCES
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/core/photon_conservation*.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/physics/photon_conservation*.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/core/photon_hhe*.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/core/photon_es*.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/physics/photon_hhe*.c)
-    set_source_files_properties(${PHOTON_CONSERVATION_SOURCES}
+    set_source_files_properties(
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/core/photon_es_meraxes.c
         ${CMAKE_CURRENT_SOURCE_DIR}/src/core/read_params.c
         ${CMAKE_CURRENT_SOURCE_DIR}/src/core/reionization.c
         PROPERTIES COMPILE_OPTIONS "-fno-fast-math;-ffp-contract=off")

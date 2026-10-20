@@ -3,6 +3,7 @@
 set -euo pipefail
 es_repo=${PC_REPO:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)}
 es_build=${PC_BUILD_DIR:-$es_repo/build-pc-mpi}
+export ES_PYTHON=${ES_PYTHON:-/g/data/qp00/sz4640/venvs/tauefix/bin/python}
 es_action=${1:-}
 case "$es_action" in
     build)
@@ -14,7 +15,6 @@ case "$es_action" in
 esac
 
 export PC_REPO="$es_repo" PC_BUILD_DIR="$es_build"
-export ES_PYTHON=${ES_PYTHON:-/g/data/qp00/sz4640/venvs/tauefix/bin/python}
 test -x "$ES_PYTHON" || {
     echo "ES_PYTHON is not executable: $ES_PYTHON (see docs/es_hhe_gadi.md)" >&2; exit 2;
 }
