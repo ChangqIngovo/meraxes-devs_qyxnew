@@ -9,11 +9,25 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 
 SOURCE = Path(__file__).resolve().parents[2]
 HEAD = subprocess.check_output(['git', '-C', str(SOURCE), 'rev-parse', 'HEAD'], text=True).strip()
 NATIVE_BINARY = os.environ.get('ES_PARAMCHECK_BINARY')
+
+class TimedTextTestResult(unittest.TextTestResult):
+    """Expose aggregate startup cost and the active case in CTest logs."""
+    def startTest(self, test):
+        self.started = time.monotonic()
+        super().startTest(test)
+        self.stream.flush()
+
+    def stopTest(self, test):
+        super().stopTest(test)
+        self.stream.writeln(f'  elapsed: {time.monotonic() - self.started:.2f} s')
+        self.stream.flush()
+
 
 class Scripts(unittest.TestCase):
     def setUp(self):
@@ -325,4 +339,5 @@ class Scripts(unittest.TestCase):
                       (self.run/'run_fixture.gadi-pbs.log').read_text())
 
 if __name__ == "__main__":
-    unittest.main(verbosity=2)
+    unittest.main(testRunner=unittest.TextTestRunner(
+        verbosity=2, resultclass=TimedTextTestResult))

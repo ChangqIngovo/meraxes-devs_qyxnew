@@ -219,8 +219,11 @@ if(Python3_Interpreter_FOUND)
         endforeach()
         add_test(NAME test_photon_es_runner
             COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/es_hhe/test_gadi_runner.py)
-        set_tests_properties(test_photon_es_runner PROPERTIES TIMEOUT 120
-            ENVIRONMENT "OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1;ES_PARAMCHECK_BINARY=$<TARGET_FILE:meraxes>")
+        # This is the entire preparation/PBS suite, with repeated real
+        # --check-params calls. Each call initializes/finalizes MPI; shared
+        # login-node startup and filesystem costs need a larger total budget.
+        set_tests_properties(test_photon_es_runner PROPERTIES TIMEOUT 600
+            ENVIRONMENT "OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1;PYTHONUNBUFFERED=1;ES_PARAMCHECK_BINARY=$<TARGET_FILE:meraxes>")
         add_executable(test_photon_es_adapter test_photon_es_adapter.c)
         set_property(TARGET test_photon_es_adapter PROPERTY C_STANDARD 99)
         target_include_directories(test_photon_es_adapter PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_BINARY_DIR})
