@@ -115,7 +115,49 @@ Output is under `$RUN_DIR/output/`; the job log is
 `$RUN_DIR/run_<PBS_JOBID>.log`. The manifest records the exact snapshot count,
 redshift endpoints, input hashes and Python dependency versions.
 
-Alongside the standard Meraxes catalogue/grid output, each snapshot has
+### Original ES comparison run
+
+For a non-PC morphology comparison, prepare a separate mode-0 run from the
+**existing PC run**, using its frozen executable, defaults and L10 simulation
+parameters. This avoids changing galaxy calibration when the branch defaults
+have since changed. No rebuild is needed for this mode switch. Load the same
+GCC/Open MPI/FFTW/HDF5/GSL modules as above, plus Python 3, then run:
+
+```bash
+# Set this to the PC directory whose morphology you are comparing.
+export PC_RUN_DIR=/g/data/qp00/sz4640/pc_runs/l10_es_hhe_34d6ccc9_20261019_122340
+export RUN_DIR=/g/data/qp00/sz4640/pc_runs/l10_original_es_$(date +%Y%m%d_%H%M%S)
+python3 tools/es_hhe/prepare_es_control.py prepare \
+    --pc-run "$PC_RUN_DIR" --run-dir "$RUN_DIR"
+qsub -v "RUN_DIR=$RUN_DIR" "$RUN_DIR/submit.pbs"
+```
+
+The helper checks the parent's frozen-file hashes and simulation snapshot list,
+validates the new parameters with that exact executable, and creates an independent
+manifest. It preserves all physics and table parameters while changing the mode,
+output/provenance paths and requesting every snapshot and supported grid output.
+The original PC directory is never modified. The job uses 32 MPI ranks and the
+same 320 GB/48-hour request; it does not launch the Python PC worker. Runtime
+verification needs only standard-library Python, not NumPy/SciPy or native ES
+kernels. No checkpoint or PC output is copied into the new run.
+
+Keep `Flag_IncludeRecombinations=1`. Original ES uses the legacy MHR/Nrec model.
+If `RecombinationDir/recombination_tables.h5` is missing or incompatible with
+the interpolation grid/cosmology, Meraxes rebuilds it in parallel and writes
+`output/recombination_tables.h5`; initialization can take time. It does not
+overwrite the input cache. Keep all snapshots: with `ReionUVBFlag=0`, ES and
+its recombination history are updated on output snapshots.
+
+Compare the actual `output/meraxes_grids_64.hdf5` and
+`output/meraxes_grids_65.hdf5` (root `xH` datasets), retaining the complete time
+series for matching mean neutral fractions as well as redshifts. The galaxy
+file's grid groups are external links, so copying only `meraxes.hdf5` is
+insufficient. Mode 0 and mode 3 use different source-budget time integration
+and recombination closures: this is a comparison of complete models, not an
+isolated test of photon counting. Mode-3 `r_bubble` is an unavailable diagnostic
+placeholder and must not be used as a measured bubble-size field.
+
+In mode 3, alongside the standard Meraxes catalogue/grid output, each snapshot has
 `output/es_state_NNN.hdf5`. It contains `xH`, `xHeI`, `xHeII`, `xHeIII`, the
 five-species `gas` array, surviving `photons`, `source_history`,
 `capture_counts`, `matter_exchange`, the source/photon energies and weights,

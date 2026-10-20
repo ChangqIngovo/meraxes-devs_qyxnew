@@ -193,6 +193,9 @@ endforeach()
 # Regression tests on the L10_N512 test set (no Criterion needed)
 find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_Interpreter_FOUND)
+    add_test(NAME test_photon_es_control_runner
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/es_hhe/test_es_control.py)
+    set_tests_properties(test_photon_es_control_runner PROPERTIES TIMEOUT 60)
     execute_process(COMMAND ${Python3_EXECUTABLE} -c "import numpy, scipy, h5py"
         RESULT_VARIABLE ES_PYTHON_STATUS OUTPUT_QUIET ERROR_QUIET)
     if(ES_PYTHON_STATUS EQUAL 0)
