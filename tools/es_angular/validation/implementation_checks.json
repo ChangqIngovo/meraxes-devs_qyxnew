@@ -1,0 +1,67 @@
+{
+  "validation_date": "2026-10-21",
+  "core_tests": 13,
+  "cli_tests": 5,
+  "frozen_front_hhe_tests": 17,
+  "geometry_suite": "passed: levels 0,1,2; 200 random faces",
+  "sanitizers": "address + undefined: 13 core tests passed",
+  "compiler": "cc (GCC 13), strict C99",
+  "source_sha256": {
+    "angular_faces.c": "7c3e685210ccdcef0963edc6ec11dee281d080060e9076a4e22f6c80f5eac1ef",
+    "angular_faces.h": "c4240df463c907c773b48dce15fa3bd039ef06310697827075cfead7aa7ba54a",
+    "angular_front.c": "dc7ddddafc836e0d7b76aedc60c3f32b881c74e986ba9e1d2483fb0bd708166a",
+    "angular_front.h": "bbbb1e2b1de72c505b63574090d77efde10d0a296fe4abf8de1bcf9cbe7d5e5e",
+    "angular_front.py": "8e293b8bc17b494d3da915b0409d211166ad47afa7276bd24eaed2bfedc66a78",
+    "angular_hhe.py": "7855432e390dd02e0552d000f88824bf110f629a22e0ecdaa5f120e28f854426",
+    "angular_hhe_convergence.py": "43be4cc059e6cb14853370e45401d41b7bacb29dc96f77192e3de35e79f4734e",
+    "axial_contact.py": "9ed302abbb9298b367ebe12bb666ed32cd8ee2c9d8be961584a463d622fafd95",
+    "benchmarks.py": "47933c130f582408a51b6a8009be1723c18f1335f071b2d221d4c6ad854a065d",
+    "build.py": "0bd2d5e2a6d3a612713f435d78c76aa23e95a79078f0a09165752133ae7116fb",
+    "chemistry.py": "213fd0b8c45d5cf32cb0fc63fb2f6e2d7b58db448d1b7e766fb6fee55710632c",
+    "contact_refinement.py": "c82e09ca1c75c90647463695f612ffea8c0667b4010a76efb001fbce56b1f12f",
+    "run.py": "9dd9f5493040f90332e3a479584c686a28f1a794e3ce2aa27867ffcaa987b56a",
+    "test_angular_cli.py": "0f829715f28af7ac3d04ee281dd54f3c8581d3ba67cf5e055851c1cd7da0090e",
+    "test_angular_faces.py": "548cf808447ce69897581b08dd0f23ec3e658137043720b1a27ba1834266400b",
+    "test_angular_front.py": "29d94dcee671c6161a194898d0ea453d659c979b51960d6109f7c09a62cac805",
+    "test_angular_hhe.py": "98cf904b5f5bd043fb8127d1c4d22ed50dbe779bf497b5a17952a36318ff4a65",
+    "test_retired_modes.py": "e44df915ca609c5179520379a5478cf78bc82132e5142979b3200de8302e925a"
+  },
+  "full_meraxes_build": "not run: CMake and MPI unavailable",
+  "scope": "Open-boundary single-capacity front solver; separate frozen-front H/He chemistry. No periodic production integration.",
+  "retired_mode_tests": {
+    "tests": 1,
+    "mode_cases": [
+      "0",
+      "-1",
+      "1",
+      "2",
+      "3",
+      "4",
+      "INT_MIN",
+      "INT_MAX"
+    ],
+    "result": "passed: actual check_problem_params extracted and compiled; only mode 0 accepted"
+  },
+  "unit_tests_total": 36,
+  "guard_source_sha256": "449a453294597d19deeacd57d7e942cdd8caff4ff1307aac3a73a821f23173d0",
+  "legacy_production_mode3": "removed: bridge, worker, native kernels, parameters, build targets, tests and Gadi launchers",
+  "chemistry_origin_reference_sha256": "4075d324a8e965ecc317bb4a4c85033b5d41cedb1a8385ca52b52c270d3cd542",
+  "chemistry_extraction_audit": {
+    "randomized_rows": 10000,
+    "exposure_cases": 5,
+    "rate_range": [
+      1e-80,
+      1e+80
+    ],
+    "gas_range": [
+      1e-200,
+      1e+200
+    ],
+    "scalar_map_cases": 1000,
+    "cross_section_energies": 10004,
+    "bitwise_equal": true,
+    "all_outputs_finite": true,
+    "native_backend_dependency": false
+  },
+  "validation_after_legacy_directory_removal": true
+}

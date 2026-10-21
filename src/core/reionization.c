@@ -15,7 +15,6 @@
 #include "meraxes.h"
 #include "misc_tools.h"
 #include "read_grids.h"
-#include "photon_es_meraxes.h"
 #include "reionization.h"
 #include "virial_properties.h"
 #if USE_STOCHASTICITY
@@ -34,7 +33,7 @@ static inline double tau_e_prefactor_at_z(double z)
 
 static inline double tau_e_sim_integrand_at_snapshot(int snapshot, double electron_per_nucleus)
 {
-  // Modes 0/1 approximate this ratio with xHII; modes 2/3 count H/He electrons.
+  // The original ES solver approximates the electron-per-nucleus ratio with xHII.
   return tau_e_prefactor_at_z(run_globals.ZZ[snapshot]) * N_b0 * electron_per_nucleus;
 } // unitless
 
@@ -75,12 +74,7 @@ static void update_mass_weighted_tau_e(const int snapshot)
   if (grids->tau_e_prev_snapshot == snapshot)
     return;
 
-  double xHII;
-  if (run_globals.params.Flag_PhotonConservation == 3)
-    xHII = photon_es_mean_electron_per_nucleus();
-  else
-    xHII = fmax(0.0, fmin(1.0, 1.0 - grids->mass_weighted_global_xH));
-  // The legacy-named history field holds ne/(nH+nHe) in mode 3, which may exceed one.
+  double xHII = fmax(0.0, fmin(1.0, 1.0 - grids->mass_weighted_global_xH));
 
   if (grids->tau_e_prev_snapshot >= 0) {
     int prev_snapshot = grids->tau_e_prev_snapshot;
@@ -102,23 +96,7 @@ static void update_mass_weighted_tau_e(const int snapshot)
 void update_galaxy_fesc_vals(galaxy_t* gal, double new_stars, int snapshot)
 {
   physics_params_t* params = &(run_globals.params.physics);
-  /* In online ES mode, each SF event contributes only its new rate. gal->Sfr
-   * already includes earlier in-situ/merger events at this snapshot; adding
-   * that running total here would count their photons repeatedly. Escape
-   * fractions may still depend on the current whole-galaxy SFR below. */
   double source_sfr = gal->Sfr;
-  if (run_globals.params.Flag_PhotonConservation == 3) {
-    if (!isfinite(new_stars) || new_stars < 0 ||
-        (new_stars > 0 && (!isfinite(gal->dt) || gal->dt <= 0))) {
-      mlog_error("Online ES source update requires finite nonnegative new stars and a positive SF timestep.");
-      ABORT(EXIT_FAILURE);
-    }
-    source_sfr = new_stars > 0 ? new_stars / gal->dt : 0;
-    if (!isfinite(source_sfr)) {
-      mlog_error("Online ES incremental SFR overflow.");
-      ABORT(EXIT_FAILURE);
-    }
-  }
 
   float fesc_bh = (float)(params->EscapeFracBHNorm *
                           (powf((float)((1.0 + run_globals.ZZ[snapshot]) / 6.0), (float)params->EscapeFracBHScaling)));
@@ -402,8 +380,7 @@ void call_find_HII_bubbles(int snapshot, int nout_gals, timer_info* timer)
   // Logic statement to avoid gridding the density field twice: skip grid construction and
   // grid saving if Flag_IncludeSpinTemp is true, since these operations have already been
   // performed by the preceding call_find_HII_bubbles
-  if (!run_globals.params.Flag_IncludeSpinTemp ||
-      (!run_globals.params.ReionUVBFlag && !run_globals.params.Flag_PhotonConservation)) {
+  if (!run_globals.params.Flag_IncludeSpinTemp || !run_globals.params.ReionUVBFlag) {
 
     // Construct the baryon grids
     construct_baryon_grids(snapshot, nout_gals);
@@ -1402,7 +1379,6 @@ void malloc_reionization_grids()
 
 void free_reionization_grids()
 {
-  photon_es_meraxes_free();
   mlog("Freeing reionization grids...", MLOG_OPEN);
 
   reion_grids_t* grids = &(run_globals.reion_grids);
@@ -3327,10 +3303,6 @@ void save_reion_output_attributes(int snapshot)
 
 bool check_if_reionization_ongoing(int snapshot)
 {
-  // The photon ledger must continue to account for sources and sinks after overlap.
-  if (run_globals.params.Flag_PhotonConservation)
-    return true;
-
   int started = run_globals.reion_grids.started;
   int finished = run_globals.reion_grids.finished;
 

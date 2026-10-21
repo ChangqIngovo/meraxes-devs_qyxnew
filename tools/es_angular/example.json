@@ -1,0 +1,18 @@
+{
+  "description": "Two constant sources in an initially neutral uniform 9 x 9 x 9 hydrogen grid",
+  "boundary": "open",
+  "recombination": false,
+  "helium": false,
+  "commands_from_repository_root": [
+    "python3 tools/es_angular/build.py",
+    "python3 tools/es_angular/run.py --write-example /tmp/angular_example.npz",
+    "python3 tools/es_angular/run.py --input /tmp/angular_example.npz --output /tmp/angular_result.npz --times 0 1 4 12",
+    "python3 tools/es_angular/run.py --input /tmp/angular_example.npz --output /tmp/angular_es_result.npz --times 0 1 4 12 --epsilon 0.1 --uniform-density 1"
+  ],
+  "notes": [
+    "The shared library is built explicitly; execution does not invoke a compiler.",
+    "Output times do not trigger score updates or change the event schedule.",
+    "resource_escaped contains photons crossing this open box, not periodic transport.",
+    "The old Meraxes mode 3 has been retired; this method runs through the independent angular CLI."
+  ]
+}

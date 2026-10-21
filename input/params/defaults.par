@@ -17,20 +17,8 @@ VolumeFactor           : 1.0  # Set to 1.0 unless the trees are subsampled
 Flag_IncludeRecombinations : 0   # if 1 reionization accounts for H-recombination
 Flag_EvolvingReionRBubbleMax : 1 # if 1, ReionRBubbleMaxRecomb follows Qin+25 and ReionRBubbleMax/ReionRBubbleMaxRecomb are ignored
 
-# Photon-conserving spectral ES H/He (CPU; top-hat filters). See docs/es_hhe_gadi.md.
-Flag_PhotonConservation : 0 # 0: original ES; 3: photon-conserving spectral ES H/He
-
-# Spectral ES H/He settings (mode 3 only).
-HHeStartSnapshot : 0
-HHeBoundaryPeriodic : 1
-HHeInitialTemperature : 10000
-HHeSourceEnergyEV : 18 # monochromatic fallback; cannot directly ionize helium
-HHeMaxStepMyr : 0.1
-HHeSourceSpectrumFile : # optional two-column energy[eV], photon-number weight
-ESPythonExecutable : # mode 3: absolute Python with numpy/scipy/h5py
-ESWorkerPath : # mode 3: absolute tools/es_hhe/snapshot_worker.py
-ESRadiusRatio : 1.1 # geometric ES radius sampling; check convergence
-ESMaxRadiusCells : 0 # 0 uses largest periodic minimum-image support
+# Legacy nonzero photon-conservation backends are removed. See tools/es_angular/README.md.
+Flag_PhotonConservation : 0 # original Meraxes ES; latest angular method runs independently
 
 Flag_TemperatureDependentRec : 1 # if 1, Recombination depends on gas temperature as well
 Flag_Compute21cmBrightTemp : 0   # if 1 Meraxes computes the 21cm Brightness Temperature 

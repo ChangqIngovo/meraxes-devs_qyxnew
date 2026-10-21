@@ -332,18 +332,7 @@ typedef struct run_params_t
   int Flag_IncludeStreamVel;
   int Flag_IncludeMetalEvo; // New for Metallicity
   int Flag_IncludeRecombinations;
-  int Flag_PhotonConservation;
-  /* Mode 3: fixed-temperature, photon-conserving spectral ES closure. */
-  int HHeStartSnapshot;
-  int HHeBoundaryPeriodic;
-  double HHeInitialTemperature;
-  double HHeSourceEnergyEV;
-  double HHeMaxStepMyr;
-  char HHeSourceSpectrumFile[STRLEN];
-  char ESPythonExecutable[STRLEN];
-  char ESWorkerPath[STRLEN];
-  double ESRadiusRatio;
-  double ESMaxRadiusCells;
+  int Flag_PhotonConservation; // Compatibility check: only 0 is accepted; old backends are removed.
   int Flag_EvolvingReionRBubbleMax;
   int Flag_InstantaneousSFR;
   int Flag_TemperatureDependentRec;

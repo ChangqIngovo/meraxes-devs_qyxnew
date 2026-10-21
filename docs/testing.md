@@ -29,8 +29,12 @@ Debug builds compile with `-Werror=implicit` and run under AddressSanitizer and 
 | Regression comparisons | Python 3 with `h5py` and `numpy` |
 | Regression plots (optional) | `matplotlib` |
 
-Without Criterion, the Criterion-based tests are skipped; standalone drivers,
-photon-conservation tests and the VELOCIraptor reader tests remain available.
+Without Criterion, the Criterion-based tests are skipped; standalone drivers
+and the VELOCIraptor reader tests remain available. Python 3 enables the
+retired-PC-mode guard test without NumPy. The independent angular tests need
+`-DBUILD_ES_ANGULAR=ON` and NumPy; see the
+[angular method validation](../tools/es_angular/VALIDATION.md).
+The previous PC bridge and worker tests have been removed.
 Without Python, the regression runs still happen but aren't compared.
 
 | Unit test | Checks |
@@ -41,6 +45,8 @@ Without Python, the regression runs still happen but aren't compared.
 | `test_emission_lines` | [O III] coefficients and luminosities. |
 | `main_cooling`, `main_blackhole_feedback` | Standalone drivers that print the same quantities for given inputs. |
 | `test_velociraptor_reader_mpi1`, `test_velociraptor_reader_mpi2` | Read a synthetic catalogue into poisoned halo storage with both `FlagIgnoreProgIndex` settings; check deterministic flags and mass-based merger selection. |
+| `test_retired_modes` | Compile the actual parameter guard in a minimal C harness; accept baseline mode 0 and explicitly reject seven nonzero legacy mode values. |
+| `test_angular_front`, `test_angular_cli`, `test_angular_hhe`, `test_angular_faces` | Exercise the independent angular solver, CLI, fixed-front chemistry and geometric partitions when `BUILD_ES_ANGULAR=ON`. |
 
 The VELOCIraptor reader currently loads descendant links (`Head`), but no
 progenitor links (`Tail`). The L10_N512 catalogue does not contain `Tail`.
@@ -53,10 +59,10 @@ on reused memory. Affected evolutions must be restarted; their outputs are
 not a reliable regression reference for this correction.
 
 The poisoned-storage test fails against the previous reader and passes after
-the correction with one and two MPI ranks. A local 32-rank L10_N512 evolution
-with photon conservation enabled completes snapshots 0--35, with all 36
-snapshot certificates passing the independent audit. The previous binary
-reproduces the negative-index assertion before completing that range.
+the correction with one and two MPI ranks. Earlier validation also exercised
+a 32-rank L10_N512 evolution through snapshots 0--35 using the now-removed
+PC implementation. That historical run does not validate the current angular
+method, which is not yet connected to Meraxes production snapshots.
 
 ## Regression tests
 

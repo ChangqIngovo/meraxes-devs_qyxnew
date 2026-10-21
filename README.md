@@ -35,13 +35,14 @@ Meraxes, what it outputs, and the physics behind it:
 
 The guide's sources are in [`docs/`](docs/).
 
-The `Photon_conservation` branch includes an opt-in
-[spectral ES H/He mode and Gadi L10 runner](docs/es_hhe_gadi.md)
-(`Flag_PhotonConservation=3`). This uses fixed excursion-set spheres, shared
-photon accounts and isothermal H/He recombination, through an online C/Python
-bridge. `Flag_PhotonConservation=0` selects the original ES calculation.
-These are the two supported modes; the retired maximum-flow and packet
-implementations have been removed. Post-processing is kept outside this repository.
+The `Photon_conservation` branch retains the latest
+[angular-face photon allocation method](tools/es_angular/README.md), with
+source/angular photon ledgers, capacity events and bounded ES modulation.
+It runs through an independent C99/Python interface with open boundaries;
+the fixed-front H/He chemistry is included, while periodic H/He integration
+into Meraxes is still pending. The previous PC strategies and their runners
+have been removed. Meraxes itself retains its original ES calculation with
+`Flag_PhotonConservation=0`; nonzero legacy PC modes are rejected.
 
 
 ## **Acknowledging**

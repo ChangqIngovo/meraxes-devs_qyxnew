@@ -1,0 +1,9 @@
+{
+  "scope": "two-cell three-spectrum fixed-front chemistry",
+  "donor_fractions": [0.08, 0.04, 0.02, 0.01],
+  "accepted_substeps": [1205, 2411, 4831, 9656],
+  "adjacent_gas_l1": [8.934071200193683e-6, 2.1978162328354506e-6, 5.450520983909385e-7],
+  "refinement_ratios": [4.064976437391967, 4.032304873834405],
+  "max_abs_photon_error": 4.773959005888173e-15,
+  "initial_split_roundoff_l1": 2.7755575615628914e-17
+}

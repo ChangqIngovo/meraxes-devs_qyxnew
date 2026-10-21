@@ -1,0 +1,56 @@
+{
+  "method": "Planar convex clipping by angular cone halfspaces; exact spherical polygon area.",
+  "levels": [
+    {
+      "level": 0,
+      "bins": 8,
+      "cells": 343,
+      "shared_faces": 1176,
+      "bin_sphere_partition_error": 0.0,
+      "maximum_face_partition_error_sr": 0.0,
+      "maximum_cell_divergence_error_sr": 2.220446049250313e-16,
+      "maximum_source_bin_flux_error_sr": 2.220446049250313e-16,
+      "zero_out_positive_in_cells": 0,
+      "free_graph_maximum_face_absolute_error_sr": 2.7755575615628914e-17,
+      "free_graph_maximum_face_relative_error": 5.551115123125783e-16,
+      "free_graph_maximum_angular_ledger_error_sr": 2.220446049250313e-16
+    },
+    {
+      "level": 1,
+      "bins": 32,
+      "cells": 343,
+      "shared_faces": 1176,
+      "bin_sphere_partition_error": 0.0,
+      "maximum_face_partition_error_sr": 1.3877787807814457e-17,
+      "maximum_cell_divergence_error_sr": 1.1102230246251565e-16,
+      "maximum_source_bin_flux_error_sr": 1.1102230246251565e-16,
+      "zero_out_positive_in_cells": 0,
+      "free_graph_maximum_face_absolute_error_sr": 5.551115123125783e-17,
+      "free_graph_maximum_face_relative_error": 4.440892098500626e-16,
+      "free_graph_maximum_angular_ledger_error_sr": 1.1102230246251565e-16
+    },
+    {
+      "level": 2,
+      "bins": 128,
+      "cells": 343,
+      "shared_faces": 1176,
+      "bin_sphere_partition_error": 0.0,
+      "maximum_face_partition_error_sr": 5.551115123125783e-17,
+      "maximum_cell_divergence_error_sr": 2.7755575615628914e-17,
+      "maximum_source_bin_flux_error_sr": 2.7755575615628914e-17,
+      "zero_out_positive_in_cells": 0,
+      "free_graph_maximum_face_absolute_error_sr": 2.7755575615628914e-17,
+      "free_graph_maximum_face_relative_error": 4.440892098500626e-16,
+      "free_graph_maximum_angular_ledger_error_sr": 2.7755575615628914e-17
+    }
+  ],
+  "additional": {
+    "random_faces": 200,
+    "maximum_random_partition_error_sr": 2.7755575615628914e-17,
+    "maximum_scale_invariance_error_sr": 1.3877787807814457e-17,
+    "maximum_central_reflection_error_sr": 8.673617379884035e-19,
+    "exact_empty_intersection_checks": 24,
+    "invalid_input_checks_passed": true
+  },
+  "scope": "Geometry and transparent fixed-graph identities only; opaque-mask shadow accuracy is tested by the transport solver."
+}

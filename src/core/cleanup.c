@@ -45,7 +45,7 @@ void cleanup()
   no_sfr_sources_free();
 #endif
 
-  if (run_globals.params.Flag_IncludeRecombinations && run_globals.params.Flag_PhotonConservation == 0) {
+  if (run_globals.params.Flag_IncludeRecombinations) {
     free_MHR();
   }
 

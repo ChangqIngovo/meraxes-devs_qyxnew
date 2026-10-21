@@ -1,0 +1,95 @@
+AXIAL BRIDGE TIME: AN INDEPENDENT CLOCK AND ITS SPATIAL LIMIT
+
+Scope
+-----
+Two constant isotropic sources, each q=0.5, are at (0,0,0) and (d,0,0),
+d=1.5. Uniform atom density is one. Initial centre-selected paid spheres have
+R0=0.6. The cell width is h=4.5/N; N is a multiple of 6, so the midpoint is a
+cell centre. ES modulation is disabled. All bins and spatial cells use the
+source-centred radial face graph and opaque-until-full capacity rule.
+
+The formula below is an exact clock for formation of the PAID AXIAL BRIDGE
+in this discrete model. The earliest three-dimensional six-connected path
+agrees with this clock in every measured fixture. The latter agreement is a
+numerical observation, not a theorem for arbitrary geometry or source arrays.
+
+1. Why the axis is an independently solvable chain
+------------------------------------------------
+For a cell on the line between these sources, its transverse coordinates
+relative to either source are zero. Both transverse faces on each transverse
+axis are outgoing in the Manhattan DAG. Thus there is no incoming transverse
+edge: radiation reaching an axial cell can only arrive from the adjacent
+axial cell toward that source. Off-axis opacity cannot feed back onto this
+chain. Once preceding axial cells are paid, the vacuum face-flux identity
+makes the arrival rate q*f_k exactly, where
+
+  r_k = (k - 1/2) h,
+  f_k = Omega_square(r_k,h/2)/(4 pi),
+  Omega_square(r,a) = 4 atan[ a^2 / (r sqrt(r^2 + 2 a^2)) ].
+
+Angular-bin partitioning sums to this same face flux; the clock is therefore
+independent of angular refinement. Any angular ES modulation would alter this
+clock and is excluded from the statement.
+
+2. Exact discrete time
+----------------------
+Let m=d/(2h), and k0 be the largest integer k with (kh)^2 <= R0^2 + 1e-14,
+matching the initial-mask convention. Each source independently fills cells
+k=k0+1,...,m-1 with atom capacity h^3. At the midpoint k=m both equal-rate
+fronts arrive simultaneously, so its capacity is filled at rate 2*q*f_m.
+Consequently
+
+  T_h = sum[k=k0+1,...,m-1] h^3/(q*f_k) + h^3/(2*q*f_m).
+
+This is computed independently in axial_contact.py, without invoking the
+transport or event solver. In all measured N=24,30,36,48,60,72,96 fixtures,
+comparison to the measured first six-connected paid path is recorded in
+axial_contact.json. It agrees at floating-point precision.
+
+3. Spatial consistency of this axial event
+------------------------------------------
+For every point of the square face, 0 <= y^2+z^2 <= h^2/2. Therefore
+
+ h^2/(4*pi*r_k^2) * (1+h^2/(2*r_k^2))^(-3/2)
+       <= f_k <= h^2/(4*pi*r_k^2).
+
+Since R0>0, this gives f_k = h^2/(4*pi*r_k^2) * [1+O(h^2)] uniformly
+along the finite interval between the initial front and the midpoint. The
+individual filling-time error relative to (4*pi/q)*h*r_k^2 is O(h^3),
+and summing O(1/h) cells gives an O(h^2) quadrature/face correction.
+
+The main error is instead the centre-selected initial edge and the half-filled
+last radial interval. Put M=d/2 and theta_h=(R0-k0*h)/h in [0,1). Apart from
+the negligible fixed initial-mask tolerance,
+
+ T_h = (4*pi/(3*q))*(M^3-R0^3)
+       + (4*pi/q)*h*[R0^2*theta_h - M^2/2] + O(h^2).
+
+Thus the exact discrete axial bridge time converges with O(h) error to
+
+ T_cont = (4*pi/(3*0.5))*(0.75^3-0.6^3)
+        = 1.7247343668207966.
+
+The coefficient oscillates with floor(R0/h). It need not have one sign,
+and convergence is not monotonic. At this fixture's parameters its leading
+error divided by h lies between -7.0685834706 and +1.9792033718.
+This explains why N=30 or N=60 can be worse than adjacent resolutions.
+
+An independent analytic sequence through N=1536 is saved in axial_contact.json;
+error/h stays bounded and (error-leading_error)/h^2 stays bounded. This sequence
+requires no high-resolution three-dimensional graph run.
+
+4. What this closes and what remains outside its scope
+------------------------------------------------------
+The large, nonmonotonic contact-time differences at coarse N are fully
+explained for the axial event by discrete cell capacities, the initial
+voxelised edge, and simultaneous filling of the common midpoint cell.
+They are not an angular-resource leakage or photon-bookkeeping defect.
+The formula also gives a concrete event-solver verification independent of
+its implementation and a spatial-consistency statement for this event.
+
+A general convergence theorem for earliest 3-D connectivity, arbitrary
+heterogeneous density, arbitrary sources, or ES-biased topology is not
+established here. Finite angular bins retain shadow diffusion, separately
+measured by the opaque-screen tests. Global photon conservation and exact
+unobstructed face fluxes alone do not imply exact finite-grid geometry.

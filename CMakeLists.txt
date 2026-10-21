@@ -62,7 +62,7 @@ option(USE_MINI_HALOS "Consider minihalos" OFF)
 option(USE_STOCHASTICITY "Compile stochastic stellar-source prescriptions" OFF)
 set(SECTOR_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/src/sector" CACHE PATH "Base directory of sector library")
 option(BUILD_TESTS "Build criterion tests" OFF)
-option(BUILD_ES_NATIVE "Build deterministic OpenMP kernels for the ES/HHe Python worker" OFF)
+option(BUILD_ES_ANGULAR "Build the independent open-boundary hydrogen angular-front research library" OFF)
 option(GDB "Drop into GDB with mpi_debug_here() calls" OFF)
 option(ENABLE_PROFILING "Enable profiling of executable with gperftools." OFF)
 option(USE_CUDA "Build with CUDA support for reionization calculations (currently unsupported, see BUILD.md)" OFF)
@@ -93,16 +93,6 @@ endif()
 file(GLOB SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/core/*.[ch] *.h ${CMAKE_CURRENT_SOURCE_DIR}/src/physics/*.[ch])
 list(REMOVE_ITEM SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/core/meraxes.c)
 
-# Conservation certificates require IEEE finite checks and ordered arithmetic,
-# including in Release builds, whose legacy physics uses -ffast-math.
-if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
-    set_source_files_properties(
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/core/photon_es_meraxes.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/core/read_params.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/core/reionization.c
-        PROPERTIES COMPILE_OPTIONS "-fno-fast-math;-ffp-contract=off")
-endif()
-    
 # THE MERAXES TARGETS
 if(BUILD_SHARED_LIBS)
     add_library(meraxes_lib SHARED ${SOURCES})
@@ -118,21 +108,19 @@ add_executable(meraxes ${CMAKE_CURRENT_SOURCE_DIR}/src/core/meraxes.c)
 set_target_properties(meraxes PROPERTIES C_STANDARD 99)
 target_link_libraries(meraxes PRIVATE meraxes_lib)
 
-if(BUILD_ES_NATIVE)
-    find_package(OpenMP REQUIRED COMPONENTS C)
-    add_library(es_hhe_kernels SHARED
-        tools/es_hhe/native_runtime.c
-        tools/es_hhe/native_geometry.c
-        tools/es_hhe/native_chemistry.c
-        tools/es_hhe/native_joint.c
-        tools/es_hhe/native_candidates.c)
-    set_target_properties(es_hhe_kernels PROPERTIES C_STANDARD 99)
-    target_link_libraries(es_hhe_kernels PRIVATE OpenMP::OpenMP_C m)
+if(BUILD_ES_ANGULAR)
+    # Independent library; tools/es_angular/build.py builds this without MPI.
+    add_library(es_angular_front SHARED
+        tools/es_angular/angular_front.c
+        tools/es_angular/angular_faces.c)
+    set_target_properties(es_angular_front PROPERTIES
+        C_STANDARD 99 C_STANDARD_REQUIRED YES OUTPUT_NAME angular_front)
+    target_link_libraries(es_angular_front PRIVATE m)
     if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
-        target_compile_options(es_hhe_kernels PRIVATE -fno-fast-math -ffp-contract=off)
+        target_compile_options(es_angular_front PRIVATE -fno-fast-math -ffp-contract=off)
     endif()
     if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
-        target_compile_options(es_hhe_kernels PRIVATE -fexcess-precision=standard)
+        target_compile_options(es_angular_front PRIVATE -fexcess-precision=standard)
     endif()
 endif()
 
