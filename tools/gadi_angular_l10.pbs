@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+#PBS -N angular_l10
+#PBS -P qp00
+#PBS -q normal
+#PBS -l ncpus=4
+#PBS -l mem=32GB
+#PBS -l walltime=20:00:00
+#PBS -l jobfs=4GB
+#PBS -l storage=gdata/qp00+gdata/cm25+scratch/qp00
+#PBS -l wd
+#PBS -j oe
+
+set -euo pipefail
+: "${RUN_DIR:?Submit with qsub -v RUN_DIR=/path/to/prepared/run}"
+: "${PBS_JOBID:?Launch this script with qsub}"
+cd "$RUN_DIR"
+mkdir .running || { echo 'Run was already launched; prepare a fresh RUN_DIR.' >&2; exit 2; }
+exec > "run_${PBS_JOBID}.log" 2>&1
+trap 'status=$?; if (( status != 0 )); then printf "%s\n" "$status" > FAILED; fi' EXIT
+echo "Job: $PBS_JOBID; start: $(date); directory: $RUN_DIR"
+module --force purge
+module load gcc/12.2.0 openmpi/4.1.4 fftw3/3.3.10-nci1 hdf5/1.12.2p gsl/2.7.1 python3/3.11.7
+export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
+export PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
+export ES_ANGULAR_LIBRARY="$RUN_DIR/solver/libangular_front.so"
+module list
+angular_python=$(python3 -c 'import json; print(json.load(open("run_manifest.json"))["python"])')
+"$angular_python" - <<'PY'
+import hashlib
+import json
+import os
+from pathlib import Path
+import h5py
+import numpy
+
+manifest = json.loads(Path('run_manifest.json').read_text())
+def digest(path):
+    h = hashlib.sha256()
+    with Path(path).open('rb') as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b''):
+            h.update(block)
+    return h.hexdigest()
+ncpus = int(os.environ['PBS_NCPUS'])
+if not 1 <= ncpus <= manifest['grid']:
+    raise RuntimeError('MPI rank count must be between 1 and the number of grid slabs')
+versions = {'numpy': numpy.__version__, 'h5py': h5py.__version__}
+if versions != manifest['python_packages']:
+    raise RuntimeError('Python package versions changed; prepare a fresh RUN_DIR')
+if digest(manifest['simulation_snapshot_list']) != manifest['simulation_snapshot_list_sha256']:
+    raise RuntimeError('Simulation a_list.txt changed after preparation')
+for name, expected in {**manifest['density_files'], **manifest['files']}.items():
+    if digest(name) != expected:
+        raise RuntimeError(f'Prepared input changed: {name}')
+if not Path(manifest['tree_catalogue']).is_file():
+    raise RuntimeError('Tree catalogue is missing')
+output = Path('output')
+if output.exists() and any(output.iterdir()):
+    raise RuntimeError('Output directory is nonempty; prepare a fresh RUN_DIR')
+output.mkdir(exist_ok=True)
+print('Commit:', manifest['commit'], flush=True)
+print('Solver:', manifest['solver'], flush=True)
+print('Snapshots:', manifest['snapshot_count'], flush=True)
+print('Python:', manifest['python'], flush=True)
+print('MPI ranks:', ncpus, '; angular worker is serial', flush=True)
+PY
+
+# Meraxes evolves galaxies and grids on MPI ranks. Rank zero spawns the serial
+# angular worker; additional MPI ranks do not parallelize photon transport.
+mpirun -np "$PBS_NCPUS" --bind-to core --map-by slot "$RUN_DIR/meraxes" "$RUN_DIR/input.par"
+touch COMPLETED
+echo "Finished: $(date)"

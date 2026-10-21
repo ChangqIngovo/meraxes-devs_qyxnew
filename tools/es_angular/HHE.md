@@ -5,8 +5,8 @@ allocation**. Its five-species upward reaction map and cross sections are
 self-contained in `chemistry.py` and require only NumPy. The formulas were
 extracted unchanged from the earlier chemistry implementation; its source
 hash and physical attribution are recorded in that module. No retired
-allocation strategy or worker is imported. It is not a complete periodic
-H/He front solver.
+allocation strategy or worker is imported. This file describes the chemistry
+kernel; its periodic snapshot caller is documented in [PERIODIC.md](PERIODIC.md).
 
 The inputs are gas `(cells, 5)`, photon credits `(resources,)`, cross sections
 `(resources, 3)` for HI/HeI/HeII, and routing fractions `(resources, cells)`.
@@ -49,9 +49,9 @@ eligibility: it does not delete residual neutral gas or its nuclei.
 After an event, a spatial solver must continue each unspent credit **from its
 current target**, preserving its resource and position. Summing leftovers
 back to the original source and rerouting them changes their allocation.
-This continuation, periodic propagation, recombination-driven reopening and
-checkpointing of angular state have not been connected to the production
-worker. No global H/He time-sandwich claim follows from the H-only theorem.
+`periodic_front.py` now preserves those credits and their finite flight times;
+`snapshot_worker.py` adds recombination-driven reopening and checkpointing.
+No global H/He time-sandwich claim follows from the H-only theorem.
 
 ## Verification
 

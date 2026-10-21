@@ -5,13 +5,15 @@ the V20/V21 investigation: shared-face solid angles, one photon ledger per
 source and angular bin, capacity events, and bounded excursion-set (ES)
 modulation. It is an independently runnable C99 library with a NumPy interface.
 
-The spatial solver currently implements **one ionization capacity per cell,
-constant sources, and open boundaries**. The earlier Meraxes PC mode 3 and
-its worker have been removed; nonzero legacy PC modes are rejected. The
-separate [fixed-front H/He kernel](HHE.md)
-implements shared spectral chemistry; periodic spatial continuation and its
-checkpoint state are not connected to that kernel. These are material limits
-of this implementation, not enabled production features.
+The original `run.py` benchmark implements **one ionization capacity per cell,
+constant sources, and open boundaries**. Meraxes now selects the
+[periodic H/He snapshot implementation](PERIODIC.md) with
+`Flag_PhotonConservation=4`; see the [Gadi L10 run instructions](../../docs/angular_gadi.md).
+It uses the same face geometry, finite-speed photon continuation, shared
+[H/He chemistry](HHE.md), and local recombination radiation. The earlier
+PC modes 1, 2 and 3 remain removed. The open benchmark's convergence results
+and time-sandwich theorem do not automatically validate the new periodic,
+time-dependent closure.
 
 ## Build and run
 
@@ -31,7 +33,8 @@ use another build. In an existing Meraxes CMake environment,
 `-DBUILD_ES_ANGULAR=ON` adds the independent `es_angular_front` target. Its
 default is OFF. The standalone build does not require MPI, FFTW, HDF5, or
 Meraxes. The original Meraxes ES baseline remains available with
-`Flag_PhotonConservation=0`; the angular solver is not selected by that flag.
+`Flag_PhotonConservation=0`. Mode 4 additionally requires h5py and the configured
+absolute worker/library paths; the NPZ CLI below remains the open benchmark.
 
 The CLI accepts an NPZ containing:
 
@@ -197,9 +200,20 @@ harness explicitly compiles into a temporary directory. The geometry test
 also builds its own temporary library. The H/He tests use the local NumPy
 chemistry module. No production snapshot or Gadi job is started by these commands.
 
-Further integration must retain a photon's current target/image and angular
-identity when it passes a newly paid cell. Periodic boundary credits need
-conservative continuation into adjacent images, and recombination must use
-the photons' current local inventory. Those states must participate in
-checkpoint/replay. Aggregating unused photons back to their original source
-would change spatial allocation and is not a valid implementation shortcut.
+The periodic integration retains each photon's current target/image and
+angular identity when it passes a newly paid cell. Its geometry, chemical and
+HDF5 snapshot tests can be run with NumPy, h5py and the built library:
+
+```bash
+python3 tools/es_angular/test_recombination.py
+python3 tools/es_angular/test_es_scores.py
+python3 tools/es_angular/test_periodic_front.py
+python3 tools/es_angular/test_snapshot_worker.py
+python3 tools/es_angular/test_retired_modes.py
+```
+
+These tests include conservative periodic continuation, local recombination,
+checkpoint/replay and source-event accounting. Aggregating unused photons
+back to their original source would change spatial allocation and is not
+a valid implementation shortcut. Full MPI compilation and the real L10
+simulation are separate validation gates.

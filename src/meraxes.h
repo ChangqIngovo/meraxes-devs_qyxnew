@@ -332,7 +332,18 @@ typedef struct run_params_t
   int Flag_IncludeStreamVel;
   int Flag_IncludeMetalEvo; // New for Metallicity
   int Flag_IncludeRecombinations;
-  int Flag_PhotonConservation; // Compatibility check: only 0 is accepted; old backends are removed.
+  int Flag_PhotonConservation; // 0: original ES; 4: periodic angular-face H/He.
+  int AngularStartSnapshot;
+  double AngularInitialTemperature;
+  double AngularSourceEnergyEV;
+  char AngularSourceSpectrumFile[STRLEN];
+  double AngularMaxStepMyr;
+  int AngularLevel;
+  double AngularEpsilon;
+  double AngularSpeedFraction;
+  char AngularPythonExecutable[STRLEN];
+  char AngularWorkerPath[STRLEN];
+  char AngularLibraryPath[STRLEN];
   int Flag_EvolvingReionRBubbleMax;
   int Flag_InstantaneousSFR;
   int Flag_TemperatureDependentRec;

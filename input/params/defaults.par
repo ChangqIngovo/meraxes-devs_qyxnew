@@ -17,8 +17,19 @@ VolumeFactor           : 1.0  # Set to 1.0 unless the trees are subsampled
 Flag_IncludeRecombinations : 0   # if 1 reionization accounts for H-recombination
 Flag_EvolvingReionRBubbleMax : 1 # if 1, ReionRBubbleMaxRecomb follows Qin+25 and ReionRBubbleMax/ReionRBubbleMaxRecomb are ignored
 
-# Legacy nonzero photon-conservation backends are removed. See tools/es_angular/README.md.
-Flag_PhotonConservation : 0 # original Meraxes ES; latest angular method runs independently
+# Angular-face photon conservation. Legacy modes 1, 2 and 3 remain removed.
+Flag_PhotonConservation : 0 # 0: original ES; 4: periodic angular-face H/He
+AngularStartSnapshot : 0
+AngularInitialTemperature : 10000 # isothermal H/He closure
+AngularSourceEnergyEV : 18 # monochromatic fallback, eV
+AngularSourceSpectrumFile : # optional energy[eV], photon-number weight columns
+AngularMaxStepMyr : 0.1
+AngularLevel : 0 # 8 * 4^level angular bins
+AngularEpsilon : 0.1 # bounded ES modulation
+AngularSpeedFraction : 1 # fraction of physical speed of light
+AngularPythonExecutable : # absolute Python path with NumPy and h5py
+AngularWorkerPath : # absolute tools/es_angular/snapshot_worker.py
+AngularLibraryPath : # absolute native periodic angular library
 
 Flag_TemperatureDependentRec : 1 # if 1, Recombination depends on gas temperature as well
 Flag_Compute21cmBrightTemp : 0   # if 1 Meraxes computes the 21cm Brightness Temperature 

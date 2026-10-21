@@ -62,7 +62,7 @@ option(USE_MINI_HALOS "Consider minihalos" OFF)
 option(USE_STOCHASTICITY "Compile stochastic stellar-source prescriptions" OFF)
 set(SECTOR_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/src/sector" CACHE PATH "Base directory of sector library")
 option(BUILD_TESTS "Build criterion tests" OFF)
-option(BUILD_ES_ANGULAR "Build the independent open-boundary hydrogen angular-front research library" OFF)
+option(BUILD_ES_ANGULAR "Build angular-face geometry for research tests and the periodic H/He worker" OFF)
 option(GDB "Drop into GDB with mpi_debug_here() calls" OFF)
 option(ENABLE_PROFILING "Enable profiling of executable with gperftools." OFF)
 option(USE_CUDA "Build with CUDA support for reionization calculations (currently unsupported, see BUILD.md)" OFF)
@@ -137,6 +137,15 @@ target_compile_options(meraxes_lib PRIVATE
     $<$<CONFIG:Debug>:-Wall -Wextra -Werror=implicit>
     $<$<CONFIG:Release>:-march=native -ffast-math>
     )
+
+# NaN/Inf checks and cumulative photon accounting must remain valid even in a
+# Release build whose other translation units use -ffast-math. Source options
+# are appended after target options by CMake.
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+    set_source_files_properties(
+        src/core/photon_angular_meraxes.c src/core/read_params.c src/core/reionization.c
+        PROPERTIES COMPILE_OPTIONS "-fno-fast-math;-ffp-contract=off")
+endif()
 
 # Anything linking an instrumented meraxes_lib also needs the sanitizer
 # runtimes at link time, so these propagate to consumers.
@@ -317,6 +326,22 @@ target_link_libraries(meraxes_lib PUBLIC ${FFTW_LIBRARIES})
 if(BUILD_TESTS)
     enable_testing()
     add_subdirectory(src/tests)
+    if(BUILD_ES_ANGULAR)
+        find_package(Python3 COMPONENTS Interpreter REQUIRED)
+        execute_process(COMMAND ${Python3_EXECUTABLE} -c "import numpy, h5py"
+            RESULT_VARIABLE ANGULAR_WORKER_PYTHON_STATUS OUTPUT_QUIET ERROR_QUIET)
+        if(ANGULAR_WORKER_PYTHON_STATUS EQUAL 0)
+            foreach(worker_test recombination es_scores periodic_front snapshot_worker)
+                add_test(NAME test_angular_production_${worker_test}
+                    COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/es_angular/test_${worker_test}.py)
+                set_tests_properties(test_angular_production_${worker_test} PROPERTIES
+                    TIMEOUT 300
+                    ENVIRONMENT "ES_ANGULAR_LIBRARY=$<TARGET_FILE:es_angular_front>;OPENBLAS_NUM_THREADS=1;OMP_NUM_THREADS=1;PYTHONDONTWRITEBYTECODE=1")
+            endforeach()
+        else()
+            message(FATAL_ERROR "Angular worker tests require numpy and h5py in Python3_EXECUTABLE")
+        endif()
+    endif()
 endif()
 
 # Exports for other codes to build against this version of Meraxes

@@ -14,6 +14,7 @@
 #include "find_HII_bubbles.h"
 #include "meraxes.h"
 #include "misc_tools.h"
+#include "photon_angular_meraxes.h"
 #include "read_grids.h"
 #include "reionization.h"
 #include "virial_properties.h"
@@ -33,7 +34,7 @@ static inline double tau_e_prefactor_at_z(double z)
 
 static inline double tau_e_sim_integrand_at_snapshot(int snapshot, double electron_per_nucleus)
 {
-  // The original ES solver approximates the electron-per-nucleus ratio with xHII.
+  // Original ES approximates this ratio with xHII; angular mode counts H/He electrons.
   return tau_e_prefactor_at_z(run_globals.ZZ[snapshot]) * N_b0 * electron_per_nucleus;
 } // unitless
 
@@ -74,7 +75,9 @@ static void update_mass_weighted_tau_e(const int snapshot)
   if (grids->tau_e_prev_snapshot == snapshot)
     return;
 
-  double xHII = fmax(0.0, fmin(1.0, 1.0 - grids->mass_weighted_global_xH));
+  // The history field holds ne/(nH+nHe) in angular mode, which can exceed one.
+  double xHII = run_globals.params.Flag_PhotonConservation == 4 ?
+    photon_angular_mean_electron_per_nucleus() : fmax(0.0, fmin(1.0, 1.0 - grids->mass_weighted_global_xH));
 
   if (grids->tau_e_prev_snapshot >= 0) {
     int prev_snapshot = grids->tau_e_prev_snapshot;
@@ -97,6 +100,20 @@ void update_galaxy_fesc_vals(galaxy_t* gal, double new_stars, int snapshot)
 {
   physics_params_t* params = &(run_globals.params.physics);
   double source_sfr = gal->Sfr;
+  if (run_globals.params.Flag_PhotonConservation == 4) {
+    // gal->Sfr already contains earlier SF/merger events at this snapshot.
+    // Add only this event's new rate to the escaped instantaneous source grid.
+    if (!isfinite(new_stars) || new_stars < 0 ||
+        (new_stars > 0 && (!isfinite(gal->dt) || gal->dt <= 0))) {
+      mlog_error("Angular source update requires finite nonnegative new stars and a positive SF timestep.");
+      ABORT(EXIT_FAILURE);
+    }
+    source_sfr = new_stars > 0 ? new_stars / gal->dt : 0;
+    if (!isfinite(source_sfr)) {
+      mlog_error("Angular incremental SFR overflow.");
+      ABORT(EXIT_FAILURE);
+    }
+  }
 
   float fesc_bh = (float)(params->EscapeFracBHNorm *
                           (powf((float)((1.0 + run_globals.ZZ[snapshot]) / 6.0), (float)params->EscapeFracBHScaling)));
@@ -1379,6 +1396,7 @@ void malloc_reionization_grids()
 
 void free_reionization_grids()
 {
+  photon_angular_meraxes_free();
   mlog("Freeing reionization grids...", MLOG_OPEN);
 
   reion_grids_t* grids = &(run_globals.reion_grids);
@@ -3303,6 +3321,10 @@ void save_reion_output_attributes(int snapshot)
 
 bool check_if_reionization_ongoing(int snapshot)
 {
+  // Advance every snapshot, including dark intervals and after overlap.
+  if (run_globals.params.Flag_PhotonConservation == 4)
+    return true;
+
   int started = run_globals.reion_grids.started;
   int finished = run_globals.reion_grids.finished;
 

@@ -34,7 +34,8 @@ and the VELOCIraptor reader tests remain available. Python 3 enables the
 retired-PC-mode guard test without NumPy. The independent angular tests need
 `-DBUILD_ES_ANGULAR=ON` and NumPy; see the
 [angular method validation](../tools/es_angular/VALIDATION.md).
-The previous PC bridge and worker tests have been removed.
+The mode-4 periodic worker tests additionally require h5py. The previous PC
+bridge and worker tests have been removed; they are not validation of mode 4.
 Without Python, the regression runs still happen but aren't compared.
 
 | Unit test | Checks |
@@ -45,8 +46,10 @@ Without Python, the regression runs still happen but aren't compared.
 | `test_emission_lines` | [O III] coefficients and luminosities. |
 | `main_cooling`, `main_blackhole_feedback` | Standalone drivers that print the same quantities for given inputs. |
 | `test_velociraptor_reader_mpi1`, `test_velociraptor_reader_mpi2` | Read a synthetic catalogue into poisoned halo storage with both `FlagIgnoreProgIndex` settings; check deterministic flags and mass-based merger selection. |
-| `test_retired_modes` | Compile the actual parameter guard in a minimal C harness; accept baseline mode 0 and explicitly reject seven nonzero legacy mode values. |
+| `test_retired_modes` | Compile actual production functions with the real Meraxes structures; accept valid modes 0/4, reject retired modes and invalid controls, and verify incremental stellar-event source accounting. |
 | `test_angular_front`, `test_angular_cli`, `test_angular_hhe`, `test_angular_faces` | Exercise the independent angular solver, CLI, fixed-front chemistry and geometric partitions when `BUILD_ES_ANGULAR=ON`. |
+| `test_angular_production_recombination`, `test_angular_production_es_scores` | Check coupled local OTS ledgers/convergence and periodic FFT ES scores against direct sums. |
+| `test_angular_production_periodic_front`, `test_angular_production_snapshot_worker` | Check shared periodic gas, finite flight, retained resource positions, temporal refinement, HDF5 snapshot evolution and replay. |
 
 The VELOCIraptor reader currently loads descendant links (`Head`), but no
 progenitor links (`Tail`). The L10_N512 catalogue does not contain `Tail`.
@@ -62,7 +65,8 @@ The poisoned-storage test fails against the previous reader and passes after
 the correction with one and two MPI ranks. Earlier validation also exercised
 a 32-rank L10_N512 evolution through snapshots 0--35 using the now-removed
 PC implementation. That historical run does not validate the current angular
-method, which is not yet connected to Meraxes production snapshots.
+method. The [new mode-4 L10 run](angular_gadi.md) requires its own MPI build
+and simulation validation.
 
 ## Regression tests
 

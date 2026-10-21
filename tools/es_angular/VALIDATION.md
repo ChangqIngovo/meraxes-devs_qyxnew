@@ -156,10 +156,43 @@ python3 tools/es_angular/test_angular_faces.py --output /tmp/angular_validation/
 python3 tools/es_angular/angular_hhe_convergence.py --output /tmp/angular_validation/hhe.json
 ```
 
-Full Meraxes CMake/MPI compilation and Gadi execution were not performed in
-this environment because CMake/MPI are absent. The previous mode-3 worker,
-native kernels, launchers and tests have been removed. The new C99 core and
-Python tools were compiled and exercised directly. Its shared H/He chemistry
-now resides in the local `chemistry.py` module. Periodic H/He continuation,
-recombination-aware photon locations and restart serialization remain
-necessary before connecting the angular method to production snapshots.
+The measurements above concern the open-front geometry and fixed-front
+chemistry. The previous mode-3 worker, native kernels, launchers and tests
+have been removed. The current H/He chemistry resides in the local
+`chemistry.py` module.
+
+## Periodic snapshot integration
+
+Mode 4 now connects periodic finite-speed photon inventory, H/He
+recombination, density remapping and worker checkpoint/replay to the Meraxes
+snapshot loop. See [PERIODIC.md](PERIODIC.md) for the explicit approximations.
+The complete time split is first order; the old global time-sandwich bound
+and fixed-front midpoint convergence do not apply to the complete new method.
+
+Local tests cover periodic crossings, repeated images sharing gas capacity,
+finite propagation through transparent periodic gas, retained source/angle/
+energy/location inventory, release before recombination, and exact worker
+checkpoint continuation. The H-only limiting comparison on a 5^3 grid at
+time 7.3 reduces the total absolute ionized-count discrepancy from about 0.30
+at 4 steps to 1.4e-7 at 32 steps. This is a consistency fixture, not a measured
+general convergence order. Real HDF5 tests include three successive snapshots
+with mixed H/He spectra and recombination, density matter-exchange accounting,
+cumulative physical recombination counts, idempotent replay and configuration
+rejection.
+
+The final local combined suite passed **84 tests in 53.646 s** under Python
+3.12, NumPy 2.5.4 and h5py 3.16.0. Numerical source hashes and the complete
+test summary are recorded in
+[`validation/production_integration_checks.json`](validation/production_integration_checks.json).
+
+The new C bridge was syntax-compiled with strict warnings against the real
+Meraxes structures and temporary declarations for unavailable external
+libraries. This is not a linked MPI/HDF5 build. Production parameter guards
+and source-event updates are exercised directly by `test_retired_modes.py`.
+The Gadi preparation/PBS preflight was exercised on real HDF5 fixtures with a
+stub executable, including file hashes, fresh-run checks and invalid-input
+rejection. It does not substitute for the real Meraxes executable.
+
+Full Meraxes MPI/HDF5 compilation and the actual Gadi L10 simulation have not
+been performed in this environment. The [Gadi launcher](../../docs/angular_gadi.md)
+performs the build and tests before permitting preparation/submission.

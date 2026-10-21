@@ -6,12 +6,48 @@
 // test
 static void check_problem_params(run_params_t* run_params)
 {
-  if (run_params->Flag_PhotonConservation != 0) {
-    mlog_error("The previous photon-conservation strategies have been removed. "
-               "Flag_PhotonConservation must be 0 for the original Meraxes ES solver. "
-               "The latest angular method runs independently via tools/es_angular/run.py; "
-               "it is not yet an online periodic H/He backend.");
+  if (run_params->Flag_PhotonConservation != 0 && run_params->Flag_PhotonConservation != 4) {
+    mlog_error("Flag_PhotonConservation must be 0 (original ES) or 4 (periodic angular-face H/He). "
+               "The previous photon-conservation modes 1, 2 and 3 have been removed.");
     ABORT(EXIT_FAILURE);
+  }
+  if (run_params->Flag_PhotonConservation == 4) {
+    if (!run_params->Flag_PatchyReion || run_params->Flag_IncludeRecombinations != 1 ||
+        run_params->ReionGridDim < 1 || run_params->AngularStartSnapshot < 0 ||
+        run_params->AngularInitialTemperature != 10000.0 ||
+        !isfinite(run_params->physics.Y_He) || run_params->physics.Y_He < 0.0 || run_params->physics.Y_He >= 1.0 ||
+        !isfinite(run_params->physics.ReionNionPhotPerBary) || run_params->physics.ReionNionPhotPerBary < 0.0 ||
+        !isfinite(run_params->AngularSourceEnergyEV) || run_params->AngularSourceEnergyEV < 13.6 ||
+        !isfinite(run_params->AngularMaxStepMyr) || run_params->AngularMaxStepMyr <= 0.0 ||
+        run_params->AngularLevel < 0 || run_params->AngularLevel > 8 ||
+        !isfinite(run_params->AngularEpsilon) || run_params->AngularEpsilon < 0.0 ||
+        !isfinite(run_params->AngularSpeedFraction) || run_params->AngularSpeedFraction <= 0.0 ||
+        run_params->AngularSpeedFraction > 1.0 || run_params->AngularPythonExecutable[0] != '/' ||
+        run_params->AngularWorkerPath[0] != '/' || run_params->AngularLibraryPath[0] != '/' ||
+        (run_params->AngularSourceSpectrumFile[0] != '\0' && run_params->AngularSourceSpectrumFile[0] != '/') ||
+        run_params->ReionFilterType != 0 || run_params->ReionRtoMFilterType != 0) {
+      mlog_error("Angular mode requires periodic top-hat geometry, T=10000 K, recombinations=1, "
+                 "positive time step, level in [0,8], epsilon>=0, speed fraction in (0,1], and absolute "
+                 "Python/worker/library paths (also spectrum path when supplied). See tools/es_angular/README.md.");
+      ABORT(EXIT_FAILURE);
+    }
+    if (run_params->Flag_IncludeSpinTemp || run_params->ReionUVBFlag || run_params->FlagMCMC ||
+        run_params->FlagInteractive || run_params->physics.Flag_ReionizationModifier ||
+        run_params->physics.Flag_FescCGMSuppression || run_params->physics.EscapeFracBHNorm != 0.0 ||
+        run_params->Flag_Compute21cmBrightTemp || run_params->Flag_ComputePS || run_params->Flag_ConstructLightcone) {
+      mlog_error("Angular mode has no calibrated UVB/heating closure: require SpinTemp=0, ReionUVBFlag=0, "
+                 "MCMC/Interactive=0, ReionizationModifier=0, FescCGMSuppression=0, EscapeFracBHNorm=0, "
+                 "Compute21cmBrightTemp=0, ComputePS=0 and ConstructLightcone=0.");
+      ABORT(EXIT_FAILURE);
+    }
+#if USE_MINI_HALOS
+    mlog_error("Angular mode requires USE_MINI_HALOS=OFF; no Pop III spectrum is specified.");
+    ABORT(EXIT_FAILURE);
+#endif
+#ifdef USE_CUDA
+    mlog_error("Angular mode requires a CPU build (USE_CUDA=OFF).");
+    ABORT(EXIT_FAILURE);
+#endif
   }
   if (run_params->NSteps != 1) {
     mlog_error("The current version of the code only works if NSteps = 1. Sorry! Exiting...");
@@ -175,6 +211,17 @@ void read_parameter_file(char* fname, int mode)
       n_param = 0;
       // Optional settings also have defaults for older parameter files.
       run_params->Flag_PhotonConservation = 0;
+      run_params->AngularStartSnapshot = 0;
+      run_params->AngularInitialTemperature = 10000.0;
+      run_params->AngularSourceEnergyEV = 18.0;
+      run_params->AngularSourceSpectrumFile[0] = '\0';
+      run_params->AngularMaxStepMyr = 0.1;
+      run_params->AngularLevel = 0;
+      run_params->AngularEpsilon = 0.1;
+      run_params->AngularSpeedFraction = 1.0;
+      run_params->AngularPythonExecutable[0] = '\0';
+      run_params->AngularWorkerPath[0] = '\0';
+      run_params->AngularLibraryPath[0] = '\0';
       for (ii = 0; ii < PARAM_MAX_ENTRIES; ii++) {
         required_tag[ii] = 0;
         hdf5props->params_type[ii] = PARAM_TYPE_UNUSED;
@@ -987,6 +1034,61 @@ void read_parameter_file(char* fname, int mode)
       params_addr[n_param] = &(run_params->Flag_PhotonConservation);
       required_tag[n_param] = 0;
       params_type[n_param++] = PARAM_TYPE_INT;
+
+      strncpy(params_tag[n_param], "AngularStartSnapshot", tag_length);
+      params_addr[n_param] = &(run_params->AngularStartSnapshot);
+      required_tag[n_param] = 0;
+      params_type[n_param++] = PARAM_TYPE_INT;
+
+      strncpy(params_tag[n_param], "AngularInitialTemperature", tag_length);
+      params_addr[n_param] = &(run_params->AngularInitialTemperature);
+      required_tag[n_param] = 0;
+      params_type[n_param++] = PARAM_TYPE_DOUBLE;
+
+      strncpy(params_tag[n_param], "AngularSourceEnergyEV", tag_length);
+      params_addr[n_param] = &(run_params->AngularSourceEnergyEV);
+      required_tag[n_param] = 0;
+      params_type[n_param++] = PARAM_TYPE_DOUBLE;
+
+      strncpy(params_tag[n_param], "AngularSourceSpectrumFile", tag_length);
+      params_addr[n_param] = run_params->AngularSourceSpectrumFile;
+      required_tag[n_param] = 0;
+      params_type[n_param++] = PARAM_TYPE_STRING;
+
+      strncpy(params_tag[n_param], "AngularMaxStepMyr", tag_length);
+      params_addr[n_param] = &(run_params->AngularMaxStepMyr);
+      required_tag[n_param] = 0;
+      params_type[n_param++] = PARAM_TYPE_DOUBLE;
+
+      strncpy(params_tag[n_param], "AngularLevel", tag_length);
+      params_addr[n_param] = &(run_params->AngularLevel);
+      required_tag[n_param] = 0;
+      params_type[n_param++] = PARAM_TYPE_INT;
+
+      strncpy(params_tag[n_param], "AngularEpsilon", tag_length);
+      params_addr[n_param] = &(run_params->AngularEpsilon);
+      required_tag[n_param] = 0;
+      params_type[n_param++] = PARAM_TYPE_DOUBLE;
+
+      strncpy(params_tag[n_param], "AngularSpeedFraction", tag_length);
+      params_addr[n_param] = &(run_params->AngularSpeedFraction);
+      required_tag[n_param] = 0;
+      params_type[n_param++] = PARAM_TYPE_DOUBLE;
+
+      strncpy(params_tag[n_param], "AngularPythonExecutable", tag_length);
+      params_addr[n_param] = run_params->AngularPythonExecutable;
+      required_tag[n_param] = 0;
+      params_type[n_param++] = PARAM_TYPE_STRING;
+
+      strncpy(params_tag[n_param], "AngularWorkerPath", tag_length);
+      params_addr[n_param] = run_params->AngularWorkerPath;
+      required_tag[n_param] = 0;
+      params_type[n_param++] = PARAM_TYPE_STRING;
+
+      strncpy(params_tag[n_param], "AngularLibraryPath", tag_length);
+      params_addr[n_param] = run_params->AngularLibraryPath;
+      required_tag[n_param] = 0;
+      params_type[n_param++] = PARAM_TYPE_STRING;
 
       strncpy(params_tag[n_param], "Flag_EvolvingReionRBubbleMax", tag_length);
       params_addr[n_param] = &(run_params->Flag_EvolvingReionRBubbleMax);

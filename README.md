@@ -38,11 +38,13 @@ The guide's sources are in [`docs/`](docs/).
 The `Photon_conservation` branch retains the latest
 [angular-face photon allocation method](tools/es_angular/README.md), with
 source/angular photon ledgers, capacity events and bounded ES modulation.
-It runs through an independent C99/Python interface with open boundaries;
-the fixed-front H/He chemistry is included, while periodic H/He integration
-into Meraxes is still pending. The previous PC strategies and their runners
-have been removed. Meraxes itself retains its original ES calculation with
-`Flag_PhotonConservation=0`; nonzero legacy PC modes are rejected.
+The open-boundary C99/Python benchmarks remain available. Meraxes mode 4 now
+connects the same geometry to periodic finite-speed H/He evolution, local
+recombination and retained photon state. See the
+[physical and numerical scope](tools/es_angular/PERIODIC.md) and
+[Gadi L10 simulation instructions](docs/angular_gadi.md).
+The previous PC strategies and their runners have been removed. Mode 0
+retains the original ES comparison; retired modes 1, 2 and 3 are rejected.
 
 
 ## **Acknowledging**
