@@ -52,11 +52,35 @@ limits fail explicitly rather than silently deleting photons.
 
 ## Chemistry, sources and time
 
-The gas vector is `(HI,HII,HeI,HeII,HeIII)`. Primary photons use the existing
-spectral-competition kernel, stopping at class-specific transparency events.
+The gas vector is `(HI,HII,HeI,HeII,HeIII)`. Primary photons compete at fixed
+target cells, stopping at class-specific transparency thresholds.
 Photons of 13.6–24.59 eV can spend HI capacity, 24.59–54.4 eV can spend HI+HeI,
 and harder photons can spend HI+2HeI+HeII. Multiple sources share those same
 populations.
+
+For identical H-only cross sections, including the default 18 eV source,
+the photoionization endpoint in an initially opaque cell is evaluated directly:
+
+\[
+A_j=\min\!\left(P_j,\max[0,N_{{\rm HI},j}-\varepsilon_{\rm tr}N_{{\rm H},j}]\right),
+\qquad D_{a,j}=A_j\frac{P_{a,j}}{P_j}.
+\]
+
+Here `P` contains only photons that have reached that target, `a` labels
+identical-cross-section arrivals, and `epsilon_tr` is the transparency
+threshold, distinct from the ES modulation parameter. All these arrivals
+have the same fractional depletion, so their proportional debits are the
+analytic endpoint of the fixed-target reaction. HI decreases and HII increases
+by `A`; helium is unchanged. Unspent photons retain their resource identities
+and are released onto outgoing edges by the usual rule. Subnormal credits
+that fail the existing representability guard remain in inventory.
+
+This removes a global exposure-step stiffness failure in the monochromatic
+case; it does not change the physical travel clock or the first-order time
+split. Distinct H cross sections or He-active light still use the coupled
+spectral kernel and its transparency events. That solve packs only cells
+with arriving photons; dark cells cannot constrain or participate in the
+reaction. The general spectral iteration limit remains in place.
 
 `recombination.py` uses case-A H/He recombination and an eight-channel local
 on-the-spot (OTS) closure. Recombination captures and diffuse photon emission

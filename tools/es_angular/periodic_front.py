@@ -173,6 +173,74 @@ class PeriodicFront:
         # Match the fixed-front kernel's roundoff band at transparency.
         return band_capacities(gas) > (self.transparency + 64*np.finfo(float).eps) * normal
 
+    def _absorb_front(self, gas, pool):
+        """Relax fixed target credits; no photon travels during this operation.
+
+        Identical H-only cross sections share one depletion factor per cell.
+        The endpoint is therefore an exact capacity-limited proportional
+        debit. Different cross sections or He-active light use the coupled
+        spectral kernel, restricted to cells that actually receive photons.
+        """
+        if not np.all(np.isfinite(pool)):
+            raise RuntimeError("Nonfinite angular target photon budget")
+        captures = np.zeros((self.ncell, 3))
+        debits = np.zeros_like(pool)
+        cells = np.flatnonzero(np.any(pool > 0, axis=0))
+        diagnostics = dict(chemistry_method="none", chemistry_active_cells=len(cells),
+                           chemistry_substeps=0, transparency_events=0)
+        if not len(cells):
+            return gas, captures, debits, diagnostics
+        local = gas[cells].copy()
+        credits = pool[:, cells].copy()
+        credits = np.where(self._opaque(local)[:, self.classes].T, credits, 0.)
+        active_bands = np.flatnonzero(np.any(credits > 0, axis=1))
+        if not len(active_bands):
+            return gas, captures, debits, diagnostics
+        active_cross = self.cross[active_bands]
+        if (np.all(active_cross[:, 0] > 0) and not np.any(active_cross[:, 1:])
+                and np.all(active_cross[:, 0] == active_cross[0, 0])):
+            diagnostics["chemistry_method"] = "analytic_h"
+            diagnostics["chemistry_substeps"] = 1
+            for index, cell in enumerate(cells):
+                # Match the iterative kernel's representability guard. Keep
+                # unresolved subnormal light in the inventory, never drop it.
+                bands = np.flatnonzero(.01*credits[:, index] >= np.nextafter(0., 1.))
+                if not len(bands):
+                    continue
+                amounts = credits[bands, index].tolist()
+                available = math.fsum(amounts)
+                normal = math.fsum(local[index, :2])
+                capacity = max(0., local[index, 0] - self.transparency*normal)
+                capture = min(available, capacity)
+                pieces = amounts if capture == available else _split(capture, amounts)
+                debits[bands, cell] = pieces
+                captures[cell, 0] = capture
+                local[index, 0] -= capture
+                local[index, 1] += capture
+                diagnostics["transparency_events"] += int(capture == capacity)
+        else:
+            diagnostics["chemistry_method"] = "spectral_midpoint"
+            for _ in range(3*len(cells) + 1):
+                mask = self._opaque(local)[:, self.classes].T
+                credits = np.where(mask, credits, 0.)
+                if not np.any(credits > 0):
+                    break
+                reaction = illuminate_channels(local, credits, self.cross,
+                                               epsilon=self.transparency,
+                                               stop_at_event=True, max_iterations=40000)
+                local = reaction['gas']
+                captures[cells] += reaction['absorbed']
+                debits[:, cells] += reaction['channel_debit']
+                credits = reaction['target_credits']
+                diagnostics['chemistry_substeps'] += reaction['substeps']
+                if reaction['stop'] != 'transparency_event':
+                    break
+                diagnostics['transparency_events'] += len(reaction['events'])
+            else:
+                raise RuntimeError("Too many monotone angular transparency events")
+        gas[cells] = local
+        return gas, captures, debits, diagnostics
+
     def _route(self, key, amount, travel, opaque, scores, node_budget=None):
         source, angular_bin, energy, x, y, z, remaining = key
         offset = (x, y, z)
@@ -288,26 +356,7 @@ class PeriodicFront:
             cell = self._cell(key[0], key[3:6])
             groups[(key[2], cell)].append((key, amount))
             pool[key[2], cell] += amount
-        captures = np.zeros((self.ncell, 3))
-        debits = np.zeros_like(pool)
-        chemistry_substeps = chemistry_events = 0
-        for _ in range(3*self.ncell + 1):
-            mask = self._opaque(gas)[:, self.classes].T
-            pool = np.where(mask, pool, 0.)
-            if not np.any(pool > 0):
-                break
-            reaction = illuminate_channels(gas, pool, self.cross, epsilon=self.transparency,
-                                           stop_at_event=True, max_iterations=40000)
-            gas = reaction['gas']
-            captures += reaction['absorbed']
-            debits += reaction['channel_debit']
-            pool = reaction['target_credits']
-            chemistry_substeps += reaction['substeps']
-            if reaction['stop'] != 'transparency_event':
-                break
-            chemistry_events += len(reaction['events'])
-        else:
-            raise RuntimeError("Too many monotone angular transparency events")
+        gas, captures, debits, chemistry_audit = self._absorb_front(gas, pool)
         source_absorbed = np.zeros(self.ncell)
         split_debit = 0.
         for (energy, cell), entries in groups.items():
@@ -366,8 +415,8 @@ class PeriodicFront:
         inventory = math.fsum(final.values())
         audits = dict(resource_ledger_max_abs=absolute, resource_ledger_max_relative=relative,
                       photon_capture_error=count_error, routed_nodes=visits,
-                      inventory_entries=len(final), chemistry_substeps=chemistry_substeps,
-                      transparency_events=chemistry_events, emitted_this_step=float(photons.sum()),
+                      inventory_entries=len(final), **chemistry_audit,
+                      emitted_this_step=float(photons.sum()),
                       absorbed_this_step=total_capture, retained_photons=inventory,
                       escaped_photons=0.)
         self.gas, self.entries = gas, dict(final)

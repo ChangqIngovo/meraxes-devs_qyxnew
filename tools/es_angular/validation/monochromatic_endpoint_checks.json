@@ -1,0 +1,77 @@
+{
+  "scope": "Synthetic fixed-target chemistry; not a replay of the Gadi snapshot-23 inputs",
+  "parent_commit": "22bb2292a73bd734bb8956ad0595671cda7fb4b8",
+  "python": "3.12.14",
+  "numpy": "2.5.4",
+  "h5py": "3.16.0",
+  "wide_density": {
+    "grid": [
+      4,
+      4,
+      4
+    ],
+    "illuminated_cells": 64,
+    "old": {
+      "max_iterations": 40000,
+      "status": "Angular chemistry iteration limit; no caller state was mutated",
+      "seconds": 6.587652470999956
+    },
+    "new": {
+      "chemistry_method": "analytic_h",
+      "chemistry_active_cells": 64,
+      "chemistry_substeps": 1,
+      "transparency_events": 0,
+      "seconds": 0.0006880029998228565,
+      "max_relative_capture_error": 0.0
+    },
+    "setup": "HI=geomspace(1e-8,1e8,64), HeI=0.08*HI, source=0.01*HI; other species zero; 18 eV"
+  },
+  "sparse_grid": {
+    "grid": [
+      32,
+      32,
+      32
+    ],
+    "illuminated_cells": 15,
+    "old": {
+      "max_iterations": 40000,
+      "status": "photon_remainder",
+      "substeps": 1516,
+      "seconds": 6.236017913000069
+    },
+    "new": {
+      "chemistry_method": "analytic_h",
+      "chemistry_active_cells": 15,
+      "chemistry_substeps": 1,
+      "transparency_events": 0,
+      "seconds": 0.00040349599998990016,
+      "max_relative_capture_error": 0.0,
+      "max_abs_difference_from_old_gas": 1.0026701691145945e-15,
+      "max_abs_difference_from_old_capture": 1.0026701691145945e-15
+    },
+    "setup": "32^3 cells, HI=1, HeI=0.08, other species zero; 15 equally spaced source cells each supply 0.01 photons; 18 eV"
+  },
+  "source_sha256": {
+    "periodic_front.py": "c218d19b758b5ae60fe508651cf410c247af95d91cd61eb583f4f6c990f33396",
+    "snapshot_worker.py": "e9109ae43763dc9cdf53989130eba565386a5c19fdd71bfc99ea40dba367b236",
+    "angular_hhe.py": "7855432e390dd02e0552d000f88824bf110f629a22e0ecdaa5f120e28f854426"
+  },
+  "date_utc": "2026-10-22",
+  "benchmark_timing_scope": "One wall-clock measurement of fixed-target chemistry only, with geometry initialized before timing; excludes routing, ES FFTs, recombination, HDF5 and Meraxes/MPI. Full-suite tests ran in a separate concurrent process.",
+  "unit_tests": {
+    "command": "python3 -m unittest discover -s tools/es_angular -p 'test_*.py' -v",
+    "count": 89,
+    "seconds": 22.653,
+    "status": "passed"
+  },
+  "gadi_observation": {
+    "job": "181886918.gadi-pbs",
+    "commit": "22bb2292a73bd734bb8956ad0595671cda7fb4b8",
+    "last_completed_snapshot": 22,
+    "failed_snapshot": 23,
+    "failed_substep": 27,
+    "substeps_in_failed_snapshot": 34,
+    "error": "Angular chemistry iteration limit; no caller state was mutated",
+    "corrected_full_simulation": "not rerun in this environment; requires a new prepared Gadi run"
+  }
+}

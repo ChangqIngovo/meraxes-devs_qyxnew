@@ -10,6 +10,7 @@ import unittest
 import numpy as np
 
 from angular_front import AngularFront
+from angular_hhe import illuminate_channels
 from periodic_front import PeriodicFront
 
 
@@ -139,6 +140,67 @@ class PeriodicFrontTests(unittest.TestCase):
         self.assertGreater(model.gas[0, 0]+model.gas[0, 2]+model.gas[0, 3], 0.)
         np.testing.assert_allclose(model.gas[:, :2].sum(1), [1.], rtol=2e-12)
         np.testing.assert_allclose(model.gas[:, 2:].sum(1), [.2], rtol=2e-12)
+
+    def test_monochromatic_hydrogen_over_wide_density_range(self):
+        # The previous common exposure step reaches 40000 iterations for
+        # this neutral-count range, despite every cell needing only 1% HI.
+        gas = np.zeros((64, 5))
+        gas[:, 0] = np.geomspace(1e-8, 1e8, 64)
+        gas[:, 2] = .08*gas[:, 0]
+        source = .01*gas[:, 0]
+        model = PeriodicFront((4, 4, 4), gas, [18.])
+        result = model.advance(source, [1.], 0.)
+        self.audit(model, result)
+        self.assertEqual(result['audits']['chemistry_method'], 'analytic_h')
+        self.assertEqual(result['audits']['chemistry_substeps'], 1)
+        np.testing.assert_allclose(result['absorbed'][:, 0], source, rtol=3e-15)
+        np.testing.assert_allclose(model.gas[:, 0], .99*gas[:, 0], rtol=3e-15)
+        np.testing.assert_array_equal(model.gas[:, 2:], gas[:, 2:])
+        self.assertLess(result['photon_inventory'], 3e-15*source.sum())
+
+    def test_identical_soft_groups_share_capacity_and_keep_source_ledgers(self):
+        gas = np.zeros((27, 5))
+        gas[9] = [.6, .4, .1, .05, .02]
+        model = PeriodicFront((3, 3, 3), gas, [18., 18., 60.], transparency=.1)
+        # Two sources and two periodic images illuminate the same gas cell.
+        # The unused hard group must not disable the H-only specialization.
+        model = self.checkpoint_with_light(model, [[0, 4, 0, 1, 0, 0, 0., .2],
+                                                  [18, 4, 1, 2, 0, 0, 0., 1.8]])
+        result = model.advance(np.zeros(27), [.5, .5, 0.], 0.)
+        self.audit(model, result)
+        self.assertEqual(result['audits']['chemistry_method'], 'analytic_h')
+        np.testing.assert_allclose(model.gas[9], [.1, .9, .1, .05, .02], atol=2e-16)
+        self.assertAlmostEqual(result['source_absorbed'][0], .05, 14)
+        self.assertAlmostEqual(result['source_absorbed'][18], .45, 14)
+        self.assertAlmostEqual(result['photon_inventory'], 1.5, 14)
+        self.assertTrue(all(key[-1] > 0 for key in model.entries))
+
+    def test_sparse_spectral_solve_matches_full_grid_chemistry(self):
+        gas = np.zeros((27, 5))
+        gas[:, 0], gas[:, 2] = 1., .08
+        gas[1, 0] = 1e8  # No photons here: must not enter the active solve.
+        source = np.zeros(27)
+        source[0], source[26] = .2, .3
+        weights = np.array([.5, .3, .2])
+        model = PeriodicFront((3, 3, 3), gas, [18., 30., 60.])
+        reference = illuminate_channels(gas, weights[:, None]*source, model.cross,
+                                        epsilon=model.transparency, max_iterations=40000)
+        self.assertEqual(reference['stop'], 'photon_remainder')
+        result = model.advance(source, weights, 0.)
+        self.audit(model, result)
+        self.assertEqual(result['audits']['chemistry_method'], 'spectral_midpoint')
+        self.assertEqual(result['audits']['chemistry_active_cells'], 2)
+        np.testing.assert_allclose(result['gas'], reference['gas'], rtol=3e-12, atol=1e-14)
+        np.testing.assert_allclose(result['absorbed'], reference['absorbed'], rtol=3e-12,
+                                   atol=1e-14)
+
+    def test_different_soft_cross_sections_use_spectral_solver(self):
+        gas = np.array([[1., 0., .08, 0., 0.]])
+        model = PeriodicFront((1, 1, 1), gas, [18., 20.])
+        result = model.advance([.1], [.3, .7], 0.)
+        self.audit(model, result)
+        self.assertEqual(result['audits']['chemistry_method'], 'spectral_midpoint')
+        self.assertAlmostEqual(result['absorbed'].sum(), .1, 12)
 
     def test_es_reweight_keeps_flight_boundary_share(self):
         model = self.model()

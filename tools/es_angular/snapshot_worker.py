@@ -62,15 +62,24 @@ def _text(value):
     return value.decode("utf8") if isinstance(value, bytes) else str(value)
 
 
+def _numeric_scalar(value, name):
+    # H5LTset_attribute_* in the C bridge writes one-element arrays, whereas
+    # h5py usually writes scalar attributes. Accept both representations.
+    scalar = np.asarray(value)
+    if scalar.shape not in ((), (1,)) or scalar.dtype.kind not in "iuf":
+        raise ValueError(f"{name} must be a numeric scalar or one-element attribute")
+    return float(scalar.item())
+
+
 def _finite_positive(value, name, allow_zero=False):
-    value = float(value)
+    value = _numeric_scalar(value, name)
     if not math.isfinite(value) or value < 0 or (not allow_zero and value == 0):
         raise ValueError(f"{name} must be finite and {'nonnegative' if allow_zero else 'positive'}")
     return value
 
 
 def _integer(value, name, minimum=0):
-    numeric = float(value)
+    numeric = _numeric_scalar(value, name)
     if not math.isfinite(numeric) or int(numeric) != numeric or numeric < minimum:
         raise ValueError(f"{name} must be an integer >= {minimum}")
     return int(numeric)
@@ -366,7 +375,10 @@ def evolve_snapshot(model, metadata, arrays, progress=False):
                 print(f"ANGULAR snapshot={metadata['snapshot']} step={index+1}/{steps} "
                       f"seconds={time.monotonic()-started:.3f} "
                       f"primary_inventory={diagnostics['primary_inventory']:.8g} "
-                      f"local_diffuse={diagnostics['diffuse_pending']:.8g} done", flush=True)
+                      f"local_diffuse={diagnostics['diffuse_pending']:.8g} "
+                      f"chemistry={result['audits']['chemistry_method']} "
+                      f"active_cells={result['audits']['chemistry_active_cells']} "
+                      f"chemistry_substeps={result['audits']['chemistry_substeps']} done", flush=True)
     diagnostics = model.audit()
     diagnostics.update(substeps=steps, normalization_atoms=normalization,
                        es_prior=es_audit, temporal_order=1,

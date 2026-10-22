@@ -37,9 +37,10 @@ bash tools/gadi_angular_build.sh
 module --force purge
 module load gcc/12.2.0 openmpi/4.1.4 fftw3/3.3.10-nci1 hdf5/1.12.2p gsl/2.7.1 python3/3.11.7
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
-export RUN_DIR=/g/data/qp00/sz4640/angular_runs/l10_${angular_rev:0:8}_${angular_tag}
+export RUN_DIR=/g/data/qp00/sz4640/angular_runs/l10_32c_320gb_${angular_rev:0:8}_${angular_tag}
 "$ANGULAR_PYTHON" tools/gadi_angular_l10.py
-qsub -v RUN_DIR="$RUN_DIR" "$RUN_DIR/submit.pbs"
+qsub -q hugemem -l ncpus=32,mem=320GB,walltime=48:00:00,jobfs=4GB \
+    -v RUN_DIR="$RUN_DIR" "$RUN_DIR/submit.pbs"
 ```
 
 The build runs the angular unit/integration tests before creating a build
@@ -65,8 +66,10 @@ energy in eV and nonnegative photon-number weight; at least one weight must be
 positive. Preparation accepts energies in [13.6, 1000] eV and copies the file
 into the run. A non-default spectrum changes the physical source assumption.
 
-The initial PBS request is four MPI ranks, 32 GB and 20 hours on `normal`.
-This is an initial allocation, not a measured runtime or memory prediction.
+The command above requests 32 MPI ranks, 320 GB and 48 hours on `hugemem`.
+It overrides the generated script's default of four ranks, 32 GB and 20 hours
+on `normal`, without editing the prepared, hash-checked script. This allocation
+is not a measured runtime or memory prediction.
 Meraxes galaxy/grid work uses MPI; the Python angular worker is serial.
 Additional MPI ranks do not accelerate its photon transport. The worker can
 stop explicitly on resource limits; photon inventories are never dropped to
@@ -99,6 +102,14 @@ identical request; this does **not** implement a full Meraxes process restart.
 The bridge therefore requires a fresh output directory when starting a new
 Meraxes process. Do not delete or reuse an earlier run to bypass this guard.
 
+The first recorded Gadi run at `22bb2292` reached snapshot 23, then failed in
+the fixed-front chemistry at substep 27/34 with `Angular chemistry iteration
+limit`. The default 18 eV case now uses a direct H-capacity update instead of
+that iteration. Progress lines report `chemistry=analytic_h`, the number of
+active target cells and chemistry substeps. Mixed spectra use
+`chemistry=spectral_midpoint`. Rebuild and prepare a fresh run after updating;
+existing checkpoints deliberately reject changes to the numerical code.
+
 ## Physical and numerical scope
 
 Photon inventory retains source cell, angular bin, energy, unwrapped periodic
@@ -125,8 +136,9 @@ CGM escape suppression, AGN ionizing photons and Pop III. This run tests the
 integrated ionization history under those explicit assumptions. It does not
 establish a calibrated reionization-feedback model.
 
-Full MPI/HDF5 compilation and the L10 data run must be verified on Gadi; local
-standalone and snapshot tests do not substitute for that run.
+The supplied Gadi log confirms that the previous MPI/HDF5 executable ran
+through snapshot 22. Completion of the corrected L10 run still needs to be
+verified on Gadi; local standalone and snapshot tests do not substitute for it.
 
 The worker equations, inventories and accounting conventions are documented
 in [PERIODIC.md](../tools/es_angular/PERIODIC.md).

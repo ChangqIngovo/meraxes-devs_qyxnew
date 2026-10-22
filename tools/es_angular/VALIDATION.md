@@ -196,3 +196,37 @@ rejection. It does not substitute for the real Meraxes executable.
 Full Meraxes MPI/HDF5 compilation and the actual Gadi L10 simulation have not
 been performed in this environment. The [Gadi launcher](../../docs/angular_gadi.md)
 performs the build and tests before permitting preparation/submission.
+
+## Gadi chemistry failure and monochromatic endpoint correction
+
+The supplied log for job `181886918.gadi-pbs`, running commit `22bb2292`,
+confirms a working production MPI executable and successful completion of
+snapshots 0–22. At snapshot 23 (z about 21.57), substep 27/34, the primary
+photoionization kernel raised its 40000-iteration limit. This traceback is
+the reported termination cause. No failing request/checkpoint was supplied,
+so the exact snapshot state has not been replayed locally.
+
+A synthetic reproduction with 64 cells, HI counts logarithmically spaced
+from `1e-8` to `1e8`, and 18 eV credits equal to 1% of each cell's HI also
+hits that limit. The common exposure step follows the largest active opacity;
+cells with much smaller opacity make slow progress. The periodic worker now
+uses the analytic fixed-target H endpoint described in [PERIODIC.md](PERIODIC.md)
+for identical H-only cross sections. This fixture finishes in one update,
+with captures equal to the supplied credits at the recorded precision.
+
+For a separate 32^3 synthetic grid with 15 illuminated cells, the former
+chemistry call took 1516 iterations and 6.236 s; the endpoint call took
+0.000403 s. The maximum absolute difference in gas or captures was `1.01e-15`.
+These are single local **chemistry-only** timings, excluding routing, ES FFTs,
+recombination, I/O and galaxy evolution. They are not a Gadi simulation
+speedup prediction. Mixed spectra retain the coupled iterative solver, now
+restricted to illuminated cells; its general stiffness limit is not removed.
+
+The updated combined suite passed **89 tests in 22.653 s**, including the
+wide-density failure fixture, proportional debits from multiple sources and
+periodic images, mixed-spectrum agreement with the full-grid kernel, and
+real HDF5 numeric attributes of shape `(1,)` with deprecation warnings treated
+as errors. Existing geometry, recombination, checkpoint and source-ledger
+checks also pass. Results and source hashes are in
+[`validation/monochromatic_endpoint_checks.json`](validation/monochromatic_endpoint_checks.json).
+The corrected full L10 simulation still requires a fresh Gadi run.

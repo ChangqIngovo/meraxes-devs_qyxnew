@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import warnings
 from unittest.mock import patch
 
 import h5py
@@ -119,6 +120,29 @@ class SnapshotWorkerTests(unittest.TestCase):
             del handle.attrs["start_snapshot"]
         with self.assertRaisesRegex(ValueError, "Missing"):
             self.advance(request)
+
+    def test_c_bridge_one_element_numeric_attributes(self):
+        request = self.request()
+        reference, _, reference_digest = read_request(request)
+        with h5py.File(request, "r+") as handle:
+            for name in list(handle.attrs):
+                value = handle.attrs[name]
+                if np.asarray(value).dtype.kind in "iuf":
+                    del handle.attrs[name]
+                    handle.attrs[name] = np.array([value])
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
+            metadata, _, digest = read_request(request)
+            _, diagnostics = self.advance(request)
+        self.assertEqual(metadata, reference)
+        self.assertEqual(digest, reference_digest)
+        self.assert_ledgers(diagnostics)
+        for invalid in (np.array([2, 2]), np.array([[2]])):
+            with h5py.File(request, "r+") as handle:
+                del handle.attrs['grid_dim']
+                handle.attrs['grid_dim'] = invalid
+            with self.assertRaisesRegex(ValueError, 'numeric scalar'):
+                read_request(request)
 
     def test_density_remap_preserves_fractions_and_photon_locations(self):
         density = np.ones(8); density[1] = 0.
