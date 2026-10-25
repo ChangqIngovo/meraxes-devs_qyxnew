@@ -50,3 +50,17 @@ target_link_libraries(main_blackhole_feedback PRIVATE meraxes_lib)
 
 # Regression tests on the L10_N512 test set (no Criterion needed)
 add_subdirectory(regression)
+
+# Tiny MPI integration checks also cover ranks with no galaxies or FFT slabs.
+add_executable(test_cpu_mpi test_cpu_mpi.c)
+set_property(TARGET test_cpu_mpi PROPERTY C_STANDARD 99)
+target_include_directories(test_cpu_mpi PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_BINARY_DIR})
+target_link_libraries(test_cpu_mpi PRIVATE meraxes_lib)
+foreach(nproc 1 2 3)
+    add_test(NAME cpu_mpi_${nproc}
+             COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${nproc} ${MPIEXEC_PREFLAGS}
+                     $<TARGET_FILE:test_cpu_mpi> ${MPIEXEC_POSTFLAGS})
+    set_tests_properties(cpu_mpi_${nproc} PROPERTIES
+        LABELS "cpu;mpi" TIMEOUT 60 PROCESSORS ${nproc}
+        ENVIRONMENT "OMPI_MCA_rmaps_base_oversubscribe=1")
+endforeach()

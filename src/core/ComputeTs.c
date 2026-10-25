@@ -1,3 +1,4 @@
+#include "cpu_utils.h"
 #include <complex.h>
 #include <fftw3-mpi.h>
 #include <math.h>
@@ -376,9 +377,9 @@ void _ComputeTs(int snapshot)
           mlog("R_ct = %d, went beyong snapshot 0, clear tocf sfr grids.", MLOG_MESG, R_ct);
 #endif
           for (int ii = 0; ii < slab_n_complex * 2; ii++) {
-            grids->sfr[ii] = 0;
+            ((float*)grids->sfr_unfiltered)[ii] = 0;
 #if USE_STOCHASTICITY
-            grids->xray_luminosity[ii] = 0;
+            ((float*)grids->xray_luminosity_unfiltered)[ii] = 0;
 #endif
           }
           snapshot_counter_backwards[R_ct] += 1;
@@ -395,9 +396,9 @@ void _ComputeTs(int snapshot)
                  weight);
 #endif
             for (int ii = 0; ii < slab_n_complex * 2; ii++) {
-              grids->sfr[ii] *= weight;
+              ((float*)grids->sfr_unfiltered)[ii] *= weight;
 #if USE_STOCHASTICITY
-              grids->xray_luminosity[ii] *= weight;
+              ((float*)grids->xray_luminosity_unfiltered)[ii] *= weight;
 #endif
             }
           } else {
@@ -426,10 +427,9 @@ void _ComputeTs(int snapshot)
                    R_ct - 1);
 #endif
               for (int ii = 0; ii < slab_n_complex * 2; ii++) {
-                grids->sfr[ii] = 0;
-                ;
+                ((float*)grids->sfr_unfiltered)[ii] = 0;
 #if USE_STOCHASTICITY
-                grids->xray_luminosity[ii] = 0;
+                ((float*)grids->xray_luminosity_unfiltered)[ii] = 0;
 #endif
               }
             }
@@ -489,99 +489,42 @@ void _ComputeTs(int snapshot)
         }
       }
 
-      fftwf_execute(run_globals.reion_grids.sfr_forward_plan);
-      // Remember to add the factor of VOLUME/TOT_NUM_PIXELS when converting from real space to k-space
-      // Note: we will leave off factor of VOLUME, in anticipation of the inverse FFT below
-      // TODO: Double check that looping over correct number of elements here
-      for (int ii = 0; ii < slab_n_complex; ii++)
-        sfr_unfiltered[ii] /= (float)total_n_cells;
+      const fftwf_complex* inputs[6];
+      fftwf_complex* outputs[6];
+      int n_fields = 0;
+#define ADD_HEATING_FIELD(name)                                                                                        \
+  do {                                                                                                                 \
+    inputs[n_fields] = name##_unfiltered;                                                                              \
+    outputs[n_fields++] = name##_filtered;                                                                             \
+  } while (0)
+      ADD_HEATING_FIELD(sfr);
 #if USE_STOCHASTICITY
-      fftwf_execute(run_globals.reion_grids.xray_luminosity_forward_plan);
-      for (int ii = 0; ii < slab_n_complex; ii++)
-        xray_luminosity_unfiltered[ii] /= (float)total_n_cells;
+      ADD_HEATING_FIELD(xray_luminosity);
 #endif
 #if USE_MINI_HALOS
-      fftwf_execute(run_globals.reion_grids.sfrIII_forward_plan);
-      for (int ii = 0; ii < slab_n_complex; ii++)
-        sfrIII_unfiltered[ii] /= (float)total_n_cells;
+      ADD_HEATING_FIELD(sfrIII);
 #endif
-
       if (agn_hard_needed) {
-        fftwf_execute(run_globals.reion_grids.BHXrayEmissivity_hard_forward_plan);
-        for (int ii = 0; ii < slab_n_complex; ii++)
-          BHXrayEmissivity_hard_unfiltered[ii] /= (float)total_n_cells;
+        ADD_HEATING_FIELD(BHXrayEmissivity_hard);
       }
       if (agn_soft_needed) {
-        fftwf_execute(run_globals.reion_grids.BHXrayEmissivity_soft_forward_plan);
-        for (int ii = 0; ii < slab_n_complex; ii++)
-          BHXrayEmissivity_soft_unfiltered[ii] /= (float)total_n_cells;
+        ADD_HEATING_FIELD(BHXrayEmissivity_soft);
       }
 #if USE_MINI_HALOS
       if (run_globals.params.Flag_IncludeLymanWerner) {
-        fftwf_execute(run_globals.reion_grids.BHUVEmissivity_forward_plan);
-        for (int ii = 0; ii < slab_n_complex; ii++)
-          BHUVEmissivity_unfiltered[ii] /= (float)total_n_cells;
+        ADD_HEATING_FIELD(BHUVEmissivity);
       }
 #endif
-
-      memcpy(sfr_filtered, sfr_unfiltered, sizeof(fftwf_complex) * slab_n_complex);
-#if USE_STOCHASTICITY
-      memcpy(xray_luminosity_filtered, xray_luminosity_unfiltered, sizeof(fftwf_complex) * slab_n_complex);
-#endif
-#if USE_MINI_HALOS
-      memcpy(sfrIII_filtered, sfrIII_unfiltered, sizeof(fftwf_complex) * slab_n_complex);
-#endif
-      if (agn_hard_needed)
-        memcpy(
-          BHXrayEmissivity_hard_filtered, BHXrayEmissivity_hard_unfiltered, sizeof(fftwf_complex) * slab_n_complex);
-      if (agn_soft_needed)
-        memcpy(
-          BHXrayEmissivity_soft_filtered, BHXrayEmissivity_soft_unfiltered, sizeof(fftwf_complex) * slab_n_complex);
-#if USE_MINI_HALOS
-      if (run_globals.params.Flag_IncludeLymanWerner)
-        memcpy(BHUVEmissivity_filtered, BHUVEmissivity_unfiltered, sizeof(fftwf_complex) * slab_n_complex);
-#endif
-
-      if (R_ct > 0) {
-        int local_ix_start = (int)(run_globals.reion_grids.slab_ix_start[run_globals.mpi_rank]);
-
-        filter(sfr_filtered, local_ix_start, local_nix, ReionGridDim, (float)R, run_globals.params.TsHeatingFilterType);
-#if USE_STOCHASTICITY
-        filter(xray_luminosity_filtered,
-               local_ix_start,
-               local_nix,
-               ReionGridDim,
-               (float)R,
-               run_globals.params.TsHeatingFilterType);
-#endif
-#if USE_MINI_HALOS
-        filter(
-          sfrIII_filtered, local_ix_start, local_nix, ReionGridDim, (float)R, run_globals.params.TsHeatingFilterType);
-#endif
-        if (agn_hard_needed)
-          filter(BHXrayEmissivity_hard_filtered,
-                 local_ix_start,
-                 local_nix,
-                 ReionGridDim,
-                 (float)R,
-                 run_globals.params.TsHeatingFilterType);
-        if (agn_soft_needed)
-          filter(BHXrayEmissivity_soft_filtered,
-                 local_ix_start,
-                 local_nix,
-                 ReionGridDim,
-                 (float)R,
-                 run_globals.params.TsHeatingFilterType);
-#if USE_MINI_HALOS
-        if (run_globals.params.Flag_IncludeLymanWerner)
-          filter(BHUVEmissivity_filtered,
-                 local_ix_start,
-                 local_nix,
-                 ReionGridDim,
-                 (float)R,
-                 run_globals.params.TsHeatingFilterType);
-#endif
-      }
+#undef ADD_HEATING_FIELD
+      filter_fields(inputs,
+                    outputs,
+                    n_fields,
+                    (int)run_globals.reion_grids.slab_ix_start[run_globals.mpi_rank],
+                    local_nix,
+                    ReionGridDim,
+                    (float)R,
+                    run_globals.params.TsHeatingFilterType,
+                    R_ct > 0);
 
       // inverse fourier transform back to real space
       fftwf_execute(run_globals.reion_grids.sfr_filtered_reverse_plan);
@@ -1202,6 +1145,8 @@ void _ComputeTs(int snapshot)
     }
 #endif
 
+    prepare_heating_shells((float)zp);
+
     // interpolate to correct nu integral value based on the cell's ionization state
     for (int ix = 0; ix < local_nix; ix++)
       for (int iy = 0; iy < ReionGridDim; iy++)
@@ -1214,6 +1159,18 @@ void _ComputeTs(int snapshot)
 #if USE_MINI_HALOS
           ans[2] = Tk_boxII[i_real];
 #endif
+
+          xHII_call = x_e_box_prev[i_padded];
+
+          // Check if ionized fraction is within boundaries; if not, adjust to be within
+          if (xHII_call > x_int_XHII[x_int_NXHII - 1] * 0.999) {
+            xHII_call = x_int_XHII[x_int_NXHII - 1] * 0.999;
+          } else if (xHII_call < x_int_XHII[0]) {
+            xHII_call = 1.001 * x_int_XHII[0];
+          }
+
+          m_xHII_low = locate_xHII_index((float)xHII_call);
+          m_xHII_high = m_xHII_low + 1;
 
           for (R_ct = 0; R_ct < TsNumFilterSteps; R_ct++) {
             i_smoothed_heating = grid_index_smoothedSFR(R_ct, ix, iy, iz, TsNumFilterSteps, ReionGridDim);
@@ -1232,18 +1189,6 @@ void _ComputeTs(int snapshot)
                              ? run_globals.params.physics.AGNLWEfficiency * SMOOTHED_AGN_UV[i_smoothed_heating]
                              : 0.0;
 #endif
-            xHII_call = x_e_box_prev[i_padded];
-
-            // Check if ionized fraction is within boundaries; if not, adjust to be within
-            if (xHII_call > x_int_XHII[x_int_NXHII - 1] * 0.999) {
-              xHII_call = x_int_XHII[x_int_NXHII - 1] * 0.999;
-            } else if (xHII_call < x_int_XHII[0]) {
-              xHII_call = 1.001 * x_int_XHII[0];
-            }
-
-            m_xHII_low = locate_xHII_index((float)xHII_call);
-            m_xHII_high = m_xHII_low + 1;
-
             // heat
             freq_int_heat_GAL[R_ct] =
               (freq_int_heat_tbl_GAL[m_xHII_high][R_ct] - freq_int_heat_tbl_GAL[m_xHII_low][R_ct]) /

@@ -1,3 +1,4 @@
+#include "cpu_utils.h"
 #include <complex.h>
 #include <fftw3-mpi.h>
 #include <math.h>
@@ -288,64 +289,44 @@ void _find_HII_bubbles(const int snapshot)
     // mlog("R = %.2e (h=0.678 -> %.2e)", MLOG_MESG, R, R/0.678);
     mlog(".", MLOG_CONT);
 
-    // copy the k-space grids
-    memcpy(deltax_filtered, deltax_unfiltered, sizeof(fftwf_complex) * slab_n_complex);
-    memcpy(stars_filtered, stars_unfiltered, sizeof(fftwf_complex) * slab_n_complex);
-    memcpy(weighted_sfr_filtered, weighted_sfr_unfiltered, sizeof(fftwf_complex) * slab_n_complex);
+    // Every field uses the same radial window. Evaluate it once and copy directly
+    // into the inverse-FFT workspaces, leaving the spectra intact for the next R.
+    const fftwf_complex* inputs[9];
+    fftwf_complex* outputs[9];
+    int n_fields = 0;
+#define ADD_FILTER_FIELD(name)                                                                                         \
+  do {                                                                                                                 \
+    inputs[n_fields] = name##_unfiltered;                                                                              \
+    outputs[n_fields++] = name##_filtered;                                                                             \
+  } while (0)
+    ADD_FILTER_FIELD(deltax);
+    ADD_FILTER_FIELD(stars);
+    ADD_FILTER_FIELD(weighted_sfr);
 #if USE_MINI_HALOS
-    memcpy(starsIII_filtered, starsIII_unfiltered, sizeof(fftwf_complex) * slab_n_complex);
-    memcpy(weighted_sfrIII_filtered, weighted_sfrIII_unfiltered, sizeof(fftwf_complex) * slab_n_complex);
+    ADD_FILTER_FIELD(starsIII);
+    ADD_FILTER_FIELD(weighted_sfrIII);
 #endif
-
     if (run_globals.params.Flag_IncludeRecombinations) {
-      memcpy(N_rec_filtered, N_rec_unfiltered, sizeof(fftwf_complex) * slab_n_complex);
+      ADD_FILTER_FIELD(N_rec);
     }
     if (run_globals.params.Flag_IncludeSpinTemp) {
-      memcpy(x_e_filtered, x_e_unfiltered, sizeof(fftwf_complex) * slab_n_complex);
+      inputs[n_fields] = x_e_unfiltered;
+      outputs[n_fields++] = x_e_filtered;
     }
     if (run_globals.params.physics.Flag_BHFeedback) {
-      memcpy(effective_bhm_filtered, effective_bhm_unfiltered, sizeof(fftwf_complex) * slab_n_complex);
-      memcpy(effective_bhar_filtered, effective_bhar_unfiltered, sizeof(fftwf_complex) * slab_n_complex);
+      ADD_FILTER_FIELD(effective_bhm);
+      ADD_FILTER_FIELD(effective_bhar);
     }
-
-    // do the filtering unless this is the last filter step
-    int local_ix_start = (int)(run_globals.reion_grids.slab_ix_start[run_globals.mpi_rank]);
-    if (!flag_last_filter_step) {
-      filter(deltax_filtered, local_ix_start, local_nix, ReionGridDim, (float)R, run_globals.params.ReionFilterType);
-      filter(stars_filtered, local_ix_start, local_nix, ReionGridDim, (float)R, run_globals.params.ReionFilterType);
-      filter(
-        weighted_sfr_filtered, local_ix_start, local_nix, ReionGridDim, (float)R, run_globals.params.ReionFilterType);
-#if USE_MINI_HALOS
-      filter(starsIII_filtered, local_ix_start, local_nix, ReionGridDim, (float)R, run_globals.params.ReionFilterType);
-      filter(weighted_sfrIII_filtered,
-             local_ix_start,
-             local_nix,
-             ReionGridDim,
-             (float)R,
-             run_globals.params.ReionFilterType);
-#endif
-
-      if (run_globals.params.Flag_IncludeRecombinations) {
-        filter(N_rec_filtered, local_ix_start, local_nix, ReionGridDim, (float)R, run_globals.params.ReionFilterType);
-      }
-      if (run_globals.params.Flag_IncludeSpinTemp) {
-        filter(x_e_filtered, local_ix_start, local_nix, ReionGridDim, (float)R, run_globals.params.ReionFilterType);
-      }
-      if (run_globals.params.physics.Flag_BHFeedback) {
-        filter(effective_bhm_filtered,
-               local_ix_start,
-               local_nix,
-               ReionGridDim,
-               (float)R,
-               run_globals.params.ReionFilterType);
-        filter(effective_bhar_filtered,
-               local_ix_start,
-               local_nix,
-               ReionGridDim,
-               (float)R,
-               run_globals.params.ReionFilterType);
-      }
-    }
+#undef ADD_FILTER_FIELD
+    filter_fields(inputs,
+                  outputs,
+                  n_fields,
+                  (int)run_globals.reion_grids.slab_ix_start[run_globals.mpi_rank],
+                  local_nix,
+                  ReionGridDim,
+                  (float)R,
+                  run_globals.params.ReionFilterType,
+                  !flag_last_filter_step);
 
     // inverse fourier transform back to real space
     fftwf_execute(run_globals.reion_grids.deltax_filtered_reverse_plan);

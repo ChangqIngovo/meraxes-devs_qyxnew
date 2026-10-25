@@ -24,7 +24,8 @@ See [Build and run](getting-started.md) for dependencies, compilation and job su
 
 ## **Documentation**
 The guide covers [model parameters](inputs.md), [execution workflow](workflow.md),
-[outputs](outputs.md) and [formulas](formulas/index.md).
+[outputs](outputs.md), [formulas](formulas/index.md) and
+[CPU performance](cpu-performance.md).
 
 
 ## **Acknowledging**

@@ -471,7 +471,8 @@ typedef struct reion_grids_t
   fftwf_plan deltax_filtered_reverse_plan;
 
   float* sfr;
-  float* sfr_histories;
+  int heating_history_head; //!< Physical slot for the newest normalized source spectrum
+  float* sfr_histories;     //!< Circular history of normalized Fourier source grids
   float* weighted_sfr;
   fftwf_complex* sfr_unfiltered;
   fftwf_complex* sfr_filtered;
@@ -484,7 +485,7 @@ typedef struct reion_grids_t
 
 #if USE_STOCHASTICITY
   float* xray_luminosity;           // Cell luminosity in units of 1e40 erg/s
-  float* xray_luminosity_histories; // Stored luminosity grids in units of 1e40 erg/s
+  float* xray_luminosity_histories; // Circular history of normalized luminosity spectra
   fftwf_complex* xray_luminosity_unfiltered;
   fftwf_complex* xray_luminosity_filtered;
   fftwf_plan xray_luminosity_forward_plan;
