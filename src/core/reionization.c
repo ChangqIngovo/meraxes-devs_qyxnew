@@ -1391,6 +1391,7 @@ void malloc_reionization_grids()
 void free_reionization_grids()
 {
   mlog("Freeing reionization grids...", MLOG_OPEN);
+  free_filter_window_cache();
 
   reion_grids_t* grids = &(run_globals.reion_grids);
 

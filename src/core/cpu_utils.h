@@ -16,6 +16,11 @@ void filter_fields(const fftwf_complex* const* input,
                    float radius,
                    int filter_type,
                    int apply_filter);
+void free_filter_window_cache(void);
+
+/* Inspect physical cells, excluding FFTW row padding. All ranks participate.
+ * Returns 1 for globally zero fields, 0 for a nonzero field, -1 for NaN/Inf. */
+int cpu_sources_are_zero(const float* const* fields, int n_fields, int slab_nx, int dim, MPI_Comm comm);
 
 /* Counts/offsets are in records, not bytes. All ranks participate, including empty ones.
  * The return buffer is grouped by sender, preserving each sender's order. */

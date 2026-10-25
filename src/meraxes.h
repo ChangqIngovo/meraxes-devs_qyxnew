@@ -1055,8 +1055,8 @@ extern "C"
   void cleanup(void);
 
   // core/magnitudes.c
-  void get_output_magnitudes(float* mags, float* dusty_mags, galaxy_t* gal, int snapshot);
-  void get_output_magnitudesIII(float* mags, galaxy_t* gal, int snapshot);
+  void get_output_magnitudes(float* mags, float* dusty_mags, const galaxy_t* gal, int snapshot);
+  void get_output_magnitudesIII(float* mags, const galaxy_t* gal, int snapshot);
 
 // MCMC related
 // meraxes_mhysa_hook must be implemented by the calling code (Mhysa)!

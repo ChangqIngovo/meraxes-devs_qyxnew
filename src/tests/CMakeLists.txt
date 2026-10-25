@@ -65,6 +65,20 @@ foreach(nproc 1 2 3)
         ENVIRONMENT "OMPI_MCA_rmaps_base_oversubscribe=1")
 endforeach()
 
+# Check bounded galaxy output buffers, HDF5 table compatibility and tree links.
+add_executable(test_save_output test_save_output.c)
+set_property(TARGET test_save_output PROPERTY C_STANDARD 99)
+target_include_directories(test_save_output PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_BINARY_DIR})
+target_link_libraries(test_save_output PRIVATE meraxes_lib)
+foreach(nproc 1 2)
+    add_test(NAME save_output_mpi_${nproc}
+             COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${nproc} ${MPIEXEC_PREFLAGS}
+                     $<TARGET_FILE:test_save_output> ${MPIEXEC_POSTFLAGS})
+    set_tests_properties(save_output_mpi_${nproc} PROPERTIES
+        LABELS "cpu;mpi;io" TIMEOUT 60 PROCESSORS ${nproc}
+        ENVIRONMENT "OMPI_MCA_rmaps_base_oversubscribe=1")
+endforeach()
+
 # Synthetic merger trees exercise actual HDF5/MPI reads and cross-batch FOF links.
 add_executable(test_tree_reader_mpi test_tree_reader_mpi.c)
 set_property(TARGET test_tree_reader_mpi PROPERTY C_STANDARD 99)

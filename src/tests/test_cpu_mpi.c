@@ -34,11 +34,15 @@ static void test_filters(void)
   for (int type = 0; type < 3; ++type)
     for (int r = 0; r < 3; ++r) {
       float radius = r == 0 ? 0.0f : r == 1 ? 0.31f : 8.0f;
-      filter_fields((const fftwf_complex* const*)src, dst, 3, x_start, nx, dim, radius, type, 1);
-      for (int f = 0; f < 3; ++f) {
-        memcpy(reference, src[f], nc * sizeof(*reference));
-        filter(reference, x_start, nx, dim, radius, type);
-        CHECK(memcmp(reference, dst[f], logical * sizeof(*reference)) == 0);
+      for (int repeat = 0; repeat < 2; ++repeat) {
+        filter_fields((const fftwf_complex* const*)src, dst, 3, x_start, nx, dim, radius, type, 1);
+        for (int f = 0; f < 3; ++f) {
+          memcpy(reference, src[f], nc * sizeof(*reference));
+          filter(reference, x_start, nx, dim, radius, type);
+          CHECK(memcmp(reference, dst[f], logical * sizeof(*reference)) == 0);
+          for (size_t i = 0; i < logical; ++i)
+            src[f][i] += 0.125f; // cache windows, never filtered source values
+        }
       }
     }
   filter_fields((const fftwf_complex* const*)src, dst, 3, x_start, nx, dim, 1.0f, 0, 0);
@@ -48,6 +52,65 @@ static void test_filters(void)
     fftwf_free(dst[f]);
   }
   fftwf_free(reference);
+}
+
+static void test_filter_cache_keys(void)
+{
+  const int sizes[] = { 4, 4, 4, 5, 5, 4 };
+  const int starts[] = { 0, 1, 1, 1, 0, 0 };
+  const int widths[] = { 2, 2, 1, 1, 2, 2 };
+  const double boxes[] = { 4, 4, 4, 4, 7, 4 };
+  fftwf_complex input[60], output[60], reference[60];
+  const fftwf_complex* inputs[] = { input };
+  fftwf_complex* outputs[] = { output };
+  for (int layout = 0; layout < 6; ++layout) {
+    int size = sizes[layout], start = starts[layout], width = widths[layout];
+    size_t count = (size_t)width * size * (size / 2 + 1);
+    CHECK(count <= 60);
+    run_globals.params.BoxSize = boxes[layout];
+    for (int type = 0; type < 3; ++type)
+      // More windows than cache entries exercises bounded eviction and revisits.
+      for (int r = 0; r < 71; ++r) {
+        float radius = r == 70 ? 0.0f : r * 0.071f;
+        for (int repeat = 0; repeat < 2; ++repeat) {
+          for (size_t i = 0; i < count; ++i)
+            input[i] = (float)(i + repeat) * 0.125f + I * (float)(r - (int)i) * 0.0625f;
+          memcpy(reference, input, count * sizeof(*reference));
+          filter(reference, start, width, size, radius, type);
+          filter_fields(inputs, outputs, 1, start, width, size, radius, type, 1);
+          CHECK(memcmp(reference, output, count * sizeof(*reference)) == 0);
+        }
+      }
+  }
+  free_filter_window_cache();
+  run_globals.params.BoxSize = dim;
+}
+
+static void test_zero_sources(void)
+{
+  const size_t allocation = 2 * (nc ? nc : 1);
+  float* fields[2] = { cpu_checked_alloc(allocation, sizeof(float)), cpu_checked_alloc(allocation, sizeof(float)) };
+  const size_t stride = 2 * (dim / 2 + 1);
+  uint32_t invalid = UINT32_C(0x7fc00000);
+  for (int f = 0; f < 2; ++f)
+    for (size_t row = 0; row < (size_t)nx * dim; ++row)
+      for (int col = dim; col < (int)stride; ++col)
+        memcpy(fields[f] + row * stride + col, &invalid, sizeof(invalid)); // ignore FFT padding
+  CHECK(cpu_sources_are_zero((const float* const*)fields, 2, nx, dim, MPI_COMM_WORLD) == 1);
+  int source_rank = nx > 0 ? run_globals.mpi_rank : -1;
+  MPI_Allreduce(MPI_IN_PLACE, &source_rank, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
+  CHECK(source_rank >= 0);
+  uint32_t cases[] = { UINT32_C(0x80000000), UINT32_C(0x3f800000), UINT32_C(0x00000001), UINT32_C(0x7f800000),
+                       UINT32_C(0xff800000), UINT32_C(0x7fc00000), UINT32_C(0) };
+  const int expected[] = { 1, 0, 0, -1, -1, -1, 1 };
+  for (int f = 0; f < 2; ++f)
+    for (int c = 0; c < 7; ++c) {
+      if (run_globals.mpi_rank == source_rank)
+        memcpy(fields[f], cases + c, sizeof(cases[c]));
+      CHECK(cpu_sources_are_zero((const float* const*)fields, 2, nx, dim, MPI_COMM_WORLD) == expected[c]);
+    }
+  free(fields[0]);
+  free(fields[1]);
 }
 
 static void test_exchange(void)
@@ -288,11 +351,14 @@ int main(int argc, char** argv)
   MPI_Allgather(
     &count, sizeof(ptrdiff_t), MPI_BYTE, grids->slab_n_complex, sizeof(ptrdiff_t), MPI_BYTE, MPI_COMM_WORLD);
   test_filters();
+  test_filter_cache_keys();
+  test_zero_sources();
   test_exchange();
   test_sources_and_history();
   free(grids->slab_nix);
   free(grids->slab_ix_start);
   free(grids->slab_n_complex);
+  free_filter_window_cache();
   fftwf_mpi_cleanup();
   if (run_globals.mpi_rank == 0)
     puts("\nCPU MPI tests passed (filters, sparse exchange, sources, feedback, circular FFT history).");
