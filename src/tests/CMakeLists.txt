@@ -64,3 +64,17 @@ foreach(nproc 1 2 3)
         LABELS "cpu;mpi" TIMEOUT 60 PROCESSORS ${nproc}
         ENVIRONMENT "OMPI_MCA_rmaps_base_oversubscribe=1")
 endforeach()
+
+# Synthetic merger trees exercise actual HDF5/MPI reads and cross-batch FOF links.
+add_executable(test_tree_reader_mpi test_tree_reader_mpi.c)
+set_property(TARGET test_tree_reader_mpi PROPERTY C_STANDARD 99)
+target_include_directories(test_tree_reader_mpi PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_BINARY_DIR})
+target_link_libraries(test_tree_reader_mpi PRIVATE meraxes_lib)
+foreach(nproc 1 2 3)
+    add_test(NAME tree_reader_mpi_${nproc}
+             COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${nproc} ${MPIEXEC_PREFLAGS}
+                     $<TARGET_FILE:test_tree_reader_mpi> ${MPIEXEC_POSTFLAGS})
+    set_tests_properties(tree_reader_mpi_${nproc} PROPERTIES
+        LABELS "cpu;mpi;io" TIMEOUT 60 PROCESSORS ${nproc}
+        ENVIRONMENT "OMPI_MCA_rmaps_base_oversubscribe=1")
+endforeach()

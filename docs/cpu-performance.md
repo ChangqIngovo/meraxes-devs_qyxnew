@@ -30,17 +30,61 @@ parameters and MPI rank count when comparing a fiducial run.
   still participate. Transfers beyond MPI-3's integer byte-count limits use
   bounded communication rounds. Galaxy contribution order, source calibration
   and stochastic draw order on each rank are preserved.
-- **Selected tree reads.** VELOCIRAPTOR readers distribute the `ForestID` scan,
-  exchange row indices with forest owners, then read only the selected rows of
-  the other properties. Original row order and global indices are retained for
-  descendant and FOF links. Dataset handles stay open across bounded reads.
-  The forest ownership directory is still gathered on every rank; this has a
-  memory and communication cost proportional to the number of selected forests.
+- **Streaming tree reads.** VELOCIRAPTOR readers read contiguous blocks, with
+  one reader per property column, then broadcast the columns and select each
+  rank's forests locally. Column reads can proceed concurrently; dataset handles
+  stay open across blocks. The workspace is bounded to 1,048,576 rows (about
+  88 MiB per rank including selection indices). Original row order and global
+  indices are retained for descendant and FOF links. No global forest directory
+  or HDF5 point selection is required.
 
 The gains depend on which part of the run dominates. Inverse FFTs, frequency
 integrals, galaxy evolution and output I/O still cost time. Dense source fields
-can reduce the advantage of sparse packing. No end-to-end speedup on Gadi is
-claimed from the small checks below.
+can reduce the advantage of sparse packing. Small checks do not establish the
+end-to-end performance of the current reader on Gadi.
+
+## Tree reader regression and repair
+
+The full 32-rank, 512-cubed fiducial logs from Gadi showed that revision
+`20c5ffb` reduced wall time from 18,881 to 16,030 seconds, while the tree-reading
+stage increased from 1,710.9 to 5,072.1 seconds. Both runs covered snapshots
+0--119 with spin-temperature evolution disabled. These are measurements from
+two different jobs, not an isolated I/O benchmark.
+
+The first CPU optimization replaced the original contiguous column reads and
+broadcasts with a global forest directory, row routing, and scattered HDF5 point
+reads. The original reader already read each column only once from disk; it did
+not make every rank read every column. This repair restores contiguous streaming
+and removes the per-snapshot directory gather/sort and row-index exchange, while
+retaining the other CPU optimizations. Broadcast traffic is restored in exchange
+for sequential disk access and bounded workspace.
+
+Each snapshot now logs maximum-rank accumulated times for disk reads,
+broadcast/wait, forest selection, and halo conversion. These maxima may come from
+different ranks and must not be added to estimate wall time. Broadcast/wait also
+includes waiting for other readers. The existing outer tree timer includes
+opening/closing files and other setup.
+
+The repaired reader passed synthetic MPI checks on 1, 2 and 3 ranks in the
+default and stochasticity/mini-halo builds. They cover contiguous and chunked
+HDF5 storage, normal and augmented trees, empty snapshots and ranks, full and
+partial forest selections, global row indices, descendant indices, and FOF links
+across read blocks. A 17-rank default-build check also covers ranks that only
+receive broadcasts and do not read any property columns. The L10 default, IGM,
+and X-ray runs through snapshot 75, as well as the short X-ray setup, passed
+strict comparisons against the actual pre-optimization `e0a7383` code.
+Full-size timing of this repair remains to be measured on Gadi.
+
+The checked-in default, IGM, and X-ray references at `72800527` still fail their
+comparisons in this environment; the actual pre-optimization runs agree with the
+repaired code. Those historical reference files were not changed.
+
+Run only the synthetic reader checks with:
+
+```sh
+cmake --build build --target test_tree_reader_mpi --parallel
+ctest --test-dir build -L '^io$' --output-on-failure
+```
 
 ## Build and check on Gadi
 
@@ -99,4 +143,4 @@ The checked-in IGM reference identifies revision `72800527` and differs from
 both the base revision and this branch in this environment. It was not replaced;
 the comparison above uses the actual base revision. The Criterion suite could
 not start here because its message server returned `Operation not permitted`.
-Full fiducial runs and performance measurements are left to Gadi.
+Full scientific validation and timing of the repaired reader are left to Gadi.

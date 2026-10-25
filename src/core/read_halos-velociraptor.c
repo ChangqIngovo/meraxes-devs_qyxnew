@@ -98,159 +98,6 @@ inline static void convert_input_virial_props(double* Mvir,
     *Vvir = calculate_Vvir(*Mvir, *Rvir);
 }
 
-typedef struct
-{
-  long forest;
-  int rank;
-} forest_owner_t;
-
-typedef struct
-{
-  uint64_t row;
-  int rank;
-} owned_tree_row_t;
-
-static int compare_forest_owner(const void* a, const void* b)
-{
-  const forest_owner_t *x = a, *y = b;
-  if (x->forest != y->forest)
-    return (x->forest > y->forest) - (x->forest < y->forest);
-  return (x->rank > y->rank) - (x->rank < y->rank);
-}
-
-static int compare_tree_row(const void* a, const void* b)
-{
-  uint64_t x = *(const uint64_t*)a, y = *(const uint64_t*)b;
-  return (x > y) - (x < y);
-}
-
-static void append_tree_row(owned_tree_row_t** rows, size_t* count, size_t* capacity, uint64_t row, int rank)
-{
-  if (*count == *capacity) {
-    size_t next = *capacity ? *capacity * 2 : 1024;
-    if (next < *capacity || next > SIZE_MAX / sizeof(**rows))
-      ABORT(EXIT_FAILURE);
-    void* p = realloc(*rows, next * sizeof(**rows));
-    if (!p)
-      ABORT(EXIT_FAILURE);
-    *rows = p;
-    *capacity = next;
-  }
-  (*rows)[(*count)++] = (owned_tree_row_t){ row, rank };
-}
-
-// Scan ForestID once across the communicator and route row numbers to forest
-// owners. The larger property arrays are then read only by their destination.
-static uint64_t* owned_tree_rows(hid_t group, int n_entries, size_t* n_owned)
-{
-  int ranks = run_globals.mpi_size, rank = run_globals.mpi_rank;
-  int* counts = cpu_checked_alloc(ranks, sizeof(int));
-  int* offsets = cpu_checked_alloc((size_t)ranks + 1, sizeof(int));
-  int* all_forests = cpu_checked_alloc(ranks, sizeof(int));
-  int local_all = run_globals.RequestedForestId == NULL && run_globals.NRequestedForests < 0;
-  int local_count = run_globals.RequestedForestId ? run_globals.NRequestedForests : 0;
-  if (local_count < 0)
-    ABORT(EXIT_FAILURE);
-  MPI_Allgather(&local_all, 1, MPI_INT, all_forests, 1, MPI_INT, run_globals.mpi_comm);
-  MPI_Allgather(&local_count, 1, MPI_INT, counts, 1, MPI_INT, run_globals.mpi_comm);
-  for (int p = 0; p < ranks; ++p) {
-    if (counts[p] > INT_MAX - offsets[p]) {
-      mlog_error("Forest ownership directory exceeds MPI_Allgatherv integer limits.");
-      ABORT(EXIT_FAILURE);
-    }
-    offsets[p + 1] = offsets[p] + counts[p];
-  }
-  long* forest_ids = cpu_checked_alloc(offsets[ranks], sizeof(long));
-  long dummy = 0;
-  MPI_Allgatherv(local_count ? run_globals.RequestedForestId : &dummy,
-                 local_count,
-                 MPI_LONG,
-                 forest_ids,
-                 counts,
-                 offsets,
-                 MPI_LONG,
-                 run_globals.mpi_comm);
-  forest_owner_t* owners = cpu_checked_alloc(offsets[ranks], sizeof(*owners));
-  for (int p = 0; p < ranks; ++p)
-    for (int i = offsets[p]; i < offsets[p + 1]; ++i)
-      owners[i] = (forest_owner_t){ forest_ids[i], p };
-  size_t n_owners = offsets[ranks];
-  qsort(owners, n_owners, sizeof(*owners), compare_forest_owner);
-  int n_all = 0;
-  for (int p = 0; p < ranks; ++p)
-    if (all_forests[p])
-      all_forests[n_all++] = p;
-  free(forest_ids);
-  free(counts);
-  free(offsets);
-
-  hid_t dataset = H5Dopen(group, "ForestID", H5P_DEFAULT);
-  hid_t space = H5Dget_space(dataset);
-  hid_t xfer = H5Pcreate(H5P_DATASET_XFER);
-  H5Pset_dxpl_mpio(xfer, H5FD_MPIO_INDEPENDENT);
-  const hsize_t chunk = 65536;
-  long* buffer = cpu_checked_alloc(chunk, sizeof(long));
-  hsize_t begin = (uint64_t)n_entries * rank / ranks;
-  hsize_t end = (uint64_t)n_entries * (rank + 1) / ranks;
-  owned_tree_row_t* routes = NULL;
-  size_t n_routes = 0, capacity = 0;
-  for (hsize_t first = begin; first < end; first += chunk) {
-    hsize_t n = end - first < chunk ? end - first : chunk;
-    H5Sselect_hyperslab(space, H5S_SELECT_SET, &first, NULL, &n, NULL);
-    hid_t memory = H5Screate_simple(1, &n, NULL);
-    if (H5Dread(dataset, H5T_NATIVE_LONG, memory, space, xfer, buffer) < 0)
-      ABORT(EXIT_FAILURE);
-    H5Sclose(memory);
-    for (hsize_t i = 0; i < n; ++i) {
-      size_t lo = 0, hi = n_owners;
-      while (lo < hi) {
-        size_t mid = lo + (hi - lo) / 2;
-        if (owners[mid].forest < buffer[i])
-          lo = mid + 1;
-        else
-          hi = mid;
-      }
-      int previous_rank = -1;
-      for (size_t j = lo; j < n_owners && owners[j].forest == buffer[i]; ++j) {
-        int p = owners[j].rank;
-        if (p != previous_rank)
-          append_tree_row(&routes, &n_routes, &capacity, first + i, p);
-        previous_rank = p;
-      }
-      for (int p = 0; p < n_all; ++p)
-        append_tree_row(&routes, &n_routes, &capacity, first + i, all_forests[p]);
-    }
-  }
-  H5Pclose(xfer);
-  H5Sclose(space);
-  H5Dclose(dataset);
-  free(buffer);
-  free(owners);
-  free(all_forests);
-
-  size_t* send_count = cpu_checked_alloc(ranks, sizeof(size_t));
-  size_t* cursor = cpu_checked_alloc((size_t)ranks + 1, sizeof(size_t));
-  for (size_t i = 0; i < n_routes; ++i)
-    ++send_count[routes[i].rank];
-  for (int p = 0; p < ranks; ++p)
-    cursor[p + 1] = cursor[p] + send_count[p];
-  uint64_t* send = cpu_checked_alloc(n_routes, sizeof(uint64_t));
-  for (size_t i = 0; i < n_routes; ++i)
-    send[cursor[routes[i].rank]++] = routes[i].row;
-  free(routes);
-  free(cursor);
-  size_t *recv_count, *recv_offset;
-  uint64_t* rows =
-    exchange_records(send, send_count, sizeof(uint64_t), &recv_count, &recv_offset, run_globals.mpi_comm);
-  *n_owned = recv_offset[ranks];
-  qsort(rows, *n_owned, sizeof(*rows), compare_tree_row);
-  free(send);
-  free(send_count);
-  free(recv_count);
-  free(recv_offset);
-  return rows;
-}
-
 void read_trees__velociraptor(int snapshot,
                               halo_t* halos,
                               int* n_halos,
@@ -311,10 +158,15 @@ void read_trees__velociraptor(int snapshot,
   mass_unit_to_internal /= 1.0e10;
   H5LTget_attribute_double(fd, snap_group_name, "scalefactor", &scale_factor);
 
-  size_t n_owned = 0;
-  uint64_t* owned_rows = owned_tree_rows(snap_group, n_tree_entries, &n_owned);
-  size_t buffer_size = n_owned < 65536 ? n_owned : 65536;
-
+  // Keep disk access contiguous. A directory of every forest and scattered
+  // HDF5 point selections were slower than streaming on the production trees.
+  // Bound the per-rank column workspace, including at late snapshots.
+  size_t buffer_size = n_tree_entries > 100000 ? (size_t)n_tree_entries / 10 : 10000;
+  if (buffer_size > 1048576)
+    buffer_size = 1048576;
+  if (buffer_size > (size_t)n_tree_entries)
+    buffer_size = (size_t)n_tree_entries;
+  long* ForestID = cpu_checked_alloc(buffer_size, sizeof(long));
   long* Head = cpu_checked_alloc(buffer_size, sizeof(long));
   long* hostHaloID = cpu_checked_alloc(buffer_size, sizeof(long));
   float* Mass_200crit = cpu_checked_alloc(buffer_size, sizeof(float));
@@ -343,6 +195,7 @@ void read_trees__velociraptor(int snapshot,
     hid_t type, dataset;
     void* data;
   } columns[] = {
+    { "ForestID", H5T_NATIVE_LONG, -1, ForestID },
     { "Head", H5T_NATIVE_LONG, -1, Head },
     { "hostHaloID", H5T_NATIVE_LONG, -1, hostHaloID },
     { "Mass_200crit", H5T_NATIVE_FLOAT, -1, Mass_200crit },
@@ -367,21 +220,55 @@ void read_trees__velociraptor(int snapshot,
     if (columns[p].dataset < 0)
       ABORT(EXIT_FAILURE);
   }
-  hsize_t* selection = cpu_checked_alloc(buffer_size, sizeof(hsize_t));
+  double timings[4] = { 0 }; // disk reads, broadcasts, forest selection, halo conversion
+  int* selected = cpu_checked_alloc(buffer_size, sizeof(int));
   size_t n_read = 0;
-  while (n_read < n_owned) {
-    int n_to_read = (int)(n_owned - n_read < buffer_size ? n_owned - n_read : buffer_size);
-    for (int i = 0; i < n_to_read; ++i)
-      selection[i] = owned_rows[n_read + i];
-    if (H5Sselect_elements(fspace_id, H5S_SELECT_SET, n_to_read, selection) < 0)
+  while (n_read < (size_t)n_tree_entries) {
+    int n_to_read =
+      (int)(((size_t)n_tree_entries - n_read < buffer_size) ? (size_t)n_tree_entries - n_read : buffer_size);
+    if (H5Sselect_hyperslab(fspace_id, H5S_SELECT_SET, (hsize_t[1]){ n_read }, NULL, (hsize_t[1]){ n_to_read }, NULL) <
+        0)
       ABORT(EXIT_FAILURE);
     hid_t memspace_id = H5Screate_simple(1, (hsize_t[1]){ n_to_read }, NULL);
-    for (size_t p = 0; p < n_columns; ++p)
-      if (H5Dread(columns[p].dataset, columns[p].type, memspace_id, fspace_id, plist_id, columns[p].data) < 0)
+
+    // Different ranks read different columns concurrently. Each column is read
+    // once from disk, then broadcast, as in the original streaming reader.
+    double start = MPI_Wtime();
+    for (size_t p = 0; p < n_columns; ++p) {
+      int reader = (int)((p + 1) % run_globals.mpi_size);
+      if (run_globals.mpi_rank == reader &&
+          H5Dread(columns[p].dataset, columns[p].type, memspace_id, fspace_id, plist_id, columns[p].data) < 0)
         ABORT(EXIT_FAILURE);
+    }
+    timings[0] += MPI_Wtime() - start;
+    start = MPI_Wtime();
+    for (size_t p = 0; p < n_columns; ++p) {
+      size_t bytes = H5Tget_size(columns[p].type) * (size_t)n_to_read;
+      if (bytes > INT_MAX)
+        ABORT(EXIT_FAILURE);
+      MPI_Bcast(columns[p].data, (int)bytes, MPI_BYTE, (int)((p + 1) % run_globals.mpi_size), run_globals.mpi_comm);
+    }
+    timings[1] += MPI_Wtime() - start;
     H5Sclose(memspace_id);
 
+    start = MPI_Wtime();
+    int n_selected = 0;
     for (int ii = 0; ii < n_to_read; ++ii) {
+      bool keep = run_globals.RequestedForestId == NULL && run_globals.NRequestedForests < 0;
+      if (run_globals.RequestedForestId != NULL && run_globals.NRequestedForests > 0)
+        keep = bsearch(&ForestID[ii],
+                       run_globals.RequestedForestId,
+                       (size_t)run_globals.NRequestedForests,
+                       sizeof(long),
+                       compare_longs) != NULL;
+      if (keep)
+        selected[n_selected++] = ii;
+    }
+    timings[2] += MPI_Wtime() - start;
+
+    start = MPI_Wtime();
+    for (int selected_index = 0; selected_index < n_selected; ++selected_index) {
+      int ii = selected[selected_index];
       halo_t* halo = &(halos[*n_halos]);
 
       halo->ID = ID[ii];
@@ -409,7 +296,7 @@ void read_trees__velociraptor(int snapshot,
         halo->DescIndex = -1;
 
       if (index_lookup)
-        index_lookup[*n_halos] = (int)owned_rows[n_read + ii];
+        index_lookup[*n_halos] = (int)n_read + ii;
 
       // TODO: What masses and radii should I use for centrals (inclusive vs. exclusive etc.)?
       if (halo->Type == 0) {
@@ -485,13 +372,14 @@ void read_trees__velociraptor(int snapshot,
       (*n_halos)++;
     }
 
+    timings[3] += MPI_Wtime() - start;
     n_read += n_to_read;
   }
 
   for (size_t p = 0; p < n_columns; ++p)
     H5Dclose(columns[p].dataset);
-  free(selection);
-  free(owned_rows);
+  free(selected);
+  free(ForestID);
   free(Head);
   free(hostHaloID);
   free(Mass_200crit);
@@ -512,5 +400,14 @@ void read_trees__velociraptor(int snapshot,
   H5Gclose(snap_group);
   H5Fclose(fd);
 
+  double max_timings[4];
+  MPI_Reduce(timings, max_timings, 4, MPI_DOUBLE, MPI_MAX, 0, run_globals.mpi_comm);
+  if (run_globals.mpi_rank == 0)
+    mlog("Tree reader max-rank times: read=%.3f s, broadcast/wait=%.3f s, select=%.3f s, convert=%.3f s",
+         MLOG_MESG,
+         max_timings[0],
+         max_timings[1],
+         max_timings[2],
+         max_timings[3]);
   mlog("...done", MLOG_CLOSE);
 }
