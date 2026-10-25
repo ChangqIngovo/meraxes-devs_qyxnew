@@ -750,7 +750,6 @@ void _ComputeTs(int snapshot)
 
     // The shell edges and mean IGM state are identical on every rank. First
     // distribute the optical-depth roots; no root depends on a previous root.
-    mlog("Computing X-ray frequency tables...", MLOG_OPEN | MLOG_TIMERSTART);
     int table_counts[run_globals.mpi_size], table_offsets[run_globals.mpi_size];
     double nu_tau_one_by_radius[TsNumFilterSteps];
     const int table_rank = run_globals.mpi_rank;
@@ -902,7 +901,6 @@ void _ComputeTs(int snapshot)
     if (agn_hard_needed)
       GATHER_HEATING_TABLES(AGN_hard);
 #undef GATHER_HEATING_TABLES
-    mlog("...done", MLOG_CLOSE | MLOG_TIMERSTOP);
 
     // Keep the Ly-alpha transition sum and its neighbouring-radius correction
     // in the original increasing-radius order.

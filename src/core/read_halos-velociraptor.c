@@ -220,7 +220,6 @@ void read_trees__velociraptor(int snapshot,
     if (columns[p].dataset < 0)
       ABORT(EXIT_FAILURE);
   }
-  double timings[4] = { 0 }; // disk reads, broadcasts, forest selection, halo conversion
   int* selected = cpu_checked_alloc(buffer_size, sizeof(int));
   size_t n_read = 0;
   while (n_read < (size_t)n_tree_entries) {
@@ -233,25 +232,20 @@ void read_trees__velociraptor(int snapshot,
 
     // Different ranks read different columns concurrently. Each column is read
     // once from disk, then broadcast, as in the original streaming reader.
-    double start = MPI_Wtime();
     for (size_t p = 0; p < n_columns; ++p) {
       int reader = (int)((p + 1) % run_globals.mpi_size);
       if (run_globals.mpi_rank == reader &&
           H5Dread(columns[p].dataset, columns[p].type, memspace_id, fspace_id, plist_id, columns[p].data) < 0)
         ABORT(EXIT_FAILURE);
     }
-    timings[0] += MPI_Wtime() - start;
-    start = MPI_Wtime();
     for (size_t p = 0; p < n_columns; ++p) {
       size_t bytes = H5Tget_size(columns[p].type) * (size_t)n_to_read;
       if (bytes > INT_MAX)
         ABORT(EXIT_FAILURE);
       MPI_Bcast(columns[p].data, (int)bytes, MPI_BYTE, (int)((p + 1) % run_globals.mpi_size), run_globals.mpi_comm);
     }
-    timings[1] += MPI_Wtime() - start;
     H5Sclose(memspace_id);
 
-    start = MPI_Wtime();
     int n_selected = 0;
     for (int ii = 0; ii < n_to_read; ++ii) {
       bool keep = run_globals.RequestedForestId == NULL && run_globals.NRequestedForests < 0;
@@ -264,9 +258,7 @@ void read_trees__velociraptor(int snapshot,
       if (keep)
         selected[n_selected++] = ii;
     }
-    timings[2] += MPI_Wtime() - start;
 
-    start = MPI_Wtime();
     for (int selected_index = 0; selected_index < n_selected; ++selected_index) {
       int ii = selected[selected_index];
       halo_t* halo = &(halos[*n_halos]);
@@ -372,7 +364,6 @@ void read_trees__velociraptor(int snapshot,
       (*n_halos)++;
     }
 
-    timings[3] += MPI_Wtime() - start;
     n_read += n_to_read;
   }
 
@@ -400,14 +391,5 @@ void read_trees__velociraptor(int snapshot,
   H5Gclose(snap_group);
   H5Fclose(fd);
 
-  double max_timings[4];
-  MPI_Reduce(timings, max_timings, 4, MPI_DOUBLE, MPI_MAX, 0, run_globals.mpi_comm);
-  if (run_globals.mpi_rank == 0)
-    mlog("Tree reader max-rank times: read=%.3f s, broadcast/wait=%.3f s, select=%.3f s, convert=%.3f s",
-         MLOG_MESG,
-         max_timings[0],
-         max_timings[1],
-         max_timings[2],
-         max_timings[3]);
   mlog("...done", MLOG_CLOSE);
 }
