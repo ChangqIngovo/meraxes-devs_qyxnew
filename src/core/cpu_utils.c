@@ -1,3 +1,4 @@
+#include <float.h>
 #include <limits.h>
 #include <math.h>
 #include <stdint.h>
@@ -19,6 +20,29 @@ void* cpu_checked_alloc(size_t count, size_t size)
     ABORT(EXIT_FAILURE);
   }
   return p;
+}
+
+int cpu_sources_are_zero(const float* const* fields, int n_fields, int slab_nx, int dim, MPI_Comm comm)
+{
+  /* Bit classification also works in Release builds with -ffast-math. */
+  _Static_assert(sizeof(float) == sizeof(uint32_t) && FLT_RADIX == 2 && FLT_MANT_DIG == 24,
+                 "Source classification requires IEEE binary32 floats");
+  int status = 0;
+  const size_t rows = (size_t)slab_nx * dim;
+  const size_t stride = 2 * (dim / 2 + 1);
+  for (int f = 0; f < n_fields; ++f)
+    for (size_t row = 0; row < rows; ++row)
+      for (int col = 0; col < dim; ++col) {
+        uint32_t bits;
+        memcpy(&bits, fields[f] + row * stride + col, sizeof(bits));
+        bits &= UINT32_C(0x7fffffff); // both signs of zero are zero
+        if (bits != 0)
+          status |= 1;
+        if (bits >= UINT32_C(0x7f800000))
+          status |= 2;
+      }
+  MPI_Allreduce(MPI_IN_PLACE, &status, 1, MPI_INT, MPI_BOR, comm);
+  return status & 2 ? -1 : !(status & 1);
 }
 
 /* Windows recur across snapshots. Retain their exact float values and actions,

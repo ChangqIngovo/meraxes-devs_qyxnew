@@ -95,6 +95,33 @@ static void test_filter_cache_keys(void)
   run_globals.params.BoxSize = dim;
 }
 
+static void test_zero_sources(void)
+{
+  const size_t allocation = 2 * (nc ? nc : 1);
+  float* fields[2] = { cpu_checked_alloc(allocation, sizeof(float)), cpu_checked_alloc(allocation, sizeof(float)) };
+  const size_t stride = 2 * (dim / 2 + 1);
+  uint32_t invalid = UINT32_C(0x7fc00000);
+  for (int f = 0; f < 2; ++f)
+    for (size_t row = 0; row < (size_t)nx * dim; ++row)
+      for (int col = dim; col < (int)stride; ++col)
+        memcpy(fields[f] + row * stride + col, &invalid, sizeof(invalid)); // ignore FFT padding
+  CHECK(cpu_sources_are_zero((const float* const*)fields, 2, nx, dim, MPI_COMM_WORLD) == 1);
+  int source_rank = nx > 0 ? run_globals.mpi_rank : -1;
+  MPI_Allreduce(MPI_IN_PLACE, &source_rank, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
+  CHECK(source_rank >= 0);
+  uint32_t cases[] = { UINT32_C(0x80000000), UINT32_C(0x3f800000), UINT32_C(0x00000001), UINT32_C(0x7f800000),
+                       UINT32_C(0xff800000), UINT32_C(0x7fc00000), UINT32_C(0) };
+  const int expected[] = { 1, 0, 0, -1, -1, -1, 1 };
+  for (int f = 0; f < 2; ++f)
+    for (int c = 0; c < 7; ++c) {
+      if (run_globals.mpi_rank == source_rank)
+        memcpy(fields[f], cases + c, sizeof(cases[c]));
+      CHECK(cpu_sources_are_zero((const float* const*)fields, 2, nx, dim, MPI_COMM_WORLD) == expected[c]);
+    }
+  free(fields[0]);
+  free(fields[1]);
+}
+
 static void test_exchange(void)
 {
   int rank = run_globals.mpi_rank, ranks = run_globals.mpi_size;
@@ -334,6 +361,7 @@ int main(int argc, char** argv)
     &count, sizeof(ptrdiff_t), MPI_BYTE, grids->slab_n_complex, sizeof(ptrdiff_t), MPI_BYTE, MPI_COMM_WORLD);
   test_filters();
   test_filter_cache_keys();
+  test_zero_sources();
   test_exchange();
   test_sources_and_history();
   free(grids->slab_nix);
