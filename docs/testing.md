@@ -47,7 +47,7 @@ Run the eight MPI integration cases with `ctest -L cpu --output-on-failure`:
 
 | Tests | MPI ranks | Checks |
 |---|---|---|
-| `cpu_mpi_1`, `cpu_mpi_2`, `cpu_mpi_3` | 1, 2, 3 | Filters against an independent reference, cache keys, zero/non-finite sources, record exchange, galaxy grid sampling, source construction and circular Fourier histories, including empty ranks. |
+| `cpu_mpi_1`, `cpu_mpi_2`, `cpu_mpi_3` | 1, 2, 3 | Filters against an independent reference, cache keys, record exchange, galaxy grid sampling, source construction and circular Fourier histories, including empty ranks. |
 | `save_output_mpi_1`, `save_output_mpi_2` | 1, 2 | Bounded output buffers, HDF5 table fields and values, galaxy ordering and tree links. |
 | `tree_reader_mpi_1`, `tree_reader_mpi_2`, `tree_reader_mpi_3` | 1, 2, 3 | Synthetic HDF5 merger-tree reads, empty ranks and FOF links across read batches. |
 
