@@ -260,107 +260,107 @@ void read_trees__velociraptor(int snapshot,
 
     for (int selected_index = 0; selected_index < n_selected; ++selected_index) {
       int ii = selected[selected_index];
-        halo_t* halo = &(halos[*n_halos]);
+      halo_t* halo = &(halos[*n_halos]);
 
-        halo->ID = ID[ii];
-        halo->DescIndex = id_to_ind(Head[ii]);
+      halo->ID = ID[ii];
+      halo->DescIndex = id_to_ind(Head[ii]);
 
-        if (run_globals.params.FlagIgnoreProgIndex)
-          halo->ProgIndex = -1;
-        // else
-        //   halo->ProgIndex = id_to_ind(Tail[ii]);
+      if (run_globals.params.FlagIgnoreProgIndex)
+        halo->ProgIndex = -1;
+      // else
+      //   halo->ProgIndex = id_to_ind(Tail[ii]);
 
-        halo->NextHaloInFOFGroup = NULL;
-        halo->Type = hostHaloID[ii] == -1 ? 0 : 1;
-        halo->SnapOffset = id_to_snap(Head[ii]) - snapshot;
+      halo->NextHaloInFOFGroup = NULL;
+      halo->Type = hostHaloID[ii] == -1 ? 0 : 1;
+      halo->SnapOffset = id_to_snap(Head[ii]) - snapshot;
 
-        // Any other tree flags need to be set using both the current and
-        // progenitor halo information (stored in the galaxy), therefore we
-        // need to leave setting those until later...
-        if (run_globals.params.FlagIgnoreProgIndex)
-          halo->TreeFlags = TREE_CASE_NO_PROGENITORS;
-        // else
-        //   halo->TreeFlags = (unsigned long)Tail[ii] != ID[ii] ? 0 : TREE_CASE_NO_PROGENITORS;
+      // Any other tree flags need to be set using both the current and
+      // progenitor halo information (stored in the galaxy), therefore we
+      // need to leave setting those until later...
+      if (run_globals.params.FlagIgnoreProgIndex)
+        halo->TreeFlags = TREE_CASE_NO_PROGENITORS;
+      // else
+      //   halo->TreeFlags = (unsigned long)Tail[ii] != ID[ii] ? 0 : TREE_CASE_NO_PROGENITORS;
 
-        // Here we have a cyclic pointer, indicating that this halo's life ends here
-        if ((unsigned long)Head[ii] == ID[ii])
-          halo->DescIndex = -1;
+      // Here we have a cyclic pointer, indicating that this halo's life ends here
+      if ((unsigned long)Head[ii] == ID[ii])
+        halo->DescIndex = -1;
 
-        if (index_lookup)
-          index_lookup[*n_halos] = (int)n_read + ii;
+      if (index_lookup)
+        index_lookup[*n_halos] = (int)n_read + ii;
 
-        // TODO: What masses and radii should I use for centrals (inclusive vs. exclusive etc.)?
-        if (halo->Type == 0) {
-          fof_group_t* fof_group = &fof_groups[*n_fof_groups];
+      // TODO: What masses and radii should I use for centrals (inclusive vs. exclusive etc.)?
+      if (halo->Type == 0) {
+        fof_group_t* fof_group = &fof_groups[*n_fof_groups];
 
-          // This check is to ensure sensible values of mass_200crit and avoid having
-          // very weird halos. Put this check back if you feel that the N-body is weird.
+        // This check is to ensure sensible values of mass_200crit and avoid having
+        // very weird halos. Put this check back if you feel that the N-body is weird.
 
-          /*if ((Mass_200crit[ii] < 5 * Mass_tot[ii])) {
-              fof_group->Mvir = Mass_200crit[ii] * hubble_h * mass_unit_to_internal;;
-              fof_group->Rvir = R_200crit[ii] * hubble_h;
-          }*/
-          // else {
-          //  BELOW_VIRIAL_THRESHOLD merger halo swammping
-          if (Mass_200crit[ii] <= 0) {
-            halo->TreeFlags |= TREE_CASE_BELOW_VIRIAL_THRESHOLD;
-            fof_group->Mvir = Mass_tot[ii] * hubble_h * mass_unit_to_internal;
-            fof_group->Rvir = -1;
-          }
-
-          else {
-            fof_group->Mvir = (double)Mass_200crit[ii] * hubble_h * mass_unit_to_internal;
-            fof_group->Rvir = (double)R_200crit[ii] * hubble_h;
-          }
-
-          fof_group->Vvir = -1;
-          fof_group->FOFMvirModifier = 1.0;
-
-          convert_input_virial_props(
-            &fof_group->Mvir, &fof_group->Rvir, &fof_group->Vvir, &fof_group->FOFMvirModifier, -1, snapshot, true);
-
-          halo->FOFGroup = &(fof_groups[*n_fof_groups]);
-          fof_groups[(*n_fof_groups)++].FirstHalo = halo;
-        } else {
-          // We can take advantage of the fact that host halos always
-          // seem to appear before their subhalos (checked below) in the
-          // trees to immediately connect FOF group members.
-          int host_index = id_to_ind(hostHaloID[ii]);
-
-          if (index_lookup)
-            host_index = find_original_index(host_index, index_lookup, *n_halos);
-
-          assert(host_index > -1);
-          assert(host_index < *n_halos);
-
-          halo_t* prev_halo = &halos[host_index];
-          halo->FOFGroup = prev_halo->FOFGroup;
-
-          while (prev_halo->NextHaloInFOFGroup != NULL)
-            prev_halo = prev_halo->NextHaloInFOFGroup;
-
-          prev_halo->NextHaloInFOFGroup = halo;
+        /*if ((Mass_200crit[ii] < 5 * Mass_tot[ii])) {
+            fof_group->Mvir = Mass_200crit[ii] * hubble_h * mass_unit_to_internal;;
+            fof_group->Rvir = R_200crit[ii] * hubble_h;
+        }*/
+        // else {
+        //  BELOW_VIRIAL_THRESHOLD merger halo swammping
+        if (Mass_200crit[ii] <= 0) {
+          halo->TreeFlags |= TREE_CASE_BELOW_VIRIAL_THRESHOLD;
+          fof_group->Mvir = Mass_tot[ii] * hubble_h * mass_unit_to_internal;
+          fof_group->Rvir = -1;
         }
 
-        halo->Len = (int)npart[ii];
-        halo->Pos[0] = apply_pbc_pos(Xc[ii] * hubble_h / scale_factor);
-        halo->Pos[1] = apply_pbc_pos(Yc[ii] * hubble_h / scale_factor);
-        halo->Pos[2] = apply_pbc_pos(Zc[ii] * hubble_h / scale_factor);
-        halo->Vel[0] = VXc[ii] / scale_factor;
-        halo->Vel[1] = VYc[ii] / scale_factor;
-        halo->Vel[2] = VZc[ii] / scale_factor;
-        halo->Vmax = Vmax[ii];
+        else {
+          fof_group->Mvir = (double)Mass_200crit[ii] * hubble_h * mass_unit_to_internal;
+          fof_group->Rvir = (double)R_200crit[ii] * hubble_h;
+        }
 
-        // TODO: What masses and radii should I use for satellites (inclusive vs. exclusive etc.)?
-        halo->Mvir = (double)Mass_tot[ii] * hubble_h * mass_unit_to_internal;
-        halo->Rvir = -1;
-        halo->Vvir = -1;
-        convert_input_virial_props(&halo->Mvir, &halo->Rvir, &halo->Vvir, NULL, -1, snapshot, false);
+        fof_group->Vvir = -1;
+        fof_group->FOFMvirModifier = 1.0;
 
-        halo->AngMom = AngMom[ii] * hubble_h;
-        halo->Galaxy = NULL;
+        convert_input_virial_props(
+          &fof_group->Mvir, &fof_group->Rvir, &fof_group->Vvir, &fof_group->FOFMvirModifier, -1, snapshot, true);
 
-        (*n_halos)++;
+        halo->FOFGroup = &(fof_groups[*n_fof_groups]);
+        fof_groups[(*n_fof_groups)++].FirstHalo = halo;
+      } else {
+        // We can take advantage of the fact that host halos always
+        // seem to appear before their subhalos (checked below) in the
+        // trees to immediately connect FOF group members.
+        int host_index = id_to_ind(hostHaloID[ii]);
+
+        if (index_lookup)
+          host_index = find_original_index(host_index, index_lookup, *n_halos);
+
+        assert(host_index > -1);
+        assert(host_index < *n_halos);
+
+        halo_t* prev_halo = &halos[host_index];
+        halo->FOFGroup = prev_halo->FOFGroup;
+
+        while (prev_halo->NextHaloInFOFGroup != NULL)
+          prev_halo = prev_halo->NextHaloInFOFGroup;
+
+        prev_halo->NextHaloInFOFGroup = halo;
+      }
+
+      halo->Len = (int)npart[ii];
+      halo->Pos[0] = apply_pbc_pos(Xc[ii] * hubble_h / scale_factor);
+      halo->Pos[1] = apply_pbc_pos(Yc[ii] * hubble_h / scale_factor);
+      halo->Pos[2] = apply_pbc_pos(Zc[ii] * hubble_h / scale_factor);
+      halo->Vel[0] = VXc[ii] / scale_factor;
+      halo->Vel[1] = VYc[ii] / scale_factor;
+      halo->Vel[2] = VZc[ii] / scale_factor;
+      halo->Vmax = Vmax[ii];
+
+      // TODO: What masses and radii should I use for satellites (inclusive vs. exclusive etc.)?
+      halo->Mvir = (double)Mass_tot[ii] * hubble_h * mass_unit_to_internal;
+      halo->Rvir = -1;
+      halo->Vvir = -1;
+      convert_input_virial_props(&halo->Mvir, &halo->Rvir, &halo->Vvir, NULL, -1, snapshot, false);
+
+      halo->AngMom = AngMom[ii] * hubble_h;
+      halo->Galaxy = NULL;
+
+      (*n_halos)++;
     }
 
     n_read += n_to_read;

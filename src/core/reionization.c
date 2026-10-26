@@ -1692,61 +1692,61 @@ void assign_Mvir_crit_to_galaxies(int ngals_in_slabs, int flag_feed)
   for (int i = 0; i < ngals_in_slabs; ++i) {
     galaxy_t* gal = map[i].galaxy;
     double gamma12_local;
-        if (flag_feed == 1)
-          gal->MvirCrit = (double)values[i];
+    if (flag_feed == 1)
+      gal->MvirCrit = (double)values[i];
 #if USE_MINI_HALOS
-        if (flag_feed == 2)
-          gal->MvirCrit_MC = (double)values[i];
+    if (flag_feed == 2)
+      gal->MvirCrit_MC = (double)values[i];
 #endif
-        if (flag_feed == 3)
-          gal->t_resp = (double)values[i];
-        // Compute tau_cgm based on CGM suppression mode
-        // Mode 1: instantaneous Gamma12, Mode 2: cumulative Gamma12, Mode 3: clumping factor
-        if (flag_feed == 4) {
-          physics_params_t* params = &(run_globals.params.physics);
-          if (gal->HotGas > 0.0 && gal->Rvir > 0.0) {
+    if (flag_feed == 3)
+      gal->t_resp = (double)values[i];
+    // Compute tau_cgm based on CGM suppression mode
+    // Mode 1: instantaneous Gamma12, Mode 2: cumulative Gamma12, Mode 3: clumping factor
+    if (flag_feed == 4) {
+      physics_params_t* params = &(run_globals.params.physics);
+      if (gal->HotGas > 0.0 && gal->Rvir > 0.0) {
 
-            double grid_value = (double)values[i];
-            double suppression_factor = 1.0; // Will be raised to FescCGMGamma12Scaling power
+        double grid_value = (double)values[i];
+        double suppression_factor = 1.0; // Will be raised to FescCGMGamma12Scaling power
 
-            switch (cgm_mode) {
-              case 1:
-                // Mode 1: Instantaneous Gamma12
-                // Normalize to 1e-12 s^-1 and scale (reference: Gamma12 = 0.1)
-                gamma12_local = grid_value * run_globals.params.Hubble_h * run_globals.params.Hubble_h;
-                CLAMP_NEGATIVE(gamma12_local);
-                suppression_factor = gamma12_local * 10.0; // Normalized at Gamma12 = 0.1
-                break;
+        switch (cgm_mode) {
+          case 1:
+            // Mode 1: Instantaneous Gamma12
+            // Normalize to 1e-12 s^-1 and scale (reference: Gamma12 = 0.1)
+            gamma12_local = grid_value * run_globals.params.Hubble_h * run_globals.params.Hubble_h;
+            CLAMP_NEGATIVE(gamma12_local);
+            suppression_factor = gamma12_local * 10.0; // Normalized at Gamma12 = 0.1
+            break;
 
-              case 2: {
-                // Mode 2: Gamma12 * dt accumulated over the galaxy's history
-                gamma12_local = grid_value * run_globals.params.Hubble_h * run_globals.params.Hubble_h;
-                CLAMP_NEGATIVE(gamma12_local);
-                double dt_myr = gal->dt * run_globals.units.UnitTime_in_s / SEC_PER_MEGAYEAR;
-                gal->cumulative_ionization += gamma12_local * dt_myr;
-                // Normalize at cumulative value of 1.0 (e.g., Gamma12=0.1 for 10 Myr)
-                suppression_factor = gal->cumulative_ionization;
-                break;
-              }
-
-              case 3:
-                // Mode 3: Local clumping factor
-                CLAMP_NEGATIVE(grid_value);
-                suppression_factor = grid_value;
-                break;
-
-              default:
-                suppression_factor = 1.0;
-            }
-
-            // Calculate optical depth from hot gas column density (HotGas/Rvir^2)
-            // Normalized at 1e8 Msun / (10 kpc)^2 for gas, and suppression_factor = 1
-            gal->tau_cgm = params->FescCGMSuppressionNorm *
-              pow(gal->HotGas * 1.0e2 / run_globals.params.Hubble_h, params->FescCGMSuppressionScaling) *
-              pow(0.01 * run_globals.params.Hubble_h / gal->Rvir, 2.0 * params->FescCGMSuppressionScaling) *
-              pow(suppression_factor, params->FescCGMGamma12Scaling);
+          case 2: {
+            // Mode 2: Gamma12 * dt accumulated over the galaxy's history
+            gamma12_local = grid_value * run_globals.params.Hubble_h * run_globals.params.Hubble_h;
+            CLAMP_NEGATIVE(gamma12_local);
+            double dt_myr = gal->dt * run_globals.units.UnitTime_in_s / SEC_PER_MEGAYEAR;
+            gal->cumulative_ionization += gamma12_local * dt_myr;
+            // Normalize at cumulative value of 1.0 (e.g., Gamma12=0.1 for 10 Myr)
+            suppression_factor = gal->cumulative_ionization;
+            break;
           }
+
+          case 3:
+            // Mode 3: Local clumping factor
+            CLAMP_NEGATIVE(grid_value);
+            suppression_factor = grid_value;
+            break;
+
+          default:
+            suppression_factor = 1.0;
         }
+
+        // Calculate optical depth from hot gas column density (HotGas/Rvir^2)
+        // Normalized at 1e8 Msun / (10 kpc)^2 for gas, and suppression_factor = 1
+        gal->tau_cgm = params->FescCGMSuppressionNorm *
+                       pow(gal->HotGas * 1.0e2 / run_globals.params.Hubble_h, params->FescCGMSuppressionScaling) *
+                       pow(0.01 * run_globals.params.Hubble_h / gal->Rvir, 2.0 * params->FescCGMSuppressionScaling) *
+                       pow(suppression_factor, params->FescCGMGamma12Scaling);
+      }
+    }
   }
   free(values);
   mlog("...done.", MLOG_CLOSE);
@@ -1931,164 +1931,164 @@ void construct_baryon_grids(int snapshot, int local_ngals)
       float* buffer = (float*)(packets + layout.slot[i] * record_size + sizeof(uint64_t)) + field;
       const int ind = 0;
       double stochasticity_calibration_factor = 1.0;
-          switch (prop) {
-            case prop_stellar:
+      switch (prop) {
+        case prop_stellar:
 #if USE_STOCHASTICITY
-              if (run_globals.params.physics.EscapeFracScatterDex > ABS_TOL ||
-                  run_globals.params.physics.Flag_RemoveSFRScatter == 1) {
-                if (run_globals.params.physics.Flag_SourceRecalibration)
-                  stochasticity_calibration_factor = extract_recalibration_factors(gal, 2, true);
-                buffer[ind] += gal->StochasticityTreatedFescWeightedGSM * stochasticity_calibration_factor;
-              } else
-                buffer[ind] += gal->FescWeightedGSM;
+          if (run_globals.params.physics.EscapeFracScatterDex > ABS_TOL ||
+              run_globals.params.physics.Flag_RemoveSFRScatter == 1) {
+            if (run_globals.params.physics.Flag_SourceRecalibration)
+              stochasticity_calibration_factor = extract_recalibration_factors(gal, 2, true);
+            buffer[ind] += gal->StochasticityTreatedFescWeightedGSM * stochasticity_calibration_factor;
+          } else
+            buffer[ind] += gal->FescWeightedGSM;
 #else
-              buffer[ind] += gal->FescWeightedGSM;
+          buffer[ind] += gal->FescWeightedGSM;
 #endif
-              break;
+          break;
 
-            case prop_effective_bhm:
-              if (gal->BlackHoleMass >= run_globals.params.physics.BlackHoleMassLimitReion) {
-                buffer[ind] += gal->EffectiveBHM;
-              } else {
-                N_BlackHoleMassLimitReion++;
-              }
-              break;
-
-#if USE_MINI_HALOS
-            case prop_stellarIII:
-#if USE_STOCHASTICITY
-              if (run_globals.params.physics.EscapeFracScatterDex > ABS_TOL ||
-                  run_globals.params.physics.Flag_RemoveSFRScatter == 1) {
-                if (run_globals.params.physics.Flag_SourceRecalibration)
-                  stochasticity_calibration_factor = extract_recalibration_factors(gal, 3, true);
-                buffer[ind] += gal->StochasticityTreatedFescIIIWeightedGSM * stochasticity_calibration_factor;
-              } else
-                buffer[ind] += gal->FescIIIWeightedGSM;
-#else
-              buffer[ind] += gal->FescIIIWeightedGSM;
-#endif
-              break;
-
-            case prop_weighted_sfrIII:
-#if USE_STOCHASTICITY
-              if (run_globals.params.physics.EscapeFracScatterDex > ABS_TOL ||
-                  run_globals.params.physics.Flag_RemoveSFRScatter == 1) {
-                if (run_globals.params.physics.Flag_SourceRecalibration)
-                  stochasticity_calibration_factor = extract_recalibration_factors(gal, 3, false);
-                buffer[ind] += gal->StochasticityTreatedFescIIIWeightedSfr * stochasticity_calibration_factor;
-              } else
-                buffer[ind] += gal->FescIIIWeightedSfr;
-#else
-              buffer[ind] += gal->FescIIIWeightedSfr;
-#endif
-              break;
-
-            case prop_sfrIII:
-#if USE_STOCHASTICITY
-              buffer[ind] +=
-                run_globals.params.Flag_InstantaneousSFR
-                  ? (run_globals.params.physics.Flag_RemoveSFRScatter == 1 ? gal->SfrIIINoScatter : gal->SfrIII)
-                  : (run_globals.params.physics.Flag_RemoveSFRScatter == 1 ? gal->GrossStellarMassIIINoScatter
-                                                                           : gal->GrossStellarMassIII);
-#else
-              buffer[ind] += run_globals.params.Flag_InstantaneousSFR ? gal->SfrIII : gal->GrossStellarMassIII;
-#endif
-              break;
-#endif
-
-            case prop_weighted_sfr:
-#if USE_STOCHASTICITY
-              if (run_globals.params.physics.EscapeFracScatterDex > ABS_TOL ||
-                  run_globals.params.physics.Flag_RemoveSFRScatter == 1) {
-                if (run_globals.params.physics.Flag_SourceRecalibration)
-                  stochasticity_calibration_factor = extract_recalibration_factors(gal, 2, false);
-                buffer[ind] += gal->StochasticityTreatedFescWeightedSfr * stochasticity_calibration_factor;
-              } else
-                buffer[ind] += gal->FescWeightedSfr;
-#else
-              buffer[ind] += gal->FescWeightedSfr;
-#endif
-              break;
-
-            case prop_effective_bhar:
-              if (gal->BlackHoleMass >= run_globals.params.physics.BlackHoleMassLimitReion) {
-                buffer[ind] += gal->EffectiveBHAR;
-              }
-              break;
-
-#if USE_STOCHASTICITY
-            case prop_xray_luminosity: {
-              double xray_target = calculate_galaxy_xray_luminosity(gal, sfr_timescale);
-              double xray_raw = xray_target;
-
-              if (run_globals.params.physics.Flag_RemoveSFRScatter == 1) {
-                galaxy_t source_view = *gal;
-                source_view.GrossStellarMass = source_view.GrossStellarMassNoScatter;
-                source_view.Sfr = source_view.SfrNoScatter;
-
-                xray_raw = calculate_galaxy_xray_luminosity(&source_view, sfr_timescale);
-              }
-
-              if (run_globals.params.physics.XrayScatterDex > 0.0)
-                xray_raw = apply_lognormal_scatter(xray_raw, run_globals.params.physics.XrayScatterDex);
-
-              if (recalibrate_xray_sources) {
-                local_xray_raw += xray_raw;
-                local_xray_target += xray_target;
-              }
-
-              buffer[ind] += (float)xray_raw;
-              break;
-            }
-#endif
-
-            case prop_sfr: {
-#if USE_STOCHASTICITY
-              double sfr_target = run_globals.params.Flag_InstantaneousSFR ? gal->Sfr : gal->GrossStellarMass;
-              double sfr_raw = sfr_target;
-
-              if (run_globals.params.physics.Flag_RemoveSFRScatter == 1)
-                sfr_raw = run_globals.params.Flag_InstantaneousSFR ? gal->SfrNoScatter : gal->GrossStellarMassNoScatter;
-
-              if (recalibrate_sfr_sources) {
-                local_sfr_raw += sfr_raw;
-                local_sfr_target += sfr_target;
-              }
-
-              buffer[ind] += sfr_raw;
-#else
-              buffer[ind] += run_globals.params.Flag_InstantaneousSFR ? gal->Sfr : gal->GrossStellarMass;
-#endif
-              break;
-            }
-
-            /*
-             *   We accumulate each per cell exactly as gal->Sfr is accumulated for prop_sfr. The owner-directed exchange
-             * below sums contributions from all galaxies on all ranks. The BlackHoleMassLimitReion guard is applied
-             * consistency with prop_effective_bhar.
-             */
-            case prop_bh_xray_emissivity_hard:
-              if (gal->BlackHoleMass >= run_globals.params.physics.BlackHoleMassLimitReion)
-                buffer[ind] += gal->BHXrayEmissivity_hard;
-              break;
-
-            case prop_bh_xray_emissivity_soft:
-              if (gal->BlackHoleMass >= run_globals.params.physics.BlackHoleMassLimitReion)
-                buffer[ind] += gal->BHXrayEmissivity_soft;
-              break;
-
-#if USE_MINI_HALOS
-            case prop_bh_uv_emissivity:
-              if (gal->BlackHoleMass >= run_globals.params.physics.BlackHoleMassLimitReion)
-                buffer[ind] += gal->QuasarLuv;
-              break;
-#endif
-
-            default:
-              mlog_error("Unrecognised property in slab creation.");
-              ABORT(EXIT_FAILURE);
-              break;
+        case prop_effective_bhm:
+          if (gal->BlackHoleMass >= run_globals.params.physics.BlackHoleMassLimitReion) {
+            buffer[ind] += gal->EffectiveBHM;
+          } else {
+            N_BlackHoleMassLimitReion++;
           }
+          break;
+
+#if USE_MINI_HALOS
+        case prop_stellarIII:
+#if USE_STOCHASTICITY
+          if (run_globals.params.physics.EscapeFracScatterDex > ABS_TOL ||
+              run_globals.params.physics.Flag_RemoveSFRScatter == 1) {
+            if (run_globals.params.physics.Flag_SourceRecalibration)
+              stochasticity_calibration_factor = extract_recalibration_factors(gal, 3, true);
+            buffer[ind] += gal->StochasticityTreatedFescIIIWeightedGSM * stochasticity_calibration_factor;
+          } else
+            buffer[ind] += gal->FescIIIWeightedGSM;
+#else
+          buffer[ind] += gal->FescIIIWeightedGSM;
+#endif
+          break;
+
+        case prop_weighted_sfrIII:
+#if USE_STOCHASTICITY
+          if (run_globals.params.physics.EscapeFracScatterDex > ABS_TOL ||
+              run_globals.params.physics.Flag_RemoveSFRScatter == 1) {
+            if (run_globals.params.physics.Flag_SourceRecalibration)
+              stochasticity_calibration_factor = extract_recalibration_factors(gal, 3, false);
+            buffer[ind] += gal->StochasticityTreatedFescIIIWeightedSfr * stochasticity_calibration_factor;
+          } else
+            buffer[ind] += gal->FescIIIWeightedSfr;
+#else
+          buffer[ind] += gal->FescIIIWeightedSfr;
+#endif
+          break;
+
+        case prop_sfrIII:
+#if USE_STOCHASTICITY
+          buffer[ind] +=
+            run_globals.params.Flag_InstantaneousSFR
+              ? (run_globals.params.physics.Flag_RemoveSFRScatter == 1 ? gal->SfrIIINoScatter : gal->SfrIII)
+              : (run_globals.params.physics.Flag_RemoveSFRScatter == 1 ? gal->GrossStellarMassIIINoScatter
+                                                                       : gal->GrossStellarMassIII);
+#else
+          buffer[ind] += run_globals.params.Flag_InstantaneousSFR ? gal->SfrIII : gal->GrossStellarMassIII;
+#endif
+          break;
+#endif
+
+        case prop_weighted_sfr:
+#if USE_STOCHASTICITY
+          if (run_globals.params.physics.EscapeFracScatterDex > ABS_TOL ||
+              run_globals.params.physics.Flag_RemoveSFRScatter == 1) {
+            if (run_globals.params.physics.Flag_SourceRecalibration)
+              stochasticity_calibration_factor = extract_recalibration_factors(gal, 2, false);
+            buffer[ind] += gal->StochasticityTreatedFescWeightedSfr * stochasticity_calibration_factor;
+          } else
+            buffer[ind] += gal->FescWeightedSfr;
+#else
+          buffer[ind] += gal->FescWeightedSfr;
+#endif
+          break;
+
+        case prop_effective_bhar:
+          if (gal->BlackHoleMass >= run_globals.params.physics.BlackHoleMassLimitReion) {
+            buffer[ind] += gal->EffectiveBHAR;
+          }
+          break;
+
+#if USE_STOCHASTICITY
+        case prop_xray_luminosity: {
+          double xray_target = calculate_galaxy_xray_luminosity(gal, sfr_timescale);
+          double xray_raw = xray_target;
+
+          if (run_globals.params.physics.Flag_RemoveSFRScatter == 1) {
+            galaxy_t source_view = *gal;
+            source_view.GrossStellarMass = source_view.GrossStellarMassNoScatter;
+            source_view.Sfr = source_view.SfrNoScatter;
+
+            xray_raw = calculate_galaxy_xray_luminosity(&source_view, sfr_timescale);
+          }
+
+          if (run_globals.params.physics.XrayScatterDex > 0.0)
+            xray_raw = apply_lognormal_scatter(xray_raw, run_globals.params.physics.XrayScatterDex);
+
+          if (recalibrate_xray_sources) {
+            local_xray_raw += xray_raw;
+            local_xray_target += xray_target;
+          }
+
+          buffer[ind] += (float)xray_raw;
+          break;
+        }
+#endif
+
+        case prop_sfr: {
+#if USE_STOCHASTICITY
+          double sfr_target = run_globals.params.Flag_InstantaneousSFR ? gal->Sfr : gal->GrossStellarMass;
+          double sfr_raw = sfr_target;
+
+          if (run_globals.params.physics.Flag_RemoveSFRScatter == 1)
+            sfr_raw = run_globals.params.Flag_InstantaneousSFR ? gal->SfrNoScatter : gal->GrossStellarMassNoScatter;
+
+          if (recalibrate_sfr_sources) {
+            local_sfr_raw += sfr_raw;
+            local_sfr_target += sfr_target;
+          }
+
+          buffer[ind] += sfr_raw;
+#else
+          buffer[ind] += run_globals.params.Flag_InstantaneousSFR ? gal->Sfr : gal->GrossStellarMass;
+#endif
+          break;
+        }
+
+        /*
+         *   We accumulate each per cell exactly as gal->Sfr is accumulated for prop_sfr. The owner-directed exchange
+         * below sums contributions from all galaxies on all ranks. The BlackHoleMassLimitReion guard is applied
+         * consistency with prop_effective_bhar.
+         */
+        case prop_bh_xray_emissivity_hard:
+          if (gal->BlackHoleMass >= run_globals.params.physics.BlackHoleMassLimitReion)
+            buffer[ind] += gal->BHXrayEmissivity_hard;
+          break;
+
+        case prop_bh_xray_emissivity_soft:
+          if (gal->BlackHoleMass >= run_globals.params.physics.BlackHoleMassLimitReion)
+            buffer[ind] += gal->BHXrayEmissivity_soft;
+          break;
+
+#if USE_MINI_HALOS
+        case prop_bh_uv_emissivity:
+          if (gal->BlackHoleMass >= run_globals.params.physics.BlackHoleMassLimitReion)
+            buffer[ind] += gal->QuasarLuv;
+          break;
+#endif
+
+        default:
+          mlog_error("Unrecognised property in slab creation.");
+          ABORT(EXIT_FAILURE);
+          break;
+      }
     }
   }
   free(active_map);
@@ -2147,9 +2147,9 @@ void construct_baryon_grids(int snapshot, int local_ngals)
   MPI_Allreduce(MPI_IN_PLACE, &N_BlackHoleMassLimitReion, 1, MPI_LONG, MPI_SUM, run_globals.mpi_comm);
   if (run_globals.params.physics.Flag_BHFeedback)
     mlog("%ld quasars are smaller than %g",
-           MLOG_MESG,
-           N_BlackHoleMassLimitReion,
-           run_globals.params.physics.BlackHoleMassLimitReion);
+         MLOG_MESG,
+         N_BlackHoleMassLimitReion,
+         run_globals.params.physics.BlackHoleMassLimitReion);
 
   if (run_globals.params.Flag_IncludeSpinTemp) {
     reion_grids_t* grids = &run_globals.reion_grids;
